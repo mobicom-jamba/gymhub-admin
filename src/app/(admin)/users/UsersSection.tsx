@@ -47,26 +47,39 @@ export default function UsersSection() {
   const [density, setDensity] = useState<Density>("comfortable");
   const toast = useToast();
 
+  const PROFILE_SELECT = "id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+
+  const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
+    const supabase = createBrowserSupabaseClient();
+    const all: Profile[] = [];
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data, error: err } = await supabase
+        .from("profiles")
+        .select(PROFILE_SELECT)
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (err) return { data: all, error: err.message };
+      all.push(...((data ?? []) as Profile[]));
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    return { data: all, error: null };
+  };
+
   const fetchProfiles = async () => {
     setLoading(true);
-    const supabase = createBrowserSupabaseClient();
-    const { data, error: err } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
-      .order("created_at", { ascending: false });
-    setProfiles((data ?? []) as Profile[]);
-    setError(err?.message ?? null);
+    const { data, error: err } = await fetchAllProfilePages();
+    setProfiles(data);
+    setError(err);
     setLoading(false);
   };
 
   const silentRefresh = async () => {
-    const supabase = createBrowserSupabaseClient();
-    const { data, error: err } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
-      .order("created_at", { ascending: false });
-    if (data) setProfiles(data as Profile[]);
-    if (err) setError(err.message);
+    const { data, error: err } = await fetchAllProfilePages();
+    setProfiles(data);
+    if (err) setError(err);
   };
 
   useEffect(() => { fetchProfiles(); }, []);

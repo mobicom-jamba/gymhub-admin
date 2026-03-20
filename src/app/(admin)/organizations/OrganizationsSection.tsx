@@ -58,39 +58,47 @@ export default function OrganizationsSection() {
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
   const toast = useToast();
 
+  const MEMBER_SELECT = "id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization, created_at";
+
+  const fetchAllMemberPages = useCallback(async (): Promise<Member[]> => {
+    const supabase = createBrowserSupabaseClient();
+    const all: Member[] = [];
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data } = await supabase
+        .from("profiles")
+        .select(MEMBER_SELECT)
+        .order("full_name", { ascending: true })
+        .range(from, from + PAGE - 1);
+      all.push(...((data ?? []) as Member[]));
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  }, []);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
-    const [profilesRes, orgsRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization, created_at")
-        .order("full_name", { ascending: true }),
-      supabase
-        .from("organizations")
-        .select("*")
-        .order("name", { ascending: true }),
+    const [allMembers, orgsRes] = await Promise.all([
+      fetchAllMemberPages(),
+      supabase.from("organizations").select("*").order("name", { ascending: true }),
     ]);
-    setMembers((profilesRes.data ?? []) as Member[]);
+    setMembers(allMembers);
     setOrgRecords((orgsRes.data ?? []) as OrgRecord[]);
     setLoading(false);
-  }, []);
+  }, [fetchAllMemberPages]);
 
   const silentRefresh = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
-    const [profilesRes, orgsRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization, created_at")
-        .order("full_name", { ascending: true }),
-      supabase
-        .from("organizations")
-        .select("*")
-        .order("name", { ascending: true }),
+    const [allMembers, orgsRes] = await Promise.all([
+      fetchAllMemberPages(),
+      supabase.from("organizations").select("*").order("name", { ascending: true }),
     ]);
-    if (profilesRes.data) setMembers(profilesRes.data as Member[]);
+    setMembers(allMembers);
     if (orgsRes.data) setOrgRecords(orgsRes.data as OrgRecord[]);
-  }, []);
+  }, [fetchAllMemberPages]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
