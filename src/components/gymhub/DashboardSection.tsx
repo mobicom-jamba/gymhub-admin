@@ -162,6 +162,7 @@ export default function DashboardSection() {
           companyCount={companyCount}
           fitnessCount={fitnessCount}
           yogaCount={yogaCount}
+          hrefs={{ userCount: "/users", companyCount: "/organizations" }}
         />
       </div>
 

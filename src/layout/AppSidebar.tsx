@@ -54,11 +54,6 @@ const navItems: NavItem[] = [
     path: "/bookings",
   },
   {
-    icon: <CalenderIcon />,
-    name: "Календарь",
-    path: "/calendar",
-  },
-  {
     icon: <TaskIcon />,
     name: "Ирц",
     path: "/visits",

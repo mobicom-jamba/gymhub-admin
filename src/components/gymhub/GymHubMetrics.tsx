@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 
 type GymHubMetricsProps = {
   userCount: number;
@@ -8,6 +9,7 @@ type GymHubMetricsProps = {
   companyCount: number;
   fitnessCount: number;
   yogaCount: number;
+  hrefs?: Partial<Record<keyof Omit<GymHubMetricsProps, "hrefs">, string>>;
 };
 
 const metrics: {
@@ -27,24 +29,28 @@ const metrics: {
 export function GymHubMetrics(props: GymHubMetricsProps) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-5">
-      {metrics.map((m) => (
-        <div
-          key={m.key}
-          className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"
-        >
-          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg ${m.bg}`}>
-            {m.icon}
-          </div>
-          <div className="min-w-0">
-            <h4 className="text-xl font-bold text-gray-800 dark:text-white/90">
-              {(props[m.key as keyof GymHubMetricsProps] ?? 0).toLocaleString()}
-            </h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {m.label}
-            </p>
-          </div>
-        </div>
-      ))}
+      {metrics.map((m) => {
+        const href = props.hrefs?.[m.key as keyof Omit<GymHubMetricsProps, "hrefs">];
+        const inner = (
+          <>
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg ${m.bg}`}>
+              {m.icon}
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-xl font-bold text-gray-800 dark:text-white/90">
+                {(props[m.key as keyof GymHubMetricsProps] ?? 0).toLocaleString()}
+              </h4>
+              <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{m.label}</p>
+            </div>
+          </>
+        );
+        const cls = "flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]";
+        return href ? (
+          <Link key={m.key} href={href} className={cls + " transition hover:border-brand-300 hover:shadow-sm"}>{inner}</Link>
+        ) : (
+          <div key={m.key} className={cls}>{inner}</div>
+        );
+      })}
     </div>
   );
 }

@@ -26,19 +26,27 @@ type Schedule = Record<DayKey, DaySchedule>;
 const DAY_KEYS: DayKey[] = ["mon","tue","wed","thu","fri","sat","sun"];
 const DAY_LABELS: Record<DayKey, string> = { mon:"Даваа",tue:"Мягмар",wed:"Лхагва",thu:"Пүрэв",fri:"Баасан",sat:"Бямба",sun:"Нямдан" };
 
-function defaultSchedule(): Schedule {
-  return { mon:{open:"08:00",close:"22:00"}, tue:{open:"08:00",close:"22:00"}, wed:{open:"08:00",close:"22:00"}, thu:{open:"08:00",close:"22:00"}, fri:{open:"08:00",close:"22:00"}, sat:{open:"09:00",close:"20:00"}, sun:null };
+function parseRaw(raw: unknown): { openTime: string; closeTime: string; openDays: Set<DayKey> } {
+  const openDays = new Set<DayKey>();
+  let openTime = "08:00", closeTime = "22:00";
+  if (raw && typeof raw === "object") {
+    DAY_KEYS.forEach(k => {
+      const v = (raw as Record<string, unknown>)[k];
+      if (v && typeof v === "object" && "open" in v && "close" in v) {
+        openDays.add(k);
+        openTime  = String((v as {open:unknown}).open);
+        closeTime = String((v as {close:unknown}).close);
+      }
+    });
+  } else {
+    ["mon","tue","wed","thu","fri","sat"].forEach(k => openDays.add(k as DayKey));
+  }
+  return { openTime, closeTime, openDays };
 }
 
-function parseSchedule(raw: unknown): Schedule {
-  if (!raw || typeof raw !== "object") return defaultSchedule();
-  const s = defaultSchedule();
-  DAY_KEYS.forEach(k => {
-    const v = (raw as Record<string, unknown>)[k];
-    if (v === null) s[k] = null;
-    else if (v && typeof v === "object" && "open" in v && "close" in v)
-      s[k] = { open: String((v as {open:unknown}).open), close: String((v as {close:unknown}).close) };
-  });
+function buildSchedule(openTime: string, closeTime: string, openDays: Set<DayKey>): Schedule {
+  const s = {} as Schedule;
+  DAY_KEYS.forEach(k => { s[k] = openDays.has(k) ? { open: openTime, close: closeTime } : null; });
   return s;
 }
 
@@ -53,7 +61,9 @@ export default function GymFormModal({
   const [address, setAddress] = useState(gym?.address ?? "");
   const [imageUrl, setImageUrl] = useState(gym?.image_url ?? "");
   const [isActive, setIsActive] = useState(gym?.is_active ?? true);
-  const [schedule, setSchedule] = useState<Schedule>(() => parseSchedule(gym?.opening_hours));
+  const [openTime, setOpenTime]   = useState(() => parseRaw(gym?.opening_hours).openTime);
+  const [closeTime, setCloseTime] = useState(() => parseRaw(gym?.opening_hours).closeTime);
+  const [openDays, setOpenDays]   = useState<Set<DayKey>>(() => parseRaw(gym?.opening_hours).openDays);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -66,16 +76,20 @@ export default function GymFormModal({
       setAddress(gym?.address ?? "");
       setImageUrl(gym?.image_url ?? "");
       setIsActive(gym?.is_active ?? true);
-      setSchedule(parseSchedule(gym?.opening_hours));
+      const parsed = parseRaw(gym?.opening_hours);
+      setOpenTime(parsed.openTime);
+      setCloseTime(parsed.closeTime);
+      setOpenDays(parsed.openDays);
       setError("");
     }
   }, [isOpen, gym]);
 
-  const setDayTime = (day: DayKey, field: "open"|"close", val: string) => {
-    setSchedule(s => ({ ...s, [day]: { ...(s[day] ?? {open:"08:00",close:"22:00"}), [field]: val } }));
-  };
   const toggleDay = (day: DayKey) => {
-    setSchedule(s => ({ ...s, [day]: s[day] ? null : { open: "08:00", close: "22:00" } }));
+    setOpenDays(prev => {
+      const next = new Set(prev);
+      next.has(day) ? next.delete(day) : next.add(day);
+      return next;
+    });
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,7 +130,7 @@ export default function GymFormModal({
       address: address || null,
       image_url: imageUrl || null,
       is_active: isActive,
-      opening_hours: schedule,
+      opening_hours: buildSchedule(openTime, closeTime, openDays),
     };
     if (gym) {
       const { error: err } = await supabase
@@ -225,34 +239,38 @@ export default function GymFormModal({
           {/* Schedule */}
           <div>
             <Label>Ажллах цаг</Label>
-            <div className="mt-1 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-              {DAY_KEYS.map((day, i) => {
-                const s = schedule[day];
+            {/* Shared open/close time */}
+            <div className="mb-2 flex items-center gap-3">
+              <div className="flex flex-1 items-center gap-2">
+                <span className="text-xs text-gray-500 w-12">Эхлэх</span>
+                <input type="time" value={openTime} onChange={e => setOpenTime(e.target.value)}
+                  className="h-9 flex-1 rounded-xl border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+              </div>
+              <span className="text-gray-300">–</span>
+              <div className="flex flex-1 items-center gap-2">
+                <span className="text-xs text-gray-500 w-12">Дуусах</span>
+                <input type="time" value={closeTime} onChange={e => setCloseTime(e.target.value)}
+                  className="h-9 flex-1 rounded-xl border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
+              </div>
+            </div>
+            {/* Day toggles */}
+            <div className="grid grid-cols-7 gap-1">
+              {DAY_KEYS.map(day => {
+                const on = openDays.has(day);
                 return (
-                  <div key={day} className={`flex items-center gap-3 px-3 py-2 ${
-                    i > 0 ? "border-t border-gray-100 dark:border-white/[0.05]" : ""
-                  }`}>
-                    <button type="button" onClick={() => toggleDay(day)}
-                      className={`flex h-5 w-5 shrink-0 items-center justify-center rounded ${
-                        s ? "bg-brand-500" : "border border-gray-300 dark:border-gray-600"
-                      }`}>
-                      {s && <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>}
-                    </button>
-                    <span className={`w-16 text-sm ${
-                      s ? "font-medium text-gray-700 dark:text-gray-300" : "text-gray-400"
-                    }`}>{DAY_LABELS[day]}</span>
-                    {s ? (
-                      <div className="flex flex-1 items-center gap-2">
-                        <input type="time" value={s.open} onChange={e => setDayTime(day, "open", e.target.value)}
-                          className="h-8 flex-1 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                        <span className="text-xs text-gray-400">–</span>
-                        <input type="time" value={s.close} onChange={e => setDayTime(day, "close", e.target.value)}
-                          className="h-8 flex-1 rounded-lg border border-gray-200 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white" />
-                      </div>
-                    ) : (
-                      <span className="flex-1 text-xs text-gray-400">Хаалтай</span>
-                    )}
-                  </div>
+                  <button key={day} type="button" onClick={() => toggleDay(day)}
+                    className={`flex flex-col items-center gap-1 rounded-xl border-2 py-2 transition-all ${
+                      on
+                        ? "border-brand-400 bg-brand-50 dark:border-brand-600 dark:bg-brand-900/20"
+                        : "border-gray-100 bg-white hover:border-gray-200 dark:border-gray-700 dark:bg-gray-800/60"
+                    }`}>
+                    <span className={`text-[11px] font-semibold ${
+                      on ? "text-brand-600 dark:text-brand-400" : "text-gray-400"
+                    }`}>{DAY_LABELS[day].slice(0,3)}</span>
+                    <div className={`h-1.5 w-1.5 rounded-full ${
+                      on ? "bg-brand-500" : "bg-gray-200 dark:bg-gray-600"
+                    }`} />
+                  </button>
                 );
               })}
             </div>

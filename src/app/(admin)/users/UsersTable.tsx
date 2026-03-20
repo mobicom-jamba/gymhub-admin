@@ -36,6 +36,11 @@ function isExpired(expiresAt: string | null) {
   return new Date(expiresAt) < new Date();
 }
 
+function daysUntil(expiresAt: string | null) {
+  if (!expiresAt) return null;
+  return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
+}
+
 export default function UsersTable({
   profiles,
   error,
@@ -192,11 +197,14 @@ export default function UsersTable({
 
                   {/* Expiry date */}
                   <TableCell className="px-4 py-3 text-sm whitespace-nowrap">
-                    {p.membership_expires_at ? (
-                      <span className={expired ? "text-red-500 dark:text-red-400" : "text-gray-600 dark:text-gray-400"}>
-                        {new Date(p.membership_expires_at).toLocaleDateString("mn-MN")}
-                      </span>
-                    ) : (
+                    {p.membership_expires_at ? (() => {
+                      const days = daysUntil(p.membership_expires_at);
+                      if (days !== null && days < 0)
+                        return <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600 dark:bg-red-900/20 dark:text-red-400">⚠️ {new Date(p.membership_expires_at).toLocaleDateString("mn-MN")}</span>;
+                      if (days !== null && days <= 30)
+                        return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">⏳ {days} өдөр</span>;
+                      return <span className="text-gray-500 dark:text-gray-400">{new Date(p.membership_expires_at).toLocaleDateString("mn-MN")}</span>;
+                    })() : (
                       <span className="text-gray-400">—</span>
                     )}
                   </TableCell>
@@ -209,23 +217,23 @@ export default function UsersTable({
                   {/* Actions */}
                   {(onEdit || onDelete) && (
                     <TableCell className="px-4 py-3 text-end">
-                      <div className="flex justify-end gap-1.5">
+                      <div className="flex justify-end gap-2">
                         {onEdit && (
                           <button
                             onClick={() => onEdit(p)}
-                            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"
+                            className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-gray-200"
                             title="Засах"
                           >
-                            <PencilIcon className="size-4" />
+                            <PencilIcon className="size-5" />
                           </button>
                         )}
                         {onDelete && (
                           <button
                             onClick={() => onDelete(p.id)}
-                            className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                            className="rounded-xl p-2 text-red-400 hover:bg-red-50 hover:text-red-600 dark:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                             title="Устгах"
                           >
-                            <TrashBinIcon className="size-4" />
+                            <TrashBinIcon className="size-5" />
                           </button>
                         )}
                       </div>

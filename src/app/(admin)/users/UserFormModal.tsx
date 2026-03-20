@@ -45,12 +45,35 @@ function Label({ children }: { children: React.ReactNode }) {
 const MN_MONTHS = ["1-р","2-р","3-р","4-р","5-р","6-р","7-р","8-р","9-р","10-р","11-р","12-р"];
 const MN_DAYS   = ["Да","Мя","Лх","Пү","Ба","Бя","Ня"];
 
+function parseTyped(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 8) {
+    const y = digits.slice(0,4), m = digits.slice(4,6), d = digits.slice(6,8);
+    const date = new Date(`${y}-${m}-${d}`);
+    if (!isNaN(date.getTime()) && date.getFullYear() === +y) return `${y}-${m}-${d}`;
+  }
+  const parts = raw.split(/[.\-\/]/);
+  if (parts.length === 3) {
+    const [y, m, d] = parts.map(p => p.padStart(2, "0"));
+    const iso = `${y}-${m}-${d}`;
+    const date = new Date(iso);
+    if (!isNaN(date.getTime()) && String(date.getFullYear()) === y) return iso;
+  }
+  return null;
+}
+
 function DateField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const uid             = useId();
   const portalId        = `date-cal-${uid.replace(/:/g, "")}`;
   const [open, setOpen]   = useState(false);
   const [pos, setPos]     = useState({ top: 0, left: 0, width: 0 });
   const triggerRef        = useRef<HTMLDivElement>(null);
+  const inputRef          = useRef<HTMLInputElement>(null);
+  const [text, setText]   = useState(value ? value.replace(/-/g, ".") : "");
+
+  useEffect(() => {
+    setText(value ? value.replace(/-/g, ".") : "");
+  }, [value]);
 
   const today = new Date();
   const [vy, setVy] = useState(() => value ? parseInt(value.slice(0,4)) : today.getFullYear());
@@ -59,16 +82,39 @@ function DateField({ value, onChange }: { value: string; onChange: (v: string) =
   const prevMonth = () => { if (vm === 0) { setVm(11); setVy(y => y-1); } else setVm(m => m-1); };
   const nextMonth = () => { if (vm === 11) { setVm(0); setVy(y => y+1); } else setVm(m => m+1); };
 
-  const handleOpen = () => {
-    if (!triggerRef.current) return;
-    const r   = triggerRef.current.getBoundingClientRect();
+  const openCalendar = (anchor: HTMLElement) => {
+    const r   = anchor.getBoundingClientRect();
     const calH = 300;
-    // position:fixed — viewport coords, no scroll offset
     const top    = r.bottom + 4;
     const adjTop = (top + calH > window.innerHeight) ? r.top - calH - 4 : top;
     setPos({ top: adjTop, left: r.left, width: Math.max(r.width, 240) });
     if (value) { setVy(parseInt(value.slice(0,4))); setVm(parseInt(value.slice(5,7))-1); }
     setOpen(o => !o);
+  };
+
+  const handleIconClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!triggerRef.current) return;
+    openCalendar(triggerRef.current);
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setText(raw);
+    if (!raw) { onChange(""); return; }
+    const iso = parseTyped(raw);
+    if (iso) onChange(iso);
+  };
+
+  const handleBlur = () => {
+    if (!text) { onChange(""); return; }
+    const iso = parseTyped(text);
+    if (iso) {
+      setText(iso.replace(/-/g, "."));
+      onChange(iso);
+    } else {
+      setText(value ? value.replace(/-/g, ".") : "");
+    }
   };
 
   useEffect(() => {
@@ -83,6 +129,7 @@ function DateField({ value, onChange }: { value: string; onChange: (v: string) =
     return () => document.removeEventListener("mousedown", close);
   }, [open, portalId]);
 
+
   const [pickMode, setPickMode] = useState<"day" | "month" | "year">("day");
 
   const firstDay   = new Date(vy, vm, 1).getDay();
@@ -94,19 +141,32 @@ function DateField({ value, onChange }: { value: string; onChange: (v: string) =
   const pick = (day: number) => {
     const iso = `${vy}-${String(vm+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
     onChange(iso);
+    setText(iso.replace(/-/g, "."));
     setOpen(false);
   };
 
   return (
-    <div ref={triggerRef}>
-      <div onClick={handleOpen}
-        className={inp + " flex cursor-pointer select-none items-center justify-between pr-3"}
+    <div ref={triggerRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        onChange={handleTextChange}
+        onBlur={handleBlur}
+        placeholder="жжжж.сс.өө"
+        className={inp + " pr-9"}
+      />
+      <button
+        type="button"
+        onMouseDown={e => e.preventDefault()}
+        onClick={handleIconClick}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 dark:hover:text-gray-400"
+        tabIndex={-1}
       >
-        <span className={value ? "" : "text-gray-300 dark:text-gray-600"}>{display || "жжжж.сс.өө"}</span>
-        <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5m-9-6h.008v.008H12V9zm0 3.75h.008v.008H12v-.008zm0 3.75h.008v.008H12v-.008zm3.75-7.5h.008v.008H15.75V9zm0 3.75h.008v.008H15.75v-.008zm0 3.75h.008v.008H15.75v-.008zM8.25 9h.008v.008H8.25V9zm0 3.75h.008v.008H8.25v-.008zm0 3.75h.008v.008H8.25v-.008z" />
         </svg>
-      </div>
+      </button>
 
       {open && createPortal(
         <div

@@ -1,17 +1,23 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
+import UserFormModal from "../users/UserFormModal";
+import type { Profile } from "../users/UsersSection";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 type Member = {
   id: string;
   full_name: string | null;
   phone: string | null;
+  role: string | null;
   membership_tier: string | null;
   membership_status: string | null;
+  membership_started_at: string | null;
   membership_expires_at: string | null;
   organization: string | null;
+  created_at: string;
 };
 
 type OrgGroup = {
@@ -46,6 +52,9 @@ export default function OrganizationsSection() {
   const [addOrgTarget, setAddOrgTarget] = useState<string | null>(null);
   const [removeLoading, setRemoveLoading] = useState<string | null>(null);
   const [formOrg, setFormOrg] = useState<OrgRecord | "new" | null>(null);
+  const [editProfile, setEditProfile] = useState<Profile | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<{ memberId: string; name: string } | null>(null);
+  const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -53,7 +62,7 @@ export default function OrganizationsSection() {
     const [profilesRes, orgsRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, full_name, phone, membership_tier, membership_status, membership_expires_at, organization")
+        .select("id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization, created_at")
         .order("full_name", { ascending: true }),
       supabase
         .from("organizations")
@@ -105,11 +114,18 @@ export default function OrganizationsSection() {
     ).slice(0, 30);
   }, [members, addOrgTarget, addSearch, orgs]);
 
-  const handleRemove = async (memberId: string) => {
-    setRemoveLoading(memberId);
+  const handleRemove = (memberId: string) => {
+    const name = members.find(m => m.id === memberId)?.full_name ?? "";
+    setConfirmRemove({ memberId, name });
+  };
+
+  const handleRemoveConfirmed = async () => {
+    if (!confirmRemove) return;
+    setRemoveLoading(confirmRemove.memberId);
     const supabase = createBrowserSupabaseClient();
-    await supabase.from("profiles").update({ organization: null }).eq("id", memberId);
+    await supabase.from("profiles").update({ organization: null }).eq("id", confirmRemove.memberId);
     setRemoveLoading(null);
+    setConfirmRemove(null);
     await fetchAll();
   };
 
@@ -119,14 +135,18 @@ export default function OrganizationsSection() {
     await fetchAll();
   };
 
-  const handleDeleteOrg = async (orgName: string, recordId: string | null) => {
-    if (!confirm(`"${orgName}" байгууллагыг устгах уу? Гишүүдийн байгууллагын холбоос арилна.`)) return;
+  const handleDeleteOrg = (orgName: string, recordId: string | null) => {
+    setConfirmDeleteOrg({ orgName, recordId });
+  };
+
+  const handleDeleteOrgConfirmed = async () => {
+    if (!confirmDeleteOrg) return;
+    const { orgName, recordId } = confirmDeleteOrg;
     const supabase = createBrowserSupabaseClient();
-    if (recordId) {
-      await supabase.from("organizations").delete().eq("id", recordId);
-    }
+    if (recordId) await supabase.from("organizations").delete().eq("id", recordId);
     await supabase.from("profiles").update({ organization: null }).eq("organization", orgName);
     setSelected(null);
+    setConfirmDeleteOrg(null);
     await fetchAll();
   };
 
@@ -266,6 +286,7 @@ export default function OrganizationsSection() {
             onEdit={() => setFormOrg(selectedRecord ?? { id: "", name: selectedOrg.name, logo_url: null, description: null, phone: null, facebook_url: null, website_url: null, partner_url: null, created_at: "" })}
             onDelete={() => handleDeleteOrg(selectedOrg.name, selectedRecord?.id ?? null)}
             onRemove={handleRemove}
+            onEditMember={(m) => setEditProfile(m as unknown as Profile)}
             onOpenAdd={() => { setAddOrgTarget(selectedOrg.name); setAddOpen(true); setAddSearch(""); }}
             onCloseAdd={() => { setAddOpen(false); setAddSearch(""); }}
             onAddSearchChange={setAddSearch}
@@ -281,6 +302,31 @@ export default function OrganizationsSection() {
         org={formOrg === "new" ? null : formOrg}
         onSuccess={() => { fetchAll(); setFormOrg(null); }}
       />
+
+      <UserFormModal
+        isOpen={editProfile !== null}
+        onClose={() => setEditProfile(null)}
+        profile={editProfile}
+        organizations={orgRecords.map(r => r.name)}
+        onSuccess={() => { fetchAll(); setEditProfile(null); }}
+      />
+
+      <ConfirmModal
+        isOpen={confirmRemove !== null}
+        title="Гишүүн хасах уу?"
+        message={confirmRemove?.name ? `"${confirmRemove.name}"-г энэ байгууллагаас хасана.` : undefined}
+        confirmLabel="Хасах"
+        onConfirm={handleRemoveConfirmed}
+        onCancel={() => setConfirmRemove(null)}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDeleteOrg !== null}
+        title="Байгууллага устгах уу?"
+        message={confirmDeleteOrg ? `"${confirmDeleteOrg.orgName}" байгууллагыг устгана. Гишүүдийн холбоос арилна.` : undefined}
+        onConfirm={handleDeleteOrgConfirmed}
+        onCancel={() => setConfirmDeleteOrg(null)}
+      />
     </div>
   );
 }
@@ -289,7 +335,7 @@ export default function OrganizationsSection() {
 function OrgDetailPanel({
   org, record, removeLoading,
   addOpen, addSearch, addCandidates,
-  onEdit, onDelete, onRemove, onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
+  onEdit, onDelete, onRemove, onEditMember, onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
 }: {
   org: OrgGroup;
   record: OrgRecord | null;
@@ -298,11 +344,38 @@ function OrgDetailPanel({
   onEdit: () => void;
   onDelete: () => void;
   onRemove: (id: string) => void;
+  onEditMember: (m: Member) => void;
   onOpenAdd: () => void; onCloseAdd: () => void;
   onAddSearchChange: (v: string) => void;
   onAddMember: (id: string) => void;
   avatarColors: string[];
 }) {
+  const [memberSearch, setMemberSearch] = useState("");
+  const [tierFilter, setTierFilter]     = useState<"" | "early" | "premium">("" );
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
+  const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
+
+  const filteredMembers = useMemo(() => {
+    let list = org.members;
+    if (memberSearch)
+      list = list.filter(m =>
+        m.full_name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+        m.phone?.includes(memberSearch));
+    if (tierFilter)
+      list = list.filter(m => m.membership_tier === tierFilter);
+    if (statusFilter === "active")
+      list = list.filter(m => m.membership_expires_at && new Date(m.membership_expires_at) >= new Date());
+    if (statusFilter === "expired")
+      list = list.filter(m => !m.membership_expires_at || new Date(m.membership_expires_at) < new Date());
+    return [...list].sort((a, b) => {
+      if (sortBy === "name")
+        return (a.full_name ?? "").localeCompare(b.full_name ?? "");
+      const da = a.membership_expires_at ? new Date(a.membership_expires_at).getTime() : Infinity;
+      const db = b.membership_expires_at ? new Date(b.membership_expires_at).getTime() : Infinity;
+      return sortBy === "expires_asc" ? da - db : db - da;
+    });
+  }, [org.members, memberSearch, tierFilter, statusFilter, sortBy]);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Org header */}
@@ -460,6 +533,61 @@ function OrgDetailPanel({
         )}
       </div>
 
+      {/* Member filters */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-100 px-4 py-2.5 dark:border-white/[0.04]">
+        <input
+          type="text"
+          value={memberSearch}
+          onChange={e => setMemberSearch(e.target.value)}
+          placeholder="Гишүүн хайх..."
+          className="h-8 w-36 rounded-lg border border-gray-200 bg-gray-50 px-3 text-xs focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+        />
+
+        {/* Tier filter */}
+        <div className="flex items-center gap-1">
+          {([["", "Бүгд"], ["early", "Early"], ["premium", "Premium"]] as const).map(([v, label]) => (
+            <button key={v} type="button" onClick={() => setTierFilter(v)}
+              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-colors ${
+                tierFilter === v
+                  ? v === "premium" ? "bg-violet-500 text-white" : v === "early" ? "bg-blue-500 text-white" : "bg-gray-700 text-white dark:bg-gray-600"
+                  : "border border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400"
+              }`}>{label}</button>
+          ))}
+        </div>
+
+        {/* Status filter */}
+        <div className="flex items-center gap-1">
+          {([["", "Төлөв"], ["active", "Идэвх"], ["expired", "Дууссан"]] as const).map(([v, label]) => (
+            <button key={v} type="button" onClick={() => setStatusFilter(v)}
+              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-colors ${
+                statusFilter === v
+                  ? v === "active" ? "bg-emerald-500 text-white" : v === "expired" ? "bg-red-500 text-white" : "bg-gray-700 text-white dark:bg-gray-600"
+                  : "border border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400"
+              }`}>{label}</button>
+          ))}
+        </div>
+
+        {/* Sort */}
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value as typeof sortBy)}
+          className="ml-auto h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+        >
+          <option value="name">Нэрээр А→Я</option>
+          <option value="expires_asc">Дуусах ↑ хамгийн</option>
+          <option value="expires_desc">Дуусах ↓ хоцойн</option>
+        </select>
+
+        {(memberSearch || tierFilter || statusFilter) && (
+          <button onClick={() => { setMemberSearch(""); setTierFilter(""); setStatusFilter(""); }}
+            className="h-7 rounded-lg border border-gray-200 px-2 text-xs text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-gray-700">
+            ✕
+          </button>
+        )}
+
+        <span className="ml-1 text-xs text-gray-400">{filteredMembers.length}/{org.members.length}</span>
+      </div>
+
       {/* Member list */}
       <div className="flex-1 overflow-y-auto">
         {org.members.length === 0 ? (
@@ -476,8 +604,10 @@ function OrgDetailPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-white/[0.04]">
-              {org.members.map((m, i) => {
-                const expired = isExpired(m.membership_expires_at);
+              {filteredMembers.map((m, i) => {
+                const days = m.membership_expires_at
+                  ? Math.ceil((new Date(m.membership_expires_at).getTime() - Date.now()) / 86400000)
+                  : null;
                 return (
                   <tr key={m.id} className="group transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
                     <td className="px-4 py-3">
@@ -502,19 +632,34 @@ function OrgDetailPanel({
                     </td>
                     <td className="px-4 py-3">
                       {m.membership_expires_at ? (
-                        <span className={`text-xs ${expired ? "text-red-500" : "text-gray-500 dark:text-gray-400"}`}>
-                          {new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}
-                        </span>
+                        days !== null && days < 0
+                          ? <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:bg-red-900/20 dark:text-red-400">⚠️ {new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
+                          : days !== null && days <= 30
+                            ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">⏳ {days} өдөр</span>
+                            : <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
                       ) : <span className="text-xs text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => onRemove(m.id)}
-                        disabled={removeLoading === m.id}
-                        className="rounded-lg px-2.5 py-1 text-xs font-medium text-gray-400 opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                      >
-                        {removeLoading === m.id ? "..." : "Хасах"}
-                      </button>
+                      <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                        <button
+                          onClick={() => onEditMember(m)}
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"
+                          title="Засах"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                        </button>
+                        <button
+                          onClick={() => onRemove(m.id)}
+                          disabled={removeLoading === m.id}
+                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                          title="Хасах"
+                        >
+                          {removeLoading === m.id
+                            ? <span className="text-xs">...</span>
+                            : <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                          }
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

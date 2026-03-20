@@ -10,6 +10,7 @@ import { t } from "@/lib/i18n";
 import SearchInput from "@/components/common/SearchInput";
 import { PlusIcon } from "@/icons";
 import { exportToCsv } from "@/lib/csv-export";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export type Profile = {
   id: string;
@@ -39,6 +40,8 @@ export default function UsersSection() {
   const [formProfile, setFormProfile] = useState<Profile | null | "new">(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
+  const [confirmBulk, setConfirmBulk] = useState(false);
 
   const fetchProfiles = async () => {
     setLoading(true);
@@ -92,16 +95,20 @@ export default function UsersSection() {
   };
 
   const handleDelete = async (profileId: string) => {
-    if (!confirm(t("confirmDeleteUser"))) return;
-    const res = await fetch(`/api/admin/users/${profileId}`, { method: "DELETE" });
+    setConfirmDelete({ id: profileId, name: profiles.find(p => p.id === profileId)?.full_name ?? "" });
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!confirmDelete) return;
+    const res = await fetch(`/api/admin/users/${confirmDelete.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) { alert(data.error ?? "Алдаа гарлаа"); return; }
     fetchProfiles();
+    setConfirmDelete(null);
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDeleteConfirmed = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`${selectedIds.size} хэрэглэгч устгах уу?`)) return;
     setBulkDeleting(true);
     try {
       await Promise.all(Array.from(selectedIds).map((id) =>
@@ -110,7 +117,7 @@ export default function UsersSection() {
       setSelectedIds(new Set());
       fetchProfiles();
     } catch { alert("Устгахад алдаа гарлаа"); }
-    finally { setBulkDeleting(false); }
+    finally { setBulkDeleting(false); setConfirmBulk(false); }
   };
 
   const handleBulkRoleChange = async (newRole: string) => {
@@ -186,81 +193,88 @@ export default function UsersSection() {
         title={`${tab === "user" ? "Гишүүд" : "Админ"} — ${filteredProfiles.length.toLocaleString()}`}
       >
         {/* ── Filters row ── */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <SearchInput
-            value={search}
-            onChange={(v) => { setSearch(v); resetPage(); }}
-            placeholder="Нэр, утас, байгууллага..."
-            className="w-56"
-          />
+        <div className="mb-4 space-y-2">
+          {/* Row 1: search + filters + actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchInput
+              value={search}
+              onChange={(v) => { setSearch(v); resetPage(); }}
+              placeholder="Нэр, утас, байгууллага..."
+              className="w-56"
+            />
 
-          {/* Organization filter */}
-          <select
-            value={orgFilter}
-            onChange={(e) => { setOrgFilter(e.target.value); resetPage(); }}
-            className="h-9 max-w-[200px] rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-          >
-            <option value="">Байгууллага: Бүгд</option>
-            {organizations.map((o) => (
-              <option key={o} value={o}>{o}</option>
-            ))}
-          </select>
+            <select
+              value={orgFilter}
+              onChange={(e) => { setOrgFilter(e.target.value); resetPage(); }}
+              className="h-10 max-w-[200px] rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            >
+              <option value="">🏢 Байгууллага: бүгд</option>
+              {organizations.map((o) => (
+                <option key={o} value={o}>{o}</option>
+              ))}
+            </select>
 
-          {/* Status filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }}
-            className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-          >
-            <option value="">Төлөв: Бүгд</option>
-            <option value="active">Идэвхтэй</option>
-            <option value="expired">Дууссан</option>
-          </select>
+            <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
+              {([["", "Бүгд"], ["active", "✅ Идэвх"], ["expired", "⛔ Дууссан"]] as const).map(([v, label]) => (
+                <button key={v} type="button"
+                  onClick={() => { setStatusFilter(v); resetPage(); }}
+                  className={`h-8 rounded-lg px-3 text-xs font-medium transition-all ${
+                    statusFilter === v
+                      ? v === "active" ? "bg-emerald-500 text-white shadow-sm"
+                        : v === "expired" ? "bg-red-500 text-white shadow-sm"
+                        : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
+                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  }`}>{label}
+                </button>
+              ))}
+            </div>
 
-          <div className="flex-1" />
-
-          {selectedIds.size > 0 && (
-            <>
-              <span className="text-sm text-gray-600 dark:text-gray-400">{selectedIds.size} сонгосон</span>
-              <select
-                className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-600 dark:bg-gray-800"
-                onChange={(e) => { if (e.target.value) { handleBulkRoleChange(e.target.value); e.target.value = ""; } }}
-                defaultValue=""
-              >
-                <option value="" disabled>Эрх солих</option>
-                <option value="user">Гишүүн</option>
-                <option value="admin">Админ</option>
-              </select>
+            {(search || orgFilter || statusFilter) && (
               <button
-                className="h-9 rounded-lg bg-red-600 px-3 text-sm text-white hover:bg-red-700 disabled:opacity-50"
-                onClick={handleBulkDelete}
-                disabled={bulkDeleting}
+                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); resetPage(); }}
+                className="h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-400 hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-gray-700 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
-                {bulkDeleting ? "Устгаж байна..." : `${selectedIds.size} устгах`}
+                ✕ Цэвэрлэх
               </button>
-            </>
-          )}
+            )}
 
-          <Button size="sm" onClick={() => setFormProfile("new")} startIcon={<PlusIcon className="size-4" />}>
-            {t("add")}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              exportToCsv("users", filteredProfiles, [
+            <div className="flex-1" />
+
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 dark:border-amber-800 dark:bg-amber-900/20">
+                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">{selectedIds.size} сонгосон</span>
+                <button
+                  className="rounded-lg bg-red-500 px-3 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                  onClick={() => setConfirmBulk(true)}
+                  disabled={bulkDeleting}
+                >
+                  {bulkDeleting ? "..." : "Устгах"}
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={() => setFormProfile("new")}
+              className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors"
+            >
+              <PlusIcon className="size-4" />
+              Нэмэх
+            </button>
+            <button
+              onClick={() => exportToCsv("users", filteredProfiles, [
                 { key: "full_name", label: "Нэр" },
                 { key: "phone", label: "Утас" },
                 { key: "organization", label: "Байгууллага" },
-                { key: "role", label: "Эрх" },
                 { key: "membership_status", label: "Төлөв" },
                 { key: "membership_expires_at", label: "Дуусах огноо" },
                 { key: "created_at", label: "Бүртгүүлсэн" },
-              ])
-            }
-          >
-            CSV
-          </Button>
+              ])}
+              className="flex h-10 items-center gap-1.5 rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.04]"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+              CSV
+            </button>
+          </div>
         </div>
 
         <UsersTable
@@ -276,55 +290,56 @@ export default function UsersSection() {
 
         {/* ── Pagination ── */}
         {(totalPages > 1 || filteredProfiles.length > 25) && (
-          <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-            <div className="flex items-center gap-2">
-              <span>{((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filteredProfiles.length)} / {filteredProfiles.length.toLocaleString()}</span>
+          <div className="mt-5 flex items-center justify-between">
+            {/* Left: count + page size */}
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <span className="tabular-nums">
+                {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filteredProfiles.length)}
+                <span className="mx-1 text-gray-300">/</span>
+                {filteredProfiles.length.toLocaleString()}
+              </span>
               <select
                 value={pageSize}
                 onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                className="h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
               >
-                {PAGE_SIZES.map(s => <option key={s} value={s}>{s} хэрэглээ</option>)}
+                {PAGE_SIZES.map(s => <option key={s} value={s}>{s} / хуудас</option>)}
               </select>
             </div>
+
+            {/* Right: page buttons */}
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage(1)}
-                disabled={page === 1}
-                className="rounded px-2 py-1 hover:bg-gray-100 disabled:opacity-40 dark:hover:bg-white/[0.05]"
-              >«</button>
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="rounded px-2 py-1 hover:bg-gray-100 disabled:opacity-40 dark:hover:bg-white/[0.05]"
-              >‹</button>
+              <button onClick={() => setPage(1)} disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 disabled:opacity-30 dark:border-gray-700 dark:hover:bg-white/[0.06]">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5"/></svg>
+              </button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 disabled:opacity-30 dark:border-gray-700 dark:hover:bg-white/[0.06]">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/></svg>
+              </button>
+
               {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
                 const start = Math.max(1, Math.min(page - 3, totalPages - 6));
                 const p = start + i;
                 return (
-                  <button
-                    key={p}
-                    onClick={() => setPage(p)}
-                    className={`min-w-[32px] rounded px-2 py-1 text-sm ${
+                  <button key={p} onClick={() => setPage(p)}
+                    className={`flex h-8 min-w-[32px] items-center justify-center rounded-lg border text-sm font-medium transition-colors ${
                       p === page
-                        ? "bg-brand-500 text-white"
-                        : "hover:bg-gray-100 dark:hover:bg-white/[0.05]"
-                    }`}
-                  >
-                    {p}
+                        ? "border-brand-500 bg-brand-500 text-white"
+                        : "border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.06]"
+                    }`}>{p}
                   </button>
                 );
               })}
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="rounded px-2 py-1 hover:bg-gray-100 disabled:opacity-40 dark:hover:bg-white/[0.05]"
-              >›</button>
-              <button
-                onClick={() => setPage(totalPages)}
-                disabled={page === totalPages}
-                className="rounded px-2 py-1 hover:bg-gray-100 disabled:opacity-40 dark:hover:bg-white/[0.05]"
-              >»</button>
+
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 disabled:opacity-30 dark:border-gray-700 dark:hover:bg-white/[0.06]">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+              </button>
+              <button onClick={() => setPage(totalPages)} disabled={page === totalPages}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-100 disabled:opacity-30 dark:border-gray-700 dark:hover:bg-white/[0.06]">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5"/></svg>
+              </button>
             </div>
           </div>
         )}
@@ -336,6 +351,24 @@ export default function UsersSection() {
         profile={formProfile === "new" ? null : formProfile}
         organizations={organizations}
         onSuccess={() => { fetchProfiles(); setFormProfile(null); }}
+      />
+
+      <ConfirmModal
+        isOpen={confirmDelete !== null}
+        title="Хэрэглэгч устгах уу?"
+        message={confirmDelete?.name ? `"${confirmDelete.name}" хэрэглэгчийг бүрмөсөн устгана. Энэ үйлдлийг буцаах боломжгүй.` : "Энэ үйлдлийг буцаах боломжгүй."}
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmModal
+        isOpen={confirmBulk}
+        title={`${selectedIds.size} хэрэглэгч устгах уу?`}
+        message="Сонгосон хэрэглэгчдийг бүрмөсөн устгана. Энэ үйлдлийг буцаах боломжгүй."
+        confirmLabel={bulkDeleting ? "..." : `${selectedIds.size} устгах`}
+        onConfirm={handleBulkDeleteConfirmed}
+        onCancel={() => setConfirmBulk(false)}
+        loading={bulkDeleting}
       />
     </>
   );
