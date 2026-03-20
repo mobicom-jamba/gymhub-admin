@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 
 type Member = {
   id: string;
@@ -36,32 +37,36 @@ function isExpired(exp: string | null) {
 
 export default function OrganizationsSection() {
   const [members, setMembers] = useState<Member[]>([]);
+  const [orgRecords, setOrgRecords] = useState<OrgRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameVal, setRenameVal] = useState("");
-  const [renameLoading, setRenameLoading] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addSearch, setAddSearch] = useState("");
   const [addOrgTarget, setAddOrgTarget] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [newOrgName, setNewOrgName] = useState("");
   const [removeLoading, setRemoveLoading] = useState<string | null>(null);
+  const [formOrg, setFormOrg] = useState<OrgRecord | "new" | null>(null);
 
   const supabase = createBrowserSupabaseClient();
 
-  const fetchMembers = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone, membership_tier, membership_status, membership_expires_at, organization")
-      .order("full_name", { ascending: true });
-    setMembers((data ?? []) as Member[]);
+    const [profilesRes, orgsRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name, phone, membership_tier, membership_status, membership_expires_at, organization")
+        .order("full_name", { ascending: true }),
+      supabase
+        .from("organizations")
+        .select("*")
+        .order("name", { ascending: true }),
+    ]);
+    setMembers((profilesRes.data ?? []) as Member[]);
+    setOrgRecords((orgsRes.data ?? []) as OrgRecord[]);
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchMembers(); }, []);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const orgs: OrgGroup[] = useMemo(() => {
     const map: Record<string, Member[]> = {};
@@ -89,8 +94,8 @@ export default function OrganizationsSection() {
   );
 
   const selectedOrg = selected ? orgs.find(o => o.name === selected) ?? null : null;
+  const selectedRecord = selected ? orgRecords.find(r => r.name === selected) ?? null : null;
 
-  // Unassigned users not already in selected org
   const addCandidates = useMemo(() => {
     if (!addOrgTarget) return [];
     const inOrg = new Set((orgs.find(o => o.name === addOrgTarget)?.members ?? []).map(m => m.id));
@@ -101,33 +106,16 @@ export default function OrganizationsSection() {
     ).slice(0, 30);
   }, [members, addOrgTarget, addSearch, orgs]);
 
-  const handleRename = async (oldName: string) => {
-    if (!renameVal.trim() || renameVal === oldName) { setRenaming(null); return; }
-    setRenameLoading(true);
-    await supabase.from("profiles").update({ organization: renameVal.trim() }).eq("organization", oldName);
-    setRenameLoading(false);
-    setRenaming(null);
-    if (selected === oldName) setSelected(renameVal.trim());
-    await fetchMembers();
-  };
-
   const handleRemove = async (memberId: string) => {
     setRemoveLoading(memberId);
     await supabase.from("profiles").update({ organization: null }).eq("id", memberId);
     setRemoveLoading(null);
-    await fetchMembers();
+    await fetchAll();
   };
 
   const handleAdd = async (memberId: string, orgName: string) => {
     await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
-    await fetchMembers();
-  };
-
-  const handleCreate = async () => {
-    if (!newOrgName.trim()) return;
-    setSelected(newOrgName.trim());
-    setNewOrgName("");
-    setCreating(false);
+    await fetchAll();
   };
 
   if (loading) {
@@ -151,7 +139,7 @@ export default function OrganizationsSection() {
               <p className="text-xs text-gray-400">{orgs.length} байгууллага · {members.length} гишүүн</p>
             </div>
             <button
-              onClick={() => setCreating(true)}
+              onClick={() => setFormOrg("new")}
               className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors"
               title="Байгууллага нэмэх"
             >
@@ -160,23 +148,6 @@ export default function OrganizationsSection() {
               </svg>
             </button>
           </div>
-
-          {/* New org input */}
-          {creating && (
-            <div className="mb-2 flex gap-2">
-              <input
-                autoFocus
-                type="text"
-                value={newOrgName}
-                onChange={e => setNewOrgName(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") setCreating(false); }}
-                placeholder="Байгууллагын нэр..."
-                className="h-9 flex-1 rounded-lg border border-brand-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-brand-700 dark:bg-gray-800 dark:text-white"
-              />
-              <button onClick={handleCreate} className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600">Нэмэх</button>
-              <button onClick={() => setCreating(false)} className="h-9 rounded-lg border border-gray-200 px-3 text-xs text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">✕</button>
-            </div>
-          )}
 
           <input
             type="text"
@@ -192,6 +163,7 @@ export default function OrganizationsSection() {
           {filteredOrgs.map((org, i) => {
             const color = avatarColors[i % avatarColors.length];
             const isActive = selected === org.name;
+            const rec = orgRecords.find(r => r.name === org.name);
             return (
               <button
                 key={org.name}
@@ -203,9 +175,13 @@ export default function OrganizationsSection() {
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white ${color}`}>
-                    {org.name.slice(0, 2).toUpperCase()}
-                  </div>
+                  {rec?.logo_url ? (
+                    <img src={rec.logo_url} alt={org.name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+                  ) : (
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white ${color}`}>
+                      {org.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className={`truncate text-sm font-medium ${isActive ? "text-brand-700 dark:text-brand-400" : "text-gray-800 dark:text-white"}`}>
                       {org.name}
@@ -270,17 +246,12 @@ export default function OrganizationsSection() {
         ) : selectedOrg ? (
           <OrgDetailPanel
             org={selectedOrg}
-            renaming={renaming}
-            renameVal={renameVal}
-            renameLoading={renameLoading}
+            record={selectedRecord}
             removeLoading={removeLoading}
             addOpen={addOpen && addOrgTarget === selectedOrg.name}
             addSearch={addSearch}
             addCandidates={addCandidates}
-            onStartRename={() => { setRenaming(selectedOrg.name); setRenameVal(selectedOrg.name); }}
-            onRenameChange={setRenameVal}
-            onRenameSubmit={() => handleRename(selectedOrg.name)}
-            onRenameCancel={() => setRenaming(null)}
+            onEdit={() => setFormOrg(selectedRecord ?? null)}
             onRemove={handleRemove}
             onOpenAdd={() => { setAddOrgTarget(selectedOrg.name); setAddOpen(true); setAddSearch(""); }}
             onCloseAdd={() => { setAddOpen(false); setAddSearch(""); }}
@@ -290,23 +261,28 @@ export default function OrganizationsSection() {
           />
         ) : null}
       </div>
+
+      <OrgFormModal
+        isOpen={formOrg !== null}
+        onClose={() => setFormOrg(null)}
+        org={formOrg === "new" ? null : formOrg}
+        onSuccess={() => { fetchAll(); setFormOrg(null); }}
+      />
     </div>
   );
 }
 
 /* ── Org Detail Panel ── */
 function OrgDetailPanel({
-  org, renaming, renameVal, renameLoading, removeLoading,
+  org, record, removeLoading,
   addOpen, addSearch, addCandidates,
-  onStartRename, onRenameChange, onRenameSubmit, onRenameCancel,
-  onRemove, onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
+  onEdit, onRemove, onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
 }: {
   org: OrgGroup;
-  renaming: string | null; renameVal: string; renameLoading: boolean;
+  record: OrgRecord | null;
   removeLoading: string | null;
   addOpen: boolean; addSearch: string; addCandidates: Member[];
-  onStartRename: () => void; onRenameChange: (v: string) => void;
-  onRenameSubmit: () => void; onRenameCancel: () => void;
+  onEdit: () => void;
   onRemove: (id: string) => void;
   onOpenAdd: () => void; onCloseAdd: () => void;
   onAddSearchChange: (v: string) => void;
@@ -316,40 +292,29 @@ function OrgDetailPanel({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Org header */}
-      <div className="border-b border-gray-100 p-5 dark:border-white/[0.06]">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            {renaming === org.name ? (
-              <div className="flex items-center gap-2">
-                <input
-                  autoFocus
-                  value={renameVal}
-                  onChange={e => onRenameChange(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") onRenameSubmit(); if (e.key === "Escape") onRenameCancel(); }}
-                  className="h-9 flex-1 rounded-lg border border-brand-400 bg-white px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:bg-gray-800 dark:text-white"
-                />
-                <button onClick={onRenameSubmit} disabled={renameLoading}
-                  className="h-9 rounded-lg bg-brand-500 px-3 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50">
-                  {renameLoading ? "..." : "Хадгалах"}
-                </button>
-                <button onClick={onRenameCancel}
-                  className="h-9 rounded-lg border border-gray-200 px-3 text-xs text-gray-500 hover:bg-gray-50 dark:border-gray-700">
-                  Болих
-                </button>
-              </div>
+      <div className="border-b border-gray-100 dark:border-white/[0.06]">
+        {/* Top: logo + name + actions */}
+        <div className="flex items-start gap-4 p-5">
+          {/* Logo */}
+          <div className="shrink-0">
+            {record?.logo_url ? (
+              <img src={record.logo_url} alt={org.name}
+                className="h-14 w-14 rounded-2xl object-cover shadow-sm" />
             ) : (
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-gray-800 dark:text-white truncate">{org.name}</h2>
-                <button onClick={onStartRename}
-                  className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06]"
-                  title="Нэр өөрчлөх">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-                  </svg>
-                </button>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600 text-lg font-bold text-white shadow-sm">
+                {org.name.slice(0, 2).toUpperCase()}
               </div>
             )}
-            <div className="mt-1.5 flex items-center gap-3">
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-lg font-bold text-gray-800 dark:text-white">{org.name}</h2>
+            </div>
+            {record?.description && (
+              <p className="mt-0.5 text-sm text-gray-400">{record.description}</p>
+            )}
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <span className="text-sm text-gray-500">{org.members.length} гишүүн</span>
               {org.premiumCount > 0 && (
                 <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
@@ -363,20 +328,75 @@ function OrgDetailPanel({
               )}
             </div>
           </div>
-          <button
-            onClick={onOpenAdd}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Гишүүн нэмэх
-          </button>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <button onClick={onEdit}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.04]">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+              </svg>
+              Засах
+            </button>
+            <button onClick={onOpenAdd}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Гишүүн нэмэх
+            </button>
+          </div>
         </div>
+
+        {/* Contact / social links strip */}
+        {record && (record.phone || record.facebook_url || record.website_url || record.partner_url) && (
+          <div className="flex flex-wrap items-center gap-4 border-t border-gray-50 px-5 py-2.5 dark:border-white/[0.04]">
+            {record.phone && (
+              <a href={`tel:${record.phone}`} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                </svg>
+                {record.phone}
+              </a>
+            )}
+            {record.facebook_url && (
+              <a href={`https://facebook.com/${record.facebook_url}`} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600">
+                <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                fb/{record.facebook_url}
+              </a>
+            )}
+            {record.website_url && (
+              <a href={record.website_url.startsWith("http") ? record.website_url : `https://${record.website_url}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582" />
+                </svg>
+                {record.website_url}
+              </a>
+            )}
+            {record.partner_url && (
+              <a href={`https://gymhub.mn/partner/${record.partner_url}`} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-brand-600">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                </svg>
+                gymhub.mn/partner/{record.partner_url}
+              </a>
+            )}
+          </div>
+        )}
+        {!record && (
+          <div className="border-t border-gray-50 px-5 py-2.5 dark:border-white/[0.04]">
+            <p className="text-xs text-gray-400">Байгууллагын мэдээлэл бүртгэгдээгүй байна — "Засах" товч дарж мэдээлэл нэмнэ үү</p>
+          </div>
+        )}
 
         {/* Add member search */}
         {addOpen && (
-          <div className="mt-3 rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800 dark:bg-brand-900/10">
+          <div className="mx-5 mb-4 rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800 dark:bg-brand-900/10">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-semibold text-brand-700 dark:text-brand-400">Гишүүн хайх</p>
               <button onClick={onCloseAdd} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
