@@ -31,15 +31,12 @@ export default function DashboardSection() {
 
   const fetchCounts = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
     const [
       usersRes, paidRes, gymsRes,
       orgsCountRes,
       qpayRes, sonoRes, pocketRes, giftRes,
       recentUsersRes, recentGymsRes,
-      profilesByDateRes, bookingsByDateRes,
     ] = await Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
       // Paid = profiles that have a membership_started_at (actual paying members)
@@ -55,9 +52,6 @@ export default function DashboardSection() {
       // Recent users & gyms
       supabase.from("profiles").select("id, full_name, phone, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
-      // Monthly charts data — use membership_started_at (paid date) for user chart
-      supabase.from("profiles").select("membership_started_at").not("membership_started_at", "is", null).gte("membership_started_at", twelveMonthsAgo.toISOString()),
-      supabase.from("profiles").select("membership_started_at").not("membership_started_at", "is", null),
     ]);
 
     // Counts
@@ -100,29 +94,35 @@ export default function DashboardSection() {
     setNewUsers((recentUsersRes.data ?? []) as UserRow[]);
     setNewGyms((recentGymsRes.data ?? []) as GymRow[]);
 
-    // Users by paid month (membership_started_at)
-    const userMonthMap: Record<string, number> = {};
-    (profilesByDateRes.data ?? []).forEach((p: { membership_started_at: string }) => {
-      const m = p.membership_started_at.slice(0, 7); // "YYYY-MM"
-      userMonthMap[m] = (userMonthMap[m] ?? 0) + 1;
-    });
-    setUsersByMonth(
-      Object.entries(userMonthMap)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([month, count]) => ({ month, count: count as number }))
-    );
+    // Paginate ALL membership_started_at values — no 1000-row cap, no date filter
+    const allStartDates: string[] = [];
+    {
+      const PAGE = 1000;
+      let from = 0;
+      while (true) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("membership_started_at")
+          .not("membership_started_at", "is", null)
+          .order("membership_started_at", { ascending: true })
+          .range(from, from + PAGE - 1);
+        (data ?? []).forEach((p: { membership_started_at: string }) => {
+          if (p.membership_started_at) allStartDates.push(p.membership_started_at.slice(0, 7));
+        });
+        if (!data || data.length < PAGE) break;
+        from += PAGE;
+      }
+    }
 
-    // Payments by month — also use membership_started_at from profiles (all time, group by month)
-    const payMonthMap: Record<string, number> = {};
-    (bookingsByDateRes.data ?? []).forEach((b: { membership_started_at: string }) => {
-      const m = b.membership_started_at.slice(0, 7);
-      payMonthMap[m] = (payMonthMap[m] ?? 0) + 1;
-    });
-    setPaymentsByMonth(
-      Object.entries(payMonthMap)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([month, count]) => ({ month, count: count as number }))
-    );
+    // Group by YYYY-MM for both charts
+    const monthMap: Record<string, number> = {};
+    allStartDates.forEach(m => { monthMap[m] = (monthMap[m] ?? 0) + 1; });
+    const sortedMonths = Object.entries(monthMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, count]) => ({ month, count: count as number }));
+
+    setUsersByMonth(sortedMonths);
+    setPaymentsByMonth(sortedMonths);
 
     setLoading(false);
   }, []);

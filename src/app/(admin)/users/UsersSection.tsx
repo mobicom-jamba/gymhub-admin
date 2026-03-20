@@ -311,7 +311,6 @@ export default function UsersSection() {
                 { key: "organization", label: "Байгууллага" },
                 { key: "membership_status", label: "Төлөв" },
                 { key: "membership_expires_at", label: "Дуусах огноо" },
-                { key: "created_at", label: "Бүртгүүлсэн" },
               ])}
               className="flex h-10 items-center gap-1.5 rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.04]"
             >

@@ -112,7 +112,6 @@ export default function UsersTable({
               <TableCell isHeader className={hdr}>Тариф</TableCell>
               <TableCell isHeader className={hdr}>Эхлэх огноо</TableCell>
               <TableCell isHeader className={hdr}>Дуусах огноо</TableCell>
-              <TableCell isHeader className={hdr}>Бүртгүүлсэн</TableCell>
               {(onEdit || onDelete) && (
                 <TableCell isHeader className={`${hdr} text-end`}>Үйлдэл</TableCell>
               )}
@@ -172,9 +171,6 @@ export default function UsersTable({
                     })() : <span className="text-gray-400">—</span>}
                   </TableCell>
 
-                  <TableCell className={`px-4 ${py} text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap`}>
-                    {new Date(p.created_at).toLocaleDateString("mn-MN")}
-                  </TableCell>
 
                   {(onEdit || onDelete) && (
                     <TableCell className={`px-4 ${py} text-end`}>
