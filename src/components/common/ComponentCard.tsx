@@ -5,6 +5,7 @@ interface ComponentCardProps {
   children: React.ReactNode;
   className?: string; // Additional custom classes for styling
   desc?: string; // Description text
+  subtitle?: string; // Subtitle below the title
 }
 
 const ComponentCard: React.FC<ComponentCardProps> = ({
@@ -12,6 +13,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
   children,
   className = "",
   desc = "",
+  subtitle = "",
 }) => {
   return (
     <div
@@ -22,6 +24,11 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
         <h3 className="text-base font-medium text-gray-800 dark:text-white/90">
           {title}
         </h3>
+        {subtitle && (
+          <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+            {subtitle}
+          </p>
+        )}
         {desc && (
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {desc}

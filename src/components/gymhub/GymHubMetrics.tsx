@@ -1,67 +1,50 @@
 "use client";
 
 import React from "react";
-import {
-  BoxCubeIcon,
-  CalenderIcon,
-  GroupIcon,
-} from "@/icons";
-import { t } from "@/lib/i18n";
 
 type GymHubMetricsProps = {
-  gymCount: number;
   userCount: number;
-  bookingCount: number;
+  paymentCount: number;
+  companyCount: number;
+  fitnessCount: number;
+  yogaCount: number;
 };
 
-export function GymHubMetrics({
-  gymCount,
-  userCount,
-  bookingCount,
-}: GymHubMetricsProps) {
+const metrics: {
+  key: keyof Omit<GymHubMetricsProps, never>;
+  label: string;
+  icon: string;
+  bg: string;
+  iconColor: string;
+}[] = [
+  { key: "userCount", label: "Хэрэглэгч", icon: "👤", bg: "bg-blue-50 dark:bg-blue-900/20", iconColor: "text-blue-600" },
+  { key: "paymentCount", label: "Төлбөр", icon: "📋", bg: "bg-green-50 dark:bg-green-900/20", iconColor: "text-green-600" },
+  { key: "companyCount", label: "Компани", icon: "🏢", bg: "bg-blue-50 dark:bg-blue-900/20", iconColor: "text-blue-600" },
+  { key: "fitnessCount", label: "Фитнес", icon: "📍", bg: "bg-orange-50 dark:bg-orange-900/20", iconColor: "text-orange-600" },
+  { key: "yogaCount", label: "Йога", icon: "🧘", bg: "bg-pink-50 dark:bg-pink-900/20", iconColor: "text-pink-600" },
+];
+
+export function GymHubMetrics(props: GymHubMetricsProps) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-6 lg:grid-cols-3">
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-        <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-xl dark:bg-gray-800">
-          <BoxCubeIcon className="text-gray-800 size-6 dark:text-white/90" />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-5">
+      {metrics.map((m) => (
+        <div
+          key={m.key}
+          className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]"
+        >
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg ${m.bg}`}>
+            {m.icon}
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xl font-bold text-gray-800 dark:text-white/90">
+              {(props[m.key as keyof GymHubMetricsProps] ?? 0).toLocaleString()}
+            </h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {m.label}
+            </p>
+          </div>
         </div>
-        <div className="mt-5">
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {t("totalGyms")}
-          </span>
-          <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
-            {gymCount}
-          </h4>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-        <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-xl dark:bg-gray-800">
-          <GroupIcon className="text-gray-800 size-6 dark:text-white/90" />
-        </div>
-        <div className="mt-5">
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {t("totalUsers")}
-          </span>
-          <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
-            {userCount}
-          </h4>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 dark:border-gray-800 dark:bg-white/[0.03] md:p-6">
-        <div className="flex items-center justify-center w-12 h-12 bg-gray-100 rounded-xl dark:bg-gray-800">
-          <CalenderIcon className="text-gray-800 size-6 dark:text-white/90" />
-        </div>
-        <div className="mt-5">
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            {t("totalBookings")}
-          </span>
-          <h4 className="mt-2 font-bold text-gray-800 text-title-sm dark:text-white/90">
-            {bookingCount}
-          </h4>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
