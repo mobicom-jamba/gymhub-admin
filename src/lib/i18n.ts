@@ -1,6 +1,6 @@
 const mn: Record<string, string> = {
   // Nav
-  dashboard: "Тойм",
+  dashboard: "Эхлэл",
   gyms: "Фитнес төвүүд",
   users: "Хэрэглэгчид",
   bookings: "Захиалгууд",
@@ -112,6 +112,7 @@ const mn: Record<string, string> = {
   errorOccurred: "Алдаа гарлаа",
   visits: "Ирц",
   method: "Арга",
+  backToDashboard: "Эхлэл рүү буцах",
 };
 
 export type Locale = "mn" | "en";

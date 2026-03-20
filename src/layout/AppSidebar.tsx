@@ -30,7 +30,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   {
     icon: <GridIcon />,
-    name: "Тойм",
+    name: "Эхлэл",
     path: "/",
   },
   {
