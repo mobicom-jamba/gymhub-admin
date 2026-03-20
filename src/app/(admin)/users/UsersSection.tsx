@@ -73,7 +73,7 @@ export default function UsersSection() {
       }
       return true;
     });
-  }, [profiles, search, roleFilter, orgFilter, statusFilter]);
+  }, [profiles, search, tab, orgFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / PAGE_SIZE));
   const pagedProfiles = filteredProfiles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
