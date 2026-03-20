@@ -76,6 +76,22 @@ export default function OrganizationsSection() {
     setLoading(false);
   }, []);
 
+  const silentRefresh = useCallback(async () => {
+    const supabase = createBrowserSupabaseClient();
+    const [profilesRes, orgsRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization, created_at")
+        .order("full_name", { ascending: true }),
+      supabase
+        .from("organizations")
+        .select("*")
+        .order("name", { ascending: true }),
+    ]);
+    if (profilesRes.data) setMembers(profilesRes.data as Member[]);
+    if (orgsRes.data) setOrgRecords(orgsRes.data as OrgRecord[]);
+  }, []);
+
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const orgs: OrgGroup[] = useMemo(() => {
@@ -123,20 +139,21 @@ export default function OrganizationsSection() {
 
   const handleRemoveConfirmed = async () => {
     if (!confirmRemove) return;
-    setRemoveLoading(confirmRemove.memberId);
-    const supabase = createBrowserSupabaseClient();
-    await supabase.from("profiles").update({ organization: null }).eq("id", confirmRemove.memberId);
-    setRemoveLoading(null);
+    const { memberId } = confirmRemove;
     setConfirmRemove(null);
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: null } : m));
     toast.show("Гишүүн амжилттай хасагдлаа ✓");
-    await fetchAll();
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("profiles").update({ organization: null }).eq("id", memberId);
+    if (error) silentRefresh();
   };
 
   const handleAdd = async (memberId: string, orgName: string) => {
-    const supabase = createBrowserSupabaseClient();
-    await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: orgName } : m));
     toast.show("Гишүүн амжилттай нэмэгдлээ ✓");
-    await fetchAll();
+    const supabase = createBrowserSupabaseClient();
+    const { error } = await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
+    if (error) silentRefresh();
   };
 
   const handleDeleteOrg = (orgName: string, recordId: string | null) => {
@@ -146,13 +163,14 @@ export default function OrganizationsSection() {
   const handleDeleteOrgConfirmed = async () => {
     if (!confirmDeleteOrg) return;
     const { orgName, recordId } = confirmDeleteOrg;
+    setConfirmDeleteOrg(null);
+    setSelected(null);
+    setOrgRecords(prev => recordId ? prev.filter(r => r.id !== recordId) : prev);
+    setMembers(prev => prev.map(m => m.organization === orgName ? { ...m, organization: null } : m));
+    toast.show("Байгууллага амжилттай устгагдлаа ✓");
     const supabase = createBrowserSupabaseClient();
     if (recordId) await supabase.from("organizations").delete().eq("id", recordId);
     await supabase.from("profiles").update({ organization: null }).eq("organization", orgName);
-    setSelected(null);
-    setConfirmDeleteOrg(null);
-    toast.show("Байгууллага амжилттай устгагдлаа ✓");
-    await fetchAll();
   };
 
   if (loading) {
@@ -305,7 +323,7 @@ export default function OrganizationsSection() {
         isOpen={formOrg !== null}
         onClose={() => setFormOrg(null)}
         org={formOrg === "new" ? null : formOrg}
-        onSuccess={() => { fetchAll(); setFormOrg(null); }}
+        onSuccess={() => { setFormOrg(null); silentRefresh(); }}
       />
 
       <UserFormModal
@@ -313,7 +331,7 @@ export default function OrganizationsSection() {
         onClose={() => setEditProfile(null)}
         profile={editProfile}
         organizations={orgRecords.map(r => r.name)}
-        onSuccess={() => { fetchAll(); setEditProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); }}
+        onSuccess={() => { setEditProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); silentRefresh(); }}
       />
 
       <ConfirmModal

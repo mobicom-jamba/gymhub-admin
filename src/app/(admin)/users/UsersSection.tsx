@@ -59,6 +59,16 @@ export default function UsersSection() {
     setLoading(false);
   };
 
+  const silentRefresh = async () => {
+    const supabase = createBrowserSupabaseClient();
+    const { data, error: err } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
+      .order("created_at", { ascending: false });
+    if (data) setProfiles(data as Profile[]);
+    if (err) setError(err.message);
+  };
+
   useEffect(() => { fetchProfiles(); }, []);
 
   const organizations = useMemo(() => {
@@ -89,13 +99,13 @@ export default function UsersSection() {
   const resetPage = () => setPage(1);
 
   const handleRoleChange = async (profileId: string, newRole: string) => {
+    setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, role: newRole } : p));
     const supabase = createBrowserSupabaseClient();
     const { error: err } = await supabase
       .from("profiles")
       .update({ role: newRole })
       .eq("id", profileId);
-    if (err) { alert(err.message); return; }
-    fetchProfiles();
+    if (err) { alert(err.message); silentRefresh(); }
   };
 
   const handleDelete = async (profileId: string) => {
@@ -104,39 +114,44 @@ export default function UsersSection() {
 
   const handleDeleteConfirmed = async () => {
     if (!confirmDelete) return;
-    const res = await fetch(`/api/admin/users/${confirmDelete.id}`, { method: "DELETE" });
-    const data = await res.json();
-    if (!res.ok) { alert(data.error ?? "Алдаа гарлаа"); return; }
-    toast.show("Хэрэглэгч амжилттай устгагдлаа ✓");
-    fetchProfiles();
+    const { id } = confirmDelete;
     setConfirmDelete(null);
+    setProfiles(prev => prev.filter(p => p.id !== id));
+    toast.show("Хэрэглэгч амжилттай устгагдлаа ✓");
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error ?? "Алдаа гарлаа"); silentRefresh(); }
   };
 
   const handleBulkDeleteConfirmed = async () => {
     if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const count = ids.length;
     setBulkDeleting(true);
+    setConfirmBulk(false);
+    setProfiles(prev => prev.filter(p => !selectedIds.has(p.id)));
+    setSelectedIds(new Set());
+    toast.show(`${count} хэрэглэгч устгагдлаа ✓`);
     try {
-      await Promise.all(Array.from(selectedIds).map((id) =>
+      await Promise.all(ids.map((id) =>
         fetch(`/api/admin/users/${id}`, { method: "DELETE" })
       ));
-      setSelectedIds(new Set());
-      fetchProfiles();
-      toast.show(`${selectedIds.size} хэрэглэгч устгагдлаа ✓`);
-    } catch { alert("Устгахад алдаа гарлаа"); }
-    finally { setBulkDeleting(false); setConfirmBulk(false); }
+    } catch { alert("Устгахад алдаа гарлаа"); silentRefresh(); }
+    finally { setBulkDeleting(false); }
   };
 
   const handleBulkRoleChange = async (newRole: string) => {
     if (selectedIds.size === 0) return;
     if (!confirm(`${selectedIds.size} хэрэглэгчийн эрхийг ${newRole} болгох уу?`)) return;
+    const ids = Array.from(selectedIds);
+    setProfiles(prev => prev.map(p => ids.includes(p.id) ? { ...p, role: newRole } : p));
+    setSelectedIds(new Set());
     const supabase = createBrowserSupabaseClient();
     const { error: err } = await supabase
       .from("profiles")
       .update({ role: newRole })
-      .in("id", Array.from(selectedIds));
-    if (err) { alert(err.message); return; }
-    setSelectedIds(new Set());
-    fetchProfiles();
+      .in("id", ids);
+    if (err) { alert(err.message); silentRefresh(); }
   };
 
   const toggleSelectAll = () => {
@@ -368,7 +383,7 @@ export default function UsersSection() {
         onClose={() => setFormProfile(null)}
         profile={formProfile === "new" ? null : formProfile}
         organizations={organizations}
-        onSuccess={() => { fetchProfiles(); setFormProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); }}
+        onSuccess={() => { setFormProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); silentRefresh(); }}
       />
 
       <ConfirmModal
