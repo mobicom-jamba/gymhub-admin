@@ -10,6 +10,8 @@ import NewUsersCard from "./NewUsersCard";
 import NewGymsCard from "./NewGymsCard";
 import ComponentCard from "../common/ComponentCard";
 import { t } from "@/lib/i18n";
+import UserFormModal from "@/app/(admin)/users/UserFormModal";
+import type { Profile } from "@/app/(admin)/users/UsersSection";
 
 type MonthPoint = { month: string; count: number };
 type UserRow = { id: string; full_name: string | null; phone: string | null; company?: string | null; created_at: string };
@@ -28,6 +30,7 @@ export default function DashboardSection() {
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editProfile, setEditProfile] = useState<Profile | null>(null);
 
   const fetchCounts = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
@@ -141,6 +144,16 @@ export default function DashboardSection() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchCounts]);
 
+  const handleEditUser = useCallback(async (id: string) => {
+    const supabase = createBrowserSupabaseClient();
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
+      .eq("id", id)
+      .single();
+    if (data) setEditProfile(data as Profile);
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -153,6 +166,7 @@ export default function DashboardSection() {
   }
 
   return (
+    <>
     <div className="grid grid-cols-12 gap-4 md:gap-6">
       {/* ── 5 Metrics Row ──────────────────────────────────── */}
       <div className="col-span-12">
@@ -210,7 +224,7 @@ export default function DashboardSection() {
       {/* ── Bottom: New Users | New Fitness ─────────────────── */}
       <div className="col-span-12 xl:col-span-6">
         <ComponentCard title="Шинэ хэрэглэгчид" subtitle="Хамгийн сүүлд бүртгүүлсэн 10 хэрэглэгч">
-          <NewUsersCard users={newUsers} />
+          <NewUsersCard users={newUsers} onEdit={handleEditUser} />
         </ComponentCard>
       </div>
 
@@ -220,5 +234,14 @@ export default function DashboardSection() {
         </ComponentCard>
       </div>
     </div>
+
+    <UserFormModal
+      isOpen={editProfile !== null}
+      onClose={() => setEditProfile(null)}
+      profile={editProfile}
+      organizations={[]}
+      onSuccess={() => { setEditProfile(null); fetchCounts(); }}
+    />
+    </>
   );
 }

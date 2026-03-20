@@ -1,17 +1,21 @@
 /**
- * update-tiers.js
- * Reads GYMHUB_All_Members.xlsx and updates every profile with:
- *   - membership_tier: 780k+ → 'premium', <780k → 'early'
+ * update-tiers.js  (v2)
+ * Reads GYMHUB_All_Members_v2.xlsx and updates every matching profile with:
+ *   - membership_tier:    780k+ → 'premium', >0 <780k → 'early'
+ *   - membership_status:  amount > 0 → 'active', 0/null → 'inactive' (not paid)
  *   - membership_started_at: expire_date − 1 year
  *   - membership_expires_at: from Excel
- *   - membership_status: 'active'
- *   - organization: from Excel
+ *   - organization, full_name, phone: from Excel
  *
+ * Matching priority: email → phone fallback
+ * Deduplication: detects DB profiles sharing the same phone and reports them.
  * Does NOT touch auth users — profiles only.
  */
 const { createClient } = require('@supabase/supabase-js');
 const XLSX = require('xlsx');
 require('dotenv').config({ path: '.env.local' });
+
+const FILE = '/Users/jamba/Downloads/GYMHUB_All_Members_v2.xlsx';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -21,6 +25,10 @@ const supabase = createClient(
 
 function getTier(amount) {
   return Number(amount) >= 780000 ? 'premium' : 'early';
+}
+
+function getStatus(amount) {
+  return Number(amount) > 0 ? 'active' : 'inactive';
 }
 
 function getStartedAt(expireDate) {
@@ -41,33 +49,86 @@ async function loadAllAuthUsers() {
     data.users.forEach(u => {
       if (u.email) emailToId[u.email.toLowerCase()] = u.id;
     });
-    console.log(`  Loaded page ${page} — ${Object.keys(emailToId).length} users so far`);
+    console.log(`  Page ${page} — ${Object.keys(emailToId).length} auth users loaded`);
     if (data.users.length < 1000) break;
     page++;
   }
   return emailToId;
 }
 
-async function main() {
-  // Check membership_started_at column exists
-  const { data: sample } = await supabase.from('profiles').select('*').limit(1);
-  if (sample && sample[0] && !('membership_started_at' in sample[0])) {
-    console.error('\n❌ Missing column! Run this SQL in Supabase SQL Editor first:\n');
-    console.error('  ALTER TABLE profiles ADD COLUMN IF NOT EXISTS membership_started_at TIMESTAMPTZ;\n');
-    process.exit(1);
+async function loadProfilePhoneMap() {
+  console.log('📥 Loading profiles (building phone→[ids] map for duplicate detection)...');
+  const phoneToIds = {};
+  let from = 0;
+  const batchSize = 1000;
+  while (true) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, phone')
+      .range(from, from + batchSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    data.forEach(p => {
+      const ph = String(p.phone || '').trim();
+      if (!ph) return;
+      if (!phoneToIds[ph]) phoneToIds[ph] = [];
+      phoneToIds[ph].push(p.id);
+    });
+    if (data.length < batchSize) break;
+    from += batchSize;
   }
+  return phoneToIds;
+}
 
-  console.log('📖 Reading Excel...');
-  const wb = XLSX.readFile('/Users/jamba/Downloads/GYMHUB_All_Members.xlsx');
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets['All Members']);
-  console.log(`📊 ${rows.length} rows`);
+async function main() {
+  console.log('📖 Reading Excel:', FILE);
+  const wb = XLSX.readFile(FILE);
+  const rawRows = XLSX.utils.sheet_to_json(wb.Sheets['All Members'], { defval: null });
+  console.log(`📊 ${rawRows.length} total rows in file`);
+
+  // Deduplicate Excel rows by email (keep highest-amount entry per email)
+  const emailBest = {};
+  const noIdentifier = [];
+  rawRows.forEach(row => {
+    const email = String(row.email || '').trim().toLowerCase();
+    const phone = String(row.utas || '').trim();
+    if (!email && !phone) { noIdentifier.push(row); return; }
+    if (!email) return; // phone-only rows handled via phone fallback later
+    const amt = Number(row.total_amount) || 0;
+    if (!emailBest[email] || amt > Number(emailBest[email].total_amount || 0)) {
+      emailBest[email] = row;
+    }
+  });
+  const rows = Object.values(emailBest);
+  // Also collect phone-only rows (no email)
+  const phoneOnlyRows = rawRows.filter(r =>
+    !String(r.email || '').trim() && String(r.utas || '').trim()
+  );
+
+  console.log(`  → ${rows.length} unique-email rows`);
+  console.log(`  → ${phoneOnlyRows.length} phone-only rows (no email)`);
+  console.log(`  → ${noIdentifier.length} rows skipped (no email, no phone)`);
 
   const emailToId = await loadAllAuthUsers();
+  const phoneToIds = await loadProfilePhoneMap();
 
-  let updated = 0, notFound = 0, errors = [];
+  // Report DB duplicates (same phone → multiple profiles)
+  const dbDupes = Object.entries(phoneToIds).filter(([, ids]) => ids.length > 1);
+  if (dbDupes.length > 0) {
+    console.log(`\n⚠️  DB DUPLICATES — ${dbDupes.length} phone numbers map to multiple profiles:`);
+    dbDupes.forEach(([phone, ids]) => {
+      console.log(`  � ${phone} → profile IDs: ${ids.join(', ')}`);
+    });
+    console.log('  → These will be updated by email match only. Review manually to merge/delete extras.\n');
+  } else {
+    console.log('✅ No duplicate profiles found in DB.\n');
+  }
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+  let updated = 0, created = 0, inactive = 0, skipped = 0, phoneMatched = 0, errors = [];
+  const allRows = [...rows, ...phoneOnlyRows];
+
+  for (let i = 0; i < allRows.length; i++) {
+    const row = allRows[i];
     const email = String(row.email || '').trim().toLowerCase();
     const phone = String(row.utas || '').trim();
     const ovog = String(row.ovog || '').trim();
@@ -76,52 +137,103 @@ async function main() {
     const organization = String(row.organization || '').trim();
     const amount = Number(row.total_amount) || 0;
     const tier = getTier(amount);
+    const status = getStatus(amount);
     const expireDate = row.expire_date ? new Date(row.expire_date).toISOString() : null;
     const startedAt = getStartedAt(row.expire_date);
 
-    const userId = emailToId[email];
-    if (!userId) {
-      console.log(`[${i + 1}/${rows.length}] ⚠️  Not found in auth: ${email}`);
-      notFound++;
-      continue;
+    const profilePayload = {
+      full_name: fullName || null,
+      phone: phone || null,
+      organization: organization || null,
+      role: 'user',
+      membership_tier: tier,
+      membership_status: status,
+      membership_expires_at: expireDate,
+      membership_started_at: startedAt,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Resolve user ID: email first, phone fallback
+    let userId = email ? emailToId[email] : null;
+    let matchedVia = 'email';
+    if (!userId && phone) {
+      const ids = phoneToIds[phone];
+      if (ids && ids.length === 1) {
+        userId = ids[0];
+        matchedVia = 'phone';
+      } else if (ids && ids.length > 1) {
+        console.log(`[${i + 1}/${allRows.length}] ⚠️  Skipping phone ${phone}: maps to ${ids.length} profiles (ambiguous)`);
+        skipped++;
+        continue;
+      }
     }
 
-    process.stdout.write(`[${i + 1}/${rows.length}] ${fullName} | ${tier} | ${expireDate?.slice(0, 10) ?? '—'} ... `);
+    const label = status === 'inactive' ? '🔴 inactive' : `✅ ${tier}`;
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        full_name: fullName,
-        phone,
-        organization,
-        role: 'user',
-        membership_tier: tier,
-        membership_status: 'active',
-        membership_expires_at: expireDate,
-        membership_started_at: startedAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId);
-
-    if (error) {
-      console.log(`❌ ${error.message}`);
-      errors.push({ email, error: error.message });
+    if (userId) {
+      // ── UPDATE existing profile ────────────────────────────────────────
+      process.stdout.write(`[${i + 1}/${allRows.length}] ${fullName || email} | ${label} | via ${matchedVia} ... `);
+      const { error } = await supabase
+        .from('profiles')
+        .update(profilePayload)
+        .eq('id', userId);
+      if (error) {
+        console.log(`❌ ${error.message}`);
+        errors.push({ key: email || phone, error: error.message });
+      } else {
+        console.log('updated');
+        updated++;
+        if (status === 'inactive') inactive++;
+        if (matchedVia === 'phone') phoneMatched++;
+      }
+    } else if (email) {
+      // ── CREATE new auth user + profile ────────────────────────────────
+      process.stdout.write(`[${i + 1}/${allRows.length}] ${fullName || email} | ${label} | NEW ... `);
+      try {
+        const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+          email,
+          password: '123456',
+          email_confirm: true,
+          user_metadata: { full_name: fullName, phone, organization, role: 'user' },
+        });
+        if (authErr) throw authErr;
+        const newId = authData.user.id;
+        emailToId[email] = newId; // keep map fresh
+        const { error: profErr } = await supabase
+          .from('profiles')
+          .upsert({ id: newId, ...profilePayload }, { onConflict: 'id' });
+        if (profErr) throw profErr;
+        console.log('created');
+        created++;
+        if (status === 'inactive') inactive++;
+      } catch (err) {
+        console.log(`❌ ${err.message}`);
+        errors.push({ key: email, error: err.message });
+      }
     } else {
-      console.log('✅');
-      updated++;
+      // phone-only row, no match found — skip
+      console.log(`[${i + 1}/${allRows.length}] ⚠️  No email, phone ${phone} not in DB — skipped`);
+      skipped++;
     }
 
-    if (i % 20 === 0) await new Promise(r => setTimeout(r, 100));
+    // Throttle to stay within Supabase rate limits
+    if (i % 10 === 0) await new Promise(r => setTimeout(r, 150));
   }
 
-  console.log('\n════════════════════════════════');
-  console.log(`✅ Updated:   ${updated}`);
-  console.log(`⚠️  Not found: ${notFound}`);
-  console.log(`❌ Errors:    ${errors.length}`);
+  console.log('\n════════════════════════════════════════');
+  console.log(`✅ Updated:           ${updated}`);
+  console.log(`🆕 Created:           ${created}`);
+  console.log(`🔴 Of which inactive: ${inactive}  (no payment)`);
+  console.log(`📞 Phone-matched:     ${phoneMatched}`);
+  console.log(`⏭️  Skipped:          ${skipped}`);
+  console.log(`❌ Errors:            ${errors.length}`);
   if (errors.length > 0) {
-    errors.forEach(e => console.log(`  ${e.email}: ${e.error}`));
+    errors.forEach(e => console.log(`  ${e.key}: ${e.error}`));
   }
-  console.log('════════════════════════════════');
+  if (dbDupes.length > 0) {
+    console.log(`\n⚠️  ${dbDupes.length} duplicate phone(s) in DB — review manually`);
+  }
+  console.log('════════════════════════════════════════');
 }
 
 main().catch(console.error);
