@@ -98,6 +98,7 @@ export default function DashboardSection() {
   const fetchChartData = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
     const allStartDates: string[] = [];
+    const today = new Date().toISOString().slice(0, 7); // YYYY-MM cap
     const PAGE = 1000;
     let from = 0;
     while (true) {
@@ -105,10 +106,12 @@ export default function DashboardSection() {
         .from("profiles")
         .select("membership_started_at")
         .not("membership_started_at", "is", null)
+        .lte("membership_started_at", today + "-31") // exclude future dates at DB level
         .order("membership_started_at", { ascending: true })
         .range(from, from + PAGE - 1);
       (data ?? []).forEach((p: { membership_started_at: string }) => {
-        if (p.membership_started_at) allStartDates.push(p.membership_started_at.slice(0, 7));
+        const month = p.membership_started_at?.slice(0, 7);
+        if (month && month <= today) allStartDates.push(month);
       });
       if (!data || data.length < PAGE) break;
       from += PAGE;
