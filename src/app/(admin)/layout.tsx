@@ -6,6 +6,7 @@ import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
 import AdminGuard from "@/components/auth/AdminGuard";
 import React from "react";
+import { ToastProvider } from "@/components/ui/Toast";
 
 export default function AdminLayout({
   children,
@@ -22,21 +23,17 @@ export default function AdminLayout({
     : "lg:ml-[90px]";
 
   return (
-    <div className="min-h-screen xl:flex">
-      {/* Sidebar and Backdrop */}
-      <AppSidebar />
-      <Backdrop />
-      {/* Main Content Area */}
-      <div
-        className={`flex-1 transition-all  duration-300 ease-in-out ${mainContentMargin}`}
-      >
-        {/* Header */}
-        <AppHeader />
-        {/* Page Content */}
-        <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
-          <AdminGuard>{children}</AdminGuard>
+    <ToastProvider>
+      <div className="min-h-screen xl:flex">
+        <AppSidebar />
+        <Backdrop />
+        <div className={`flex-1 transition-all duration-300 ease-in-out ${mainContentMargin}`}>
+          <AppHeader />
+          <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">
+            <AdminGuard>{children}</AdminGuard>
+          </div>
         </div>
       </div>
-    </div>
+    </ToastProvider>
   );
 }

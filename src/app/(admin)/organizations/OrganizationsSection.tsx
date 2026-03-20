@@ -6,6 +6,7 @@ import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 import UserFormModal from "../users/UserFormModal";
 import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { useToast } from "@/components/ui/Toast";
 
 type Member = {
   id: string;
@@ -55,6 +56,7 @@ export default function OrganizationsSection() {
   const [editProfile, setEditProfile] = useState<Profile | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<{ memberId: string; name: string } | null>(null);
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
+  const toast = useToast();
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -126,12 +128,14 @@ export default function OrganizationsSection() {
     await supabase.from("profiles").update({ organization: null }).eq("id", confirmRemove.memberId);
     setRemoveLoading(null);
     setConfirmRemove(null);
+    toast.show("Гишүүн амжилттай хасагдлаа ✓");
     await fetchAll();
   };
 
   const handleAdd = async (memberId: string, orgName: string) => {
     const supabase = createBrowserSupabaseClient();
     await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
+    toast.show("Гишүүн амжилттай нэмэгдлээ ✓");
     await fetchAll();
   };
 
@@ -147,6 +151,7 @@ export default function OrganizationsSection() {
     await supabase.from("profiles").update({ organization: null }).eq("organization", orgName);
     setSelected(null);
     setConfirmDeleteOrg(null);
+    toast.show("Байгууллага амжилттай устгагдлаа ✓");
     await fetchAll();
   };
 
@@ -308,7 +313,7 @@ export default function OrganizationsSection() {
         onClose={() => setEditProfile(null)}
         profile={editProfile}
         organizations={orgRecords.map(r => r.name)}
-        onSuccess={() => { fetchAll(); setEditProfile(null); }}
+        onSuccess={() => { fetchAll(); setEditProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); }}
       />
 
       <ConfirmModal
@@ -544,25 +549,29 @@ function OrgDetailPanel({
         />
 
         {/* Tier filter */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
           {([["", "Бүгд"], ["early", "Early"], ["premium", "Premium"]] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => setTierFilter(v)}
-              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-colors ${
+              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-all ${
                 tierFilter === v
-                  ? v === "premium" ? "bg-violet-500 text-white" : v === "early" ? "bg-blue-500 text-white" : "bg-gray-700 text-white dark:bg-gray-600"
-                  : "border border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400"
+                  ? v === "premium" ? "bg-violet-500 text-white shadow-sm"
+                    : v === "early" ? "bg-blue-500 text-white shadow-sm"
+                    : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
+                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               }`}>{label}</button>
           ))}
         </div>
 
         {/* Status filter */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
           {([["", "Төлөв"], ["active", "Идэвх"], ["expired", "Дууссан"]] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => setStatusFilter(v)}
-              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-colors ${
+              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-all ${
                 statusFilter === v
-                  ? v === "active" ? "bg-emerald-500 text-white" : v === "expired" ? "bg-red-500 text-white" : "bg-gray-700 text-white dark:bg-gray-600"
-                  : "border border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400"
+                  ? v === "active" ? "bg-emerald-500 text-white shadow-sm"
+                    : v === "expired" ? "bg-red-500 text-white shadow-sm"
+                    : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
+                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               }`}>{label}</button>
           ))}
         </div>
@@ -640,7 +649,7 @@ function OrgDetailPanel({
                       ) : <span className="text-xs text-gray-400">—</span>}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => onEditMember(m)}
                           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"

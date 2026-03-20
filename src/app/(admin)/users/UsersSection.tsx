@@ -11,6 +11,8 @@ import SearchInput from "@/components/common/SearchInput";
 import { PlusIcon } from "@/icons";
 import { exportToCsv } from "@/lib/csv-export";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { useToast } from "@/components/ui/Toast";
+import type { Density } from "./UsersTable";
 
 export type Profile = {
   id: string;
@@ -42,6 +44,8 @@ export default function UsersSection() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [density, setDensity] = useState<Density>("comfortable");
+  const toast = useToast();
 
   const fetchProfiles = async () => {
     setLoading(true);
@@ -103,6 +107,7 @@ export default function UsersSection() {
     const res = await fetch(`/api/admin/users/${confirmDelete.id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) { alert(data.error ?? "Алдаа гарлаа"); return; }
+    toast.show("Хэрэглэгч амжилттай устгагдлаа ✓");
     fetchProfiles();
     setConfirmDelete(null);
   };
@@ -116,6 +121,7 @@ export default function UsersSection() {
       ));
       setSelectedIds(new Set());
       fetchProfiles();
+      toast.show(`${selectedIds.size} хэрэглэгч устгагдлаа ✓`);
     } catch { alert("Устгахад алдаа гарлаа"); }
     finally { setBulkDeleting(false); setConfirmBulk(false); }
   };
@@ -253,10 +259,20 @@ export default function UsersSection() {
               </div>
             )}
 
-            <button
-              onClick={() => setFormProfile("new")}
-              className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors"
-            >
+            {/* Density toggle */}
+            <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
+              <button type="button" onClick={() => setDensity("comfortable")} title="Тэлэгдсэн"
+                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${density === "comfortable" ? "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-400 hover:text-gray-600"}`}>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+              </button>
+              <button type="button" onClick={() => setDensity("compact")} title="Нягтаралсан"
+                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${density === "compact" ? "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-400 hover:text-gray-600"}`}>
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6h16.5M3.75 9.75h16.5M3.75 13.5h16.5M3.75 17.25h16.5M3.75 21h16.5"/></svg>
+              </button>
+            </div>
+
+            <button onClick={() => setFormProfile("new")}
+              className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors">
               <PlusIcon className="size-4" />
               Нэмэх
             </button>
@@ -280,6 +296,8 @@ export default function UsersSection() {
         <UsersTable
           profiles={pagedProfiles}
           error={error ?? undefined}
+          loading={loading}
+          density={density}
           onRoleChange={handleRoleChange}
           onEdit={(p) => setFormProfile(p)}
           onDelete={handleDelete}
@@ -350,7 +368,7 @@ export default function UsersSection() {
         onClose={() => setFormProfile(null)}
         profile={formProfile === "new" ? null : formProfile}
         organizations={organizations}
-        onSuccess={() => { fetchProfiles(); setFormProfile(null); }}
+        onSuccess={() => { fetchProfiles(); setFormProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); }}
       />
 
       <ConfirmModal

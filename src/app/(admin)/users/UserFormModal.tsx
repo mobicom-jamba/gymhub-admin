@@ -442,7 +442,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <div>
                       <Label>И-мэйл хаяг *</Label>
                       <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                        className={inp} required placeholder="user@example.com" />
+                        className={inp} required placeholder="user@example.com" autoFocus />
                     </div>
                     <div>
                       <Label>Нууц үг *</Label>
@@ -473,7 +473,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 <div>
                   <Label>Овог</Label>
                   <input type="text" value={ovog} onChange={e => setOvog(e.target.value)}
-                    className={inp} placeholder="Батболд" />
+                    className={inp} placeholder="Батболд" autoFocus={!isCreate} />
                 </div>
                 <div>
                   <Label>Нэр</Label>
