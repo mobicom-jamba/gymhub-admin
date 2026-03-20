@@ -44,6 +44,11 @@ const navItems: NavItem[] = [
     path: "/users",
   },
   {
+    icon: <TableIcon />,
+    name: "Байгууллагууд",
+    path: "/organizations",
+  },
+  {
     icon: <CalenderIcon />,
     name: "Захиалгууд",
     path: "/bookings",

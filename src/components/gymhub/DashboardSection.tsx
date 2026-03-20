@@ -32,8 +32,8 @@ export default function DashboardSection() {
 
   const fetchCounts = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const twelveMonthsAgo = new Date();
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
     const [
       usersRes, paidRes, gymsRes,
@@ -53,8 +53,8 @@ export default function DashboardSection() {
       supabase.from("profiles").select("id, full_name, phone, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
       // Monthly charts data — use membership_started_at (paid date) for user chart
-      supabase.from("profiles").select("membership_started_at").not("membership_started_at", "is", null).gte("membership_started_at", sixMonthsAgo.toISOString()),
-      supabase.from("bookings").select("created_at").eq("payment_status", "paid").gte("created_at", sixMonthsAgo.toISOString()),
+      supabase.from("profiles").select("membership_started_at").not("membership_started_at", "is", null).gte("membership_started_at", twelveMonthsAgo.toISOString()),
+      supabase.from("profiles").select("membership_started_at").not("membership_started_at", "is", null),
     ]);
 
     // Counts
@@ -102,10 +102,10 @@ export default function DashboardSection() {
         .map(([month, count]) => ({ month, count: count as number }))
     );
 
-    // Payments by month
+    // Payments by month — also use membership_started_at from profiles (all time, group by month)
     const payMonthMap: Record<string, number> = {};
-    (bookingsByDateRes.data ?? []).forEach((b: { created_at: string }) => {
-      const m = b.created_at.slice(0, 7);
+    (bookingsByDateRes.data ?? []).forEach((b: { membership_started_at: string }) => {
+      const m = b.membership_started_at.slice(0, 7);
       payMonthMap[m] = (payMonthMap[m] ?? 0) + 1;
     });
     setPaymentsByMonth(
