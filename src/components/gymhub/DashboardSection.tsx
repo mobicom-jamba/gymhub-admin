@@ -52,8 +52,8 @@ export default function DashboardSection() {
       // Recent users & gyms
       supabase.from("profiles").select("id, full_name, phone, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
-      // Monthly charts data
-      supabase.from("profiles").select("created_at").gte("created_at", sixMonthsAgo.toISOString()),
+      // Monthly charts data — use membership_started_at (paid date) for user chart
+      supabase.from("profiles").select("membership_started_at").not("membership_started_at", "is", null).gte("membership_started_at", sixMonthsAgo.toISOString()),
       supabase.from("bookings").select("created_at").eq("payment_status", "paid").gte("created_at", sixMonthsAgo.toISOString()),
     ]);
 
@@ -70,9 +70,14 @@ export default function DashboardSection() {
     setFitnessCount(totalGyms - yogaGyms);
     setYogaCount(yogaGyms);
 
-    // Company count — distinct companies from profiles or fallback to gym count
-    // We'll use the gym count as a proxy for "companies" since the screenshot shows "Компани"
-    setCompanyCount(totalGyms);
+    // Company count — distinct organizations from profiles
+    const { data: orgsData } = await supabase
+      .from("profiles")
+      .select("organization")
+      .not("organization", "is", null)
+      .neq("organization", "");
+    const distinctOrgs = new Set((orgsData ?? []).map((p: { organization: string }) => p.organization));
+    setCompanyCount(distinctOrgs.size);
 
     // Payment channels
     setPaymentChannels({
@@ -85,10 +90,10 @@ export default function DashboardSection() {
     setNewUsers((recentUsersRes.data ?? []) as UserRow[]);
     setNewGyms((recentGymsRes.data ?? []) as GymRow[]);
 
-    // User registrations by month
+    // Users by paid month (membership_started_at)
     const userMonthMap: Record<string, number> = {};
-    (profilesByDateRes.data ?? []).forEach((p: { created_at: string }) => {
-      const m = p.created_at.slice(0, 7); // "YYYY-MM"
+    (profilesByDateRes.data ?? []).forEach((p: { membership_started_at: string }) => {
+      const m = p.membership_started_at.slice(0, 7); // "YYYY-MM"
       userMonthMap[m] = (userMonthMap[m] ?? 0) + 1;
     });
     setUsersByMonth(
@@ -157,7 +162,7 @@ export default function DashboardSection() {
 
       {/* ── Charts Row: User registrations | Payments | Channels ── */}
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Хэрэглэгч бүртгүүлсэн огноо" subtitle="Бүртгүүлсэн огноо сараар">
+        <ComponentCard title="Гишүүнчлэл эхэлсэн огноо" subtitle="Төлбөр төлсөн огноо сараар">
           <MemberGrowthChart data={usersByMonth.map((d) => ({ date: d.month, count: d.count }))} />
           {/* Monthly summary below chart */}
           <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
@@ -165,7 +170,7 @@ export default function DashboardSection() {
               <div key={m.month} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <span className="inline-block h-2 w-2 rounded-sm bg-violet-500" />
-                  <span className="text-gray-600 dark:text-gray-400">{m.month.replace("-", "-р сар ")}</span>
+                  <span className="text-gray-600 dark:text-gray-400">{m.month.slice(0,4)}он {Number(m.month.slice(5,7))}-р сар</span>
                 </div>
                 <span className="font-bold text-violet-600 dark:text-violet-400">{m.count}</span>
               </div>

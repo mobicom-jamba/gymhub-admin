@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
-import Label from "@/components/form/Label";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { Profile } from "./UsersSection";
 
@@ -11,24 +10,39 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   profile: Profile | null;
+  organizations: string[];
   onSuccess: () => void;
 };
 
+const F = "block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400";
 const inputCls =
-  "h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
-
+  "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 " +
+  "focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 " +
+  "dark:border-gray-700 dark:bg-gray-800 dark:text-white/90 dark:[color-scheme:dark]";
 const selectCls =
-  "h-11 w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90";
+  "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-800 " +
+  "focus:border-brand-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90";
 
-export default function UserFormModal({ isOpen, onClose, profile, onSuccess }: Props) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className={F}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+export default function UserFormModal({ isOpen, onClose, profile, organizations, onSuccess }: Props) {
   const isCreate = !profile;
 
   const [email, setEmail]               = useState("");
   const [password, setPassword]         = useState("123456");
-  const [fullName, setFullName]         = useState("");
+  const [ovog, setOvog]                 = useState("");
+  const [ner, setNer]                   = useState("");
   const [phone, setPhone]               = useState("");
   const [role, setRole]                 = useState("user");
   const [organization, setOrganization] = useState("");
+  const [orgSearch, setOrgSearch]       = useState("");
   const [tier, setTier]                 = useState("early");
   const [startedAt, setStartedAt]       = useState("");
   const [expiresAt, setExpiresAt]       = useState("");
@@ -38,33 +52,31 @@ export default function UserFormModal({ isOpen, onClose, profile, onSuccess }: P
   useEffect(() => {
     if (!isOpen) return;
     if (profile) {
-      setEmail("");
-      setPassword("");
-      setFullName(profile.full_name ?? "");
+      const parts = (profile.full_name ?? "").trim().split(" ");
+      setOvog(parts[0] ?? "");
+      setNer(parts.slice(1).join(" "));
       setPhone(profile.phone ?? "");
       setRole(profile.role ?? "user");
       setOrganization(profile.organization ?? "");
+      setOrgSearch("");
       setTier(profile.membership_tier ?? "early");
-      setStartedAt(profile.membership_started_at ? profile.membership_started_at.slice(0, 10) : "");
-      setExpiresAt(profile.membership_expires_at ? profile.membership_expires_at.slice(0, 10) : "");
-    } else {
+      setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
+      setExpiresAt(profile.membership_expires_at?.slice(0, 10) ?? "");
       setEmail("");
-      setPassword("123456");
-      setFullName("");
-      setPhone("");
-      setRole("user");
-      setOrganization("");
-      setTier("early");
-      setStartedAt("");
-      setExpiresAt("");
+      setPassword("");
+    } else {
+      setEmail(""); setPassword("123456");
+      setOvog(""); setNer("");
+      setPhone(""); setRole("user");
+      setOrganization(""); setOrgSearch("");
+      setTier("early"); setStartedAt(""); setExpiresAt("");
     }
     setFormError("");
   }, [isOpen, profile]);
 
-  // Auto-fill started_at = expires_at − 1 year when expires changes (create mode)
   const handleExpiresChange = (val: string) => {
     setExpiresAt(val);
-    if (val && isCreate) {
+    if (val) {
       const d = new Date(val);
       d.setFullYear(d.getFullYear() - 1);
       setStartedAt(d.toISOString().slice(0, 10));
@@ -75,25 +87,20 @@ export default function UserFormModal({ isOpen, onClose, profile, onSuccess }: P
     e.preventDefault();
     setFormError("");
     setLoading(true);
-
+    const fullName = [ovog, ner].filter(Boolean).join(" ") || null;
     try {
       if (isCreate) {
-        if (!email || !password) {
-          setFormError("И-мэйл болон нууц үг оруулна уу");
-          return;
-        }
-        // Create auth user + profile via admin API
+        if (!email || !password) { setFormError("И-мэйл болон нууц үг оруулна уу"); return; }
         const res = await fetch("/api/admin/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email,
-            password,
-            full_name: fullName || null,
+            email, password,
+            full_name: fullName,
             phone: phone || null,
             role,
             organization: organization || null,
-            membership_tier: tier || null,
+            membership_tier: tier,
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
             membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
             membership_status: "active",
@@ -106,11 +113,11 @@ export default function UserFormModal({ isOpen, onClose, profile, onSuccess }: P
         const { error: err } = await supabase
           .from("profiles")
           .update({
-            full_name: fullName || null,
+            full_name: fullName,
             phone: phone || null,
             role,
             organization: organization || null,
-            membership_tier: tier || null,
+            membership_tier: tier,
             membership_status: "active",
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
             membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
@@ -126,94 +133,141 @@ export default function UserFormModal({ isOpen, onClose, profile, onSuccess }: P
     }
   };
 
+  const filteredOrgs = organizations.filter((o) =>
+    o.toLowerCase().includes(orgSearch.toLowerCase())
+  );
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-lg m-4">
-      <div className="p-6">
-        <h3 className="mb-1 text-lg font-semibold text-gray-800 dark:text-white/90">
+      <div className="max-h-[90vh] overflow-y-auto p-6">
+        <h3 className="mb-1 text-base font-semibold text-gray-800 dark:text-white/90">
           {isCreate ? "Шинэ хэрэглэгч нэмэх" : "Хэрэглэгч засах"}
         </h3>
-        <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">
-          {isCreate ? "Auth + профайл хамт үүснэ" : `ID: ${profile?.id?.slice(0, 8)}...`}
+        <p className="mb-4 text-xs text-gray-400">
+          {isCreate ? "Auth болон профайл хамт үүснэ" : `ID: ${profile?.id?.slice(0, 8)}...`}
         </p>
 
         {formError && (
-          <div className="mb-4 rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
+          <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-400">
             {formError}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* ── Auth fields (create only) ── */}
+        <form onSubmit={handleSubmit} className="space-y-3">
+
+          {/* ── Login (create only) ── */}
           {isCreate && (
-            <div className="rounded-xl border border-dashed border-gray-300 p-4 dark:border-gray-700">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Нэвтрэх мэдээлэл</p>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Нэвтрэх мэдээлэл</p>
+              <div className="grid grid-cols-2 gap-2">
                 <div className="col-span-2">
-                  <Label>И-мэйл *</Label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                    className={inputCls} required placeholder="user@example.com" />
+                  <Field label="И-мэйл *">
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                      className={inputCls} required placeholder="user@example.com" />
+                  </Field>
                 </div>
                 <div className="col-span-2">
-                  <Label>Нууц үг *</Label>
-                  <input type="text" value={password} onChange={(e) => setPassword(e.target.value)}
-                    className={inputCls} required minLength={6} placeholder="123456" />
+                  <Field label="Нууц үг *">
+                    <input type="text" value={password} onChange={(e) => setPassword(e.target.value)}
+                      className={inputCls} required minLength={6} />
+                  </Field>
                 </div>
               </div>
             </div>
           )}
 
           {/* ── Personal info ── */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <Label>Нэр</Label>
-              <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                className={inputCls} placeholder="Овог Нэр" />
-            </div>
-            <div>
-              <Label>Утасны дугаар</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Овог">
+              <input type="text" value={ovog} onChange={(e) => setOvog(e.target.value)}
+                className={inputCls} placeholder="Батболд" />
+            </Field>
+            <Field label="Нэр">
+              <input type="text" value={ner} onChange={(e) => setNer(e.target.value)}
+                className={inputCls} placeholder="Мөнхбаяр" />
+            </Field>
+            <Field label="Утасны дугаар">
               <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)}
                 className={inputCls} placeholder="9911xxxx" />
-            </div>
-            <div>
-              <Label>Эрх</Label>
+            </Field>
+            <Field label="Эрх">
               <select value={role} onChange={(e) => setRole(e.target.value)} className={selectCls}>
                 <option value="user">Гишүүн</option>
                 <option value="admin">Админ</option>
               </select>
-            </div>
-            <div className="col-span-2">
-              <Label>Байгууллага</Label>
-              <input type="text" value={organization} onChange={(e) => setOrganization(e.target.value)}
-                className={inputCls} placeholder="Khanbank, MCS Group..." />
-            </div>
+            </Field>
           </div>
+
+          {/* ── Organization searchable select ── */}
+          <Field label="Байгууллага">
+            <div className="relative">
+              <input
+                type="text"
+                value={organization || orgSearch}
+                onChange={(e) => {
+                  setOrgSearch(e.target.value);
+                  setOrganization("");
+                }}
+                onFocus={() => setOrgSearch(organization)}
+                className={inputCls}
+                placeholder="Хайх эсвэл сонгох..."
+                autoComplete="off"
+              />
+              {orgSearch && !organization && filteredOrgs.length > 0 && (
+                <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                  {filteredOrgs.slice(0, 30).map((o) => (
+                    <li
+                      key={o}
+                      onMouseDown={() => { setOrganization(o); setOrgSearch(""); }}
+                      className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-brand-50 hover:text-brand-700 dark:text-gray-300 dark:hover:bg-brand-900/20"
+                    >
+                      {o}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Field>
 
           {/* ── Membership ── */}
-          <div className="rounded-xl border border-dashed border-gray-300 p-4 dark:border-gray-700">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Гишүүнчлэл</p>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-gray-50 p-3 dark:bg-gray-800/50">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Гишүүнчлэл</p>
+            <div className="grid grid-cols-2 gap-2">
               <div className="col-span-2">
-                <Label>Тариф</Label>
-                <select value={tier} onChange={(e) => setTier(e.target.value)} className={selectCls}>
-                  <option value="early">Early — 480,000₮</option>
-                  <option value="premium">Premium — 780,000₮</option>
-                </select>
+                <Field label="Тариф">
+                  <select value={tier} onChange={(e) => setTier(e.target.value)} className={selectCls}>
+                    <option value="early">Early — 480,000₮</option>
+                    <option value="premium">Premium — 780,000₮</option>
+                  </select>
+                </Field>
               </div>
-              <div>
-                <Label>Эхлэх огноо</Label>
-                <input type="date" value={startedAt} onChange={(e) => setStartedAt(e.target.value)}
-                  className={inputCls} />
-              </div>
-              <div>
-                <Label>Дуусах огноо</Label>
-                <input type="date" value={expiresAt} onChange={(e) => handleExpiresChange(e.target.value)}
-                  className={inputCls} />
-                {isCreate && <p className="mt-1 text-xs text-gray-400">Дуусах огноо оруулахад эхлэх огноо автоматаар тохируулагдана</p>}
-              </div>
+              <Field label="Эхлэх огноо">
+                <input
+                  type="date"
+                  value={startedAt}
+                  onChange={(e) => setStartedAt(e.target.value)}
+                  className={inputCls}
+                  style={{ colorScheme: "light" }}
+                />
+              </Field>
+              <Field label="Дуусах огноо">
+                <input
+                  type="date"
+                  value={expiresAt}
+                  onChange={(e) => handleExpiresChange(e.target.value)}
+                  className={inputCls}
+                  style={{ colorScheme: "light" }}
+                />
+              </Field>
+              {expiresAt && (
+                <p className="col-span-2 text-xs text-gray-400">
+                  Дуусах огноо оруулахад эхлэх огноо автоматаар −1 жил тохируулагдана
+                </p>
+              )}
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={onClose} size="sm">Цуцлах</Button>
             <Button type="submit" disabled={loading} size="sm">
               {loading ? "Хадгалж байна..." : isCreate ? "Нэмэх" : "Хадгалах"}

@@ -307,6 +307,7 @@ export default function UsersSection() {
         isOpen={formProfile !== null}
         onClose={() => setFormProfile(null)}
         profile={formProfile === "new" ? null : formProfile}
+        organizations={organizations}
         onSuccess={() => { fetchProfiles(); setFormProfile(null); }}
       />
     </>
