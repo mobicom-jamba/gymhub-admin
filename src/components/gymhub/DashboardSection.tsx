@@ -37,13 +37,17 @@ export default function DashboardSection() {
 
     const [
       usersRes, paidRes, gymsRes,
+      orgsCountRes,
       qpayRes, sonoRes, pocketRes, giftRes,
       recentUsersRes, recentGymsRes,
       profilesByDateRes, bookingsByDateRes,
     ] = await Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
-      supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid"),
-      supabase.from("gyms").select("id, amenities", { count: "exact" }),
+      // Paid = profiles that have a membership_started_at (actual paying members)
+      supabase.from("profiles").select("id", { count: "exact", head: true }).not("membership_started_at", "is", null),
+      supabase.from("gyms").select("id, name, amenities", { count: "exact" }),
+      // Company count from organizations table
+      supabase.from("organizations").select("id", { count: "exact", head: true }),
       // Payment channels
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "qpay"),
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "sono"),
@@ -61,23 +65,30 @@ export default function DashboardSection() {
     setUserCount(usersRes.count ?? 0);
     setPaymentCount(paidRes.count ?? 0);
 
-    // Gym type counts — fitness vs yoga
+    // Company count — from organizations table (falls back to distinct profiles.organization)
+    const orgTableCount = orgsCountRes.count ?? 0;
+    if (orgTableCount > 0) {
+      setCompanyCount(orgTableCount);
+    } else {
+      const { data: orgsData } = await supabase
+        .from("profiles")
+        .select("organization")
+        .not("organization", "is", null)
+        .neq("organization", "");
+      const distinctOrgs = new Set((orgsData ?? []).map((p: { organization: string }) => p.organization));
+      setCompanyCount(distinctOrgs.size);
+    }
+
+    // Gym type counts — fitness vs yoga (check both amenities array and gym name)
     const allGyms = gymsRes.data ?? [];
     const totalGyms = gymsRes.count ?? allGyms.length;
-    const yogaGyms = allGyms.filter((g: { amenities?: string[] | null }) =>
-      (g.amenities ?? []).some((a: string) => a.toLowerCase().includes("yoga") || a.toLowerCase().includes("йога"))
-    ).length;
+    const yogaGyms = allGyms.filter((g: { name?: string | null; amenities?: string[] | null }) => {
+      const nameMatch = (g.name ?? "").toLowerCase().includes("yoga") || (g.name ?? "").toLowerCase().includes("йога");
+      const amenityMatch = (g.amenities ?? []).some((a: string) => a.toLowerCase().includes("yoga") || a.toLowerCase().includes("йога"));
+      return nameMatch || amenityMatch;
+    }).length;
     setFitnessCount(totalGyms - yogaGyms);
     setYogaCount(yogaGyms);
-
-    // Company count — distinct organizations from profiles
-    const { data: orgsData } = await supabase
-      .from("profiles")
-      .select("organization")
-      .not("organization", "is", null)
-      .neq("organization", "");
-    const distinctOrgs = new Set((orgsData ?? []).map((p: { organization: string }) => p.organization));
-    setCompanyCount(distinctOrgs.size);
 
     // Payment channels
     setPaymentChannels({

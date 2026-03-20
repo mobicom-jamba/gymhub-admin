@@ -48,7 +48,7 @@ function SectionHeader({ icon, title }: { icon: React.ReactNode; title: string }
 }
 
 export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props) {
-  const isCreate = !org;
+  const isCreate = !org || !org.id;
   const fileRef = useRef<HTMLInputElement>(null);
   const supabase = createBrowserSupabaseClient();
 
@@ -230,11 +230,6 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
                     <Label>Нэр *</Label>
                     <input type="text" value={name} onChange={e => setName(e.target.value)}
                       className={inp} placeholder="Khanbank" required />
-                  </div>
-                  <div>
-                    <Label>Зангиа</Label>
-                    <input type="text" value={description} onChange={e => setDescription(e.target.value)}
-                      className={inp} placeholder="Монголын тэргүүлэх банк" />
                   </div>
                   <div>
                     <Label>Утас</Label>

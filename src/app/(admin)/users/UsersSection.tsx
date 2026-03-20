@@ -30,8 +30,8 @@ export default function UsersSection() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"user" | "admin">("user");
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -60,7 +60,7 @@ export default function UsersSection() {
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
-      if (roleFilter && (p.role ?? "user") !== roleFilter) return false;
+      if ((p.role ?? "user") !== tab) return false;
       if (orgFilter && p.organization !== orgFilter) return false;
       if (statusFilter && (p.membership_status ?? "active") !== statusFilter) return false;
       if (search) {
@@ -149,10 +149,40 @@ export default function UsersSection() {
     );
   }
 
+  const adminCount = profiles.filter(p => (p.role ?? "user") === "admin").length;
+  const userCount  = profiles.filter(p => (p.role ?? "user") === "user").length;
+
   return (
     <>
+      {/* ── Role Tabs ── */}
+      <div className="mb-4 flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 dark:border-white/[0.08] dark:bg-gray-900" style={{ width: "fit-content" }}>
+        {(["user", "admin"] as const).map((r) => {
+          const label = r === "user" ? "Гишүүд" : "Админ";
+          const count = r === "user" ? userCount : adminCount;
+          const active = tab === r;
+          return (
+            <button
+              key={r}
+              onClick={() => { setTab(r); setPage(1); setSelectedIds(new Set()); }}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                active
+                  ? "bg-brand-500 text-white shadow-sm"
+                  : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/[0.06]"
+              }`}
+            >
+              {label}
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500 dark:bg-white/[0.08] dark:text-gray-400"
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <ComponentCard
-        title={`${t("users")} — ${filteredProfiles.length.toLocaleString()} нийт`}
+        title={`${tab === "user" ? "Гишүүд" : "Админ"} — ${filteredProfiles.length.toLocaleString()}`}
       >
         {/* ── Filters row ── */}
         <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -173,17 +203,6 @@ export default function UsersSection() {
             {organizations.map((o) => (
               <option key={o} value={o}>{o}</option>
             ))}
-          </select>
-
-          {/* Role filter */}
-          <select
-            value={roleFilter}
-            onChange={(e) => { setRoleFilter(e.target.value); resetPage(); }}
-            className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-          >
-            <option value="">Эрх: Бүгд</option>
-            <option value="user">Гишүүн</option>
-            <option value="admin">Админ</option>
           </select>
 
           {/* Status filter */}
