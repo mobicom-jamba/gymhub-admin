@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { GymHubMetrics } from "./GymHubMetrics";
 import MemberGrowthChart from "./MemberGrowthChart";
@@ -20,7 +20,7 @@ type PaymentChannels = { qpay: number; sono: number; pocket: number; gift: numbe
 
 export default function DashboardSection() {
   const [userCount, setUserCount] = useState(0);
-  const [paymentCount, setPaymentCount] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
   const [companyCount, setCompanyCount] = useState(0);
   const [fitnessCount, setFitnessCount] = useState(0);
   const [yogaCount, setYogaCount] = useState(0);
@@ -29,53 +29,48 @@ export default function DashboardSection() {
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannels>({ qpay: 0, sono: 0, pocket: 0, gift: 0 });
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
+  const [orgs, setOrgs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [editProfile, setEditProfile] = useState<Profile | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchCounts = useCallback(async () => {
+  // ── Fast fetch: all count queries + recent lists + orgs ──────────────────
+  // Resolves in ~50–100ms. Triggered on mount AND debounced realtime events.
+  const fetchFast = useCallback(async () => {
     const supabase = createBrowserSupabaseClient();
 
     const [
-      usersRes, paidRes, gymsRes,
-      orgsCountRes,
+      usersRes, activeRes, gymsRes, orgsCountRes,
       qpayRes, sonoRes, pocketRes, giftRes,
-      recentUsersRes, recentGymsRes,
+      recentUsersRes, recentGymsRes, orgsListRes,
     ] = await Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
-      // Paid = profiles that have a membership_started_at (actual paying members)
-      supabase.from("profiles").select("id", { count: "exact", head: true }).not("membership_started_at", "is", null),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("membership_status", "active"),
       supabase.from("gyms").select("id, name, amenities", { count: "exact" }),
-      // Company count from organizations table
       supabase.from("organizations").select("id", { count: "exact", head: true }),
-      // Payment channels
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "qpay"),
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "sono"),
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "pocket"),
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "gift"),
-      // Recent users & gyms
       supabase.from("profiles").select("id, full_name, phone, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
+      supabase.from("organizations").select("name").order("name", { ascending: true }),
     ]);
 
-    // Counts
     setUserCount(usersRes.count ?? 0);
-    setPaymentCount(paidRes.count ?? 0);
+    setActiveCount(activeRes.count ?? 0);
 
-    // Company count — from organizations table (falls back to distinct profiles.organization)
     const orgTableCount = orgsCountRes.count ?? 0;
     if (orgTableCount > 0) {
       setCompanyCount(orgTableCount);
     } else {
       const { data: orgsData } = await supabase
-        .from("profiles")
-        .select("organization")
-        .not("organization", "is", null)
-        .neq("organization", "");
+        .from("profiles").select("organization")
+        .not("organization", "is", null).neq("organization", "");
       const distinctOrgs = new Set((orgsData ?? []).map((p: { organization: string }) => p.organization));
       setCompanyCount(distinctOrgs.size);
     }
 
-    // Gym type counts — fitness vs yoga (check both amenities array and gym name)
     const allGyms = gymsRes.data ?? [];
     const totalGyms = gymsRes.count ?? allGyms.length;
     const yogaGyms = allGyms.filter((g: { name?: string | null; amenities?: string[] | null }) => {
@@ -86,7 +81,6 @@ export default function DashboardSection() {
     setFitnessCount(totalGyms - yogaGyms);
     setYogaCount(yogaGyms);
 
-    // Payment channels
     setPaymentChannels({
       qpay: qpayRes.count ?? 0,
       sono: sonoRes.count ?? 0,
@@ -96,53 +90,61 @@ export default function DashboardSection() {
 
     setNewUsers((recentUsersRes.data ?? []) as UserRow[]);
     setNewGyms((recentGymsRes.data ?? []) as GymRow[]);
+    setOrgs((orgsListRes.data ?? []).map((o: { name: string }) => o.name));
+    setLoading(false);
+  }, []);
 
-    // Paginate ALL membership_started_at values — no 1000-row cap, no date filter
+  // ── Slow fetch: paginated chart data — only runs on mount ─────────────────
+  const fetchChartData = useCallback(async () => {
+    const supabase = createBrowserSupabaseClient();
     const allStartDates: string[] = [];
-    {
-      const PAGE = 1000;
-      let from = 0;
-      while (true) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("membership_started_at")
-          .not("membership_started_at", "is", null)
-          .order("membership_started_at", { ascending: true })
-          .range(from, from + PAGE - 1);
-        (data ?? []).forEach((p: { membership_started_at: string }) => {
-          if (p.membership_started_at) allStartDates.push(p.membership_started_at.slice(0, 7));
-        });
-        if (!data || data.length < PAGE) break;
-        from += PAGE;
-      }
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("membership_started_at")
+        .not("membership_started_at", "is", null)
+        .order("membership_started_at", { ascending: true })
+        .range(from, from + PAGE - 1);
+      (data ?? []).forEach((p: { membership_started_at: string }) => {
+        if (p.membership_started_at) allStartDates.push(p.membership_started_at.slice(0, 7));
+      });
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
     }
-
-    // Group by YYYY-MM for both charts
     const monthMap: Record<string, number> = {};
     allStartDates.forEach(m => { monthMap[m] = (monthMap[m] ?? 0) + 1; });
     const sortedMonths = Object.entries(monthMap)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, count]) => ({ month, count: count as number }));
-
     setUsersByMonth(sortedMonths);
     setPaymentsByMonth(sortedMonths);
-
-    setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchCounts();
+    fetchFast().then(() => fetchChartData());
 
     const supabase = createBrowserSupabaseClient();
+
+    // Debounced handler — only refreshes fast counts, not the heavy chart loop
+    const debouncedFast = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => fetchFast(), 2000);
+    };
+
     const channel = supabase
       .channel("dashboard-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "gyms" }, () => fetchCounts())
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => fetchCounts())
-      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => fetchCounts())
+      .on("postgres_changes", { event: "*", schema: "public", table: "gyms" }, debouncedFast)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, debouncedFast)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, debouncedFast)
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchCounts]);
+    return () => {
+      supabase.removeChannel(channel);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [fetchFast, fetchChartData]);
 
   const handleEditUser = useCallback(async (id: string) => {
     const supabase = createBrowserSupabaseClient();
@@ -168,11 +170,11 @@ export default function DashboardSection() {
   return (
     <>
     <div className="grid grid-cols-12 gap-4 md:gap-6">
-      {/* ── 5 Metrics Row ──────────────────────────────────── */}
+      {/* ── Metrics Row ──────────────────────────────────────── */}
       <div className="col-span-12">
         <GymHubMetrics
           userCount={userCount}
-          paymentCount={paymentCount}
+          activeCount={activeCount}
           companyCount={companyCount}
           fitnessCount={fitnessCount}
           yogaCount={yogaCount}
@@ -180,11 +182,10 @@ export default function DashboardSection() {
         />
       </div>
 
-      {/* ── Charts Row: User registrations | Payments | Channels ── */}
+      {/* ── Charts Row ───────────────────────────────────────── */}
       <div className="col-span-12 xl:col-span-4">
         <ComponentCard title="Гишүүнчлэл эхэлсэн огноо" subtitle="Төлбөр төлсөн огноо сараар">
           <MemberGrowthChart data={usersByMonth.map((d) => ({ date: d.month, count: d.count }))} />
-          {/* Monthly summary below chart */}
           <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
             {usersByMonth.slice(-3).reverse().map((m) => (
               <div key={m.month} className="flex items-center justify-between text-sm">
@@ -200,28 +201,18 @@ export default function DashboardSection() {
       </div>
 
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Төлбөр төлсөн огноо" subtitle="Төлбөр төлөлт">
+        <ComponentCard title="Төлбөр төлсөн огноо" subtitle="Гишүүнчлэл эхэлсэн огноо сараар">
           <BookingsChart data={paymentsByMonth.map((d) => ({ date: d.month, count: d.count }))} />
-          <div className="mt-3 flex justify-center border-t border-gray-100 pt-3 dark:border-white/[0.06]">
-            <button className="text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">
-              Дэлгэрэнгүй
-            </button>
-          </div>
         </ComponentCard>
       </div>
 
       <div className="col-span-12 xl:col-span-4">
         <ComponentCard title="Төлбөр төлсөн суваг" subtitle="Төлбөр төлсөн суваг">
           <PaymentChannelsCard channels={paymentChannels} />
-          <div className="mt-3 flex justify-center border-t border-gray-100 pt-3 dark:border-white/[0.06]">
-            <button className="text-sm font-medium text-brand-500 hover:text-brand-600 dark:text-brand-400">
-              Дэлгэрэнгүй
-            </button>
-          </div>
         </ComponentCard>
       </div>
 
-      {/* ── Bottom: New Users | New Fitness ─────────────────── */}
+      {/* ── Bottom: New Users | New Fitness ──────────────────── */}
       <div className="col-span-12 xl:col-span-6">
         <ComponentCard title="Шинэ хэрэглэгчид" subtitle="Хамгийн сүүлд бүртгүүлсэн 10 хэрэглэгч">
           <NewUsersCard users={newUsers} onEdit={handleEditUser} />
@@ -239,8 +230,8 @@ export default function DashboardSection() {
       isOpen={editProfile !== null}
       onClose={() => setEditProfile(null)}
       profile={editProfile}
-      organizations={[]}
-      onSuccess={() => { setEditProfile(null); fetchCounts(); }}
+      organizations={orgs}
+      onSuccess={() => { setEditProfile(null); fetchFast(); }}
     />
     </>
   );

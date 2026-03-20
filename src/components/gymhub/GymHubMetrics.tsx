@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type GymHubMetricsProps = {
   userCount: number;
-  paymentCount: number;
+  activeCount: number;
   companyCount: number;
   fitnessCount: number;
   yogaCount: number;
@@ -19,8 +19,8 @@ const metrics: {
   bg: string;
   iconColor: string;
 }[] = [
-  { key: "userCount", label: "Хэрэглэгч", icon: "👤", bg: "bg-blue-50 dark:bg-blue-900/20", iconColor: "text-blue-600" },
-  { key: "paymentCount", label: "Төлбөр", icon: "📋", bg: "bg-green-50 dark:bg-green-900/20", iconColor: "text-green-600" },
+  { key: "userCount", label: "Нийт гишүүн", icon: "👤", bg: "bg-blue-50 dark:bg-blue-900/20", iconColor: "text-blue-600" },
+  { key: "activeCount", label: "Идэвхтэй", icon: "✅", bg: "bg-green-50 dark:bg-green-900/20", iconColor: "text-green-600" },
   { key: "companyCount", label: "Компани", icon: "🏢", bg: "bg-blue-50 dark:bg-blue-900/20", iconColor: "text-blue-600" },
   { key: "fitnessCount", label: "Фитнес", icon: "📍", bg: "bg-orange-50 dark:bg-orange-900/20", iconColor: "text-orange-600" },
   { key: "yogaCount", label: "Йога", icon: "🧘", bg: "bg-pink-50 dark:bg-pink-900/20", iconColor: "text-pink-600" },
