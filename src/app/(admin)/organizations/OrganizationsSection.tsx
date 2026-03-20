@@ -47,10 +47,9 @@ export default function OrganizationsSection() {
   const [removeLoading, setRemoveLoading] = useState<string | null>(null);
   const [formOrg, setFormOrg] = useState<OrgRecord | "new" | null>(null);
 
-  const supabase = createBrowserSupabaseClient();
-
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    const supabase = createBrowserSupabaseClient();
     const [profilesRes, orgsRes] = await Promise.all([
       supabase
         .from("profiles")
@@ -108,18 +107,21 @@ export default function OrganizationsSection() {
 
   const handleRemove = async (memberId: string) => {
     setRemoveLoading(memberId);
+    const supabase = createBrowserSupabaseClient();
     await supabase.from("profiles").update({ organization: null }).eq("id", memberId);
     setRemoveLoading(null);
     await fetchAll();
   };
 
   const handleAdd = async (memberId: string, orgName: string) => {
+    const supabase = createBrowserSupabaseClient();
     await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
     await fetchAll();
   };
 
   const handleDeleteOrg = async (orgName: string, recordId: string | null) => {
     if (!confirm(`"${orgName}" байгууллагыг устгах уу? Гишүүдийн байгууллагын холбоос арилна.`)) return;
+    const supabase = createBrowserSupabaseClient();
     if (recordId) {
       await supabase.from("organizations").delete().eq("id", recordId);
     }

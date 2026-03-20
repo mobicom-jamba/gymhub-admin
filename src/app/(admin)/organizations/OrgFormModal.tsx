@@ -120,6 +120,10 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
         if (finalLogo) {
           await supabase.from("organizations").update({ logo_url: finalLogo }).eq("id", inserted.id);
         }
+        // If opened from a stub (existing org name pre-filled), update profiles if name changed
+        if (org?.name && name.trim() !== org.name) {
+          await supabase.from("profiles").update({ organization: name.trim() }).eq("organization", org.name);
+        }
       } else {
         const finalLogo = await uploadLogo(org!.id);
         const { error: updateErr } = await supabase

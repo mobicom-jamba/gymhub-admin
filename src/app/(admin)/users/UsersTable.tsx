@@ -115,9 +115,6 @@ export default function UsersTable({
                 Дуусах огноо
               </TableCell>
               <TableCell isHeader className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Эрх
-              </TableCell>
-              <TableCell isHeader className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 Бүртгүүлсэн
               </TableCell>
               {(onEdit || onDelete) && (
@@ -201,26 +198,6 @@ export default function UsersTable({
                       </span>
                     ) : (
                       <span className="text-gray-400">—</span>
-                    )}
-                  </TableCell>
-
-                  {/* Role */}
-                  <TableCell className="px-4 py-3">
-                    {onRoleChange ? (
-                      <select
-                        value={p.role ?? "user"}
-                        onChange={(e) => handleRoleSelect(p, e.target.value)}
-                        disabled={updatingId === p.id}
-                        className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>{roleLabels[r]}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <Badge size="sm" color={p.role === "admin" ? "warning" : "primary"}>
-                        {roleLabels[p.role ?? "user"] ?? p.role}
-                      </Badge>
                     )}
                   </TableCell>
 

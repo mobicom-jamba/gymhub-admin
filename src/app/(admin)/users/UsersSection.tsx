@@ -24,7 +24,7 @@ export type Profile = {
   created_at: string;
 };
 
-const PAGE_SIZE = 25;
+const PAGE_SIZES = [25, 50, 100, 500];
 
 export default function UsersSection() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -35,6 +35,7 @@ export default function UsersSection() {
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [formProfile, setFormProfile] = useState<Profile | null | "new">(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -75,8 +76,8 @@ export default function UsersSection() {
     });
   }, [profiles, search, tab, orgFilter, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / PAGE_SIZE));
-  const pagedProfiles = filteredProfiles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / pageSize));
+  const pagedProfiles = filteredProfiles.slice((page - 1) * pageSize, page * pageSize);
 
   const resetPage = () => setPage(1);
 
@@ -163,7 +164,7 @@ export default function UsersSection() {
           return (
             <button
               key={r}
-              onClick={() => { setTab(r); setPage(1); setSelectedIds(new Set()); }}
+              onClick={() => { setTab(r); setPage(1); setPageSize(25); setSelectedIds(new Set()); }}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                 active
                   ? "bg-brand-500 text-white shadow-sm"
@@ -274,11 +275,18 @@ export default function UsersSection() {
         />
 
         {/* ── Pagination ── */}
-        {totalPages > 1 && (
+        {(totalPages > 1 || filteredProfiles.length > 25) && (
           <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-            <span>
-              {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, filteredProfiles.length)} / {filteredProfiles.length.toLocaleString()}
-            </span>
+            <div className="flex items-center gap-2">
+              <span>{((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filteredProfiles.length)} / {filteredProfiles.length.toLocaleString()}</span>
+              <select
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+              >
+                {PAGE_SIZES.map(s => <option key={s} value={s}>{s} хэрэглээ</option>)}
+              </select>
+            </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setPage(1)}

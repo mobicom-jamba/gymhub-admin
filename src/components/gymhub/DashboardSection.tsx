@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import ProfileHeader from "./ProfileHeader";
 import { GymHubMetrics } from "./GymHubMetrics";
 import MemberGrowthChart from "./MemberGrowthChart";
 import BookingsChart from "./BookingsChart";
@@ -155,11 +154,6 @@ export default function DashboardSection() {
 
   return (
     <div className="grid grid-cols-12 gap-4 md:gap-6">
-      {/* ── Profile Header ─────────────────────────────────── */}
-      <div className="col-span-12">
-        <ProfileHeader />
-      </div>
-
       {/* ── 5 Metrics Row ──────────────────────────────────── */}
       <div className="col-span-12">
         <GymHubMetrics

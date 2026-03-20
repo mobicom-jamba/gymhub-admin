@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useId } from "react";
+import { createPortal } from "react-dom";
 import { Modal } from "@/components/ui/modal";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { Profile } from "./UsersSection";
@@ -39,6 +40,174 @@ const sel =
 
 function Label({ children }: { children: React.ReactNode }) {
   return <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{children}</p>;
+}
+
+const MN_MONTHS = ["1-р","2-р","3-р","4-р","5-р","6-р","7-р","8-р","9-р","10-р","11-р","12-р"];
+const MN_DAYS   = ["Да","Мя","Лх","Пү","Ба","Бя","Ня"];
+
+function DateField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const uid             = useId();
+  const portalId        = `date-cal-${uid.replace(/:/g, "")}`;
+  const [open, setOpen]   = useState(false);
+  const [pos, setPos]     = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef        = useRef<HTMLDivElement>(null);
+
+  const today = new Date();
+  const [vy, setVy] = useState(() => value ? parseInt(value.slice(0,4)) : today.getFullYear());
+  const [vm, setVm] = useState(() => value ? parseInt(value.slice(5,7)) - 1 : today.getMonth());
+
+  const prevMonth = () => { if (vm === 0) { setVm(11); setVy(y => y-1); } else setVm(m => m-1); };
+  const nextMonth = () => { if (vm === 11) { setVm(0); setVy(y => y+1); } else setVm(m => m+1); };
+
+  const handleOpen = () => {
+    if (!triggerRef.current) return;
+    const r   = triggerRef.current.getBoundingClientRect();
+    const calH = 300;
+    // position:fixed — viewport coords, no scroll offset
+    const top    = r.bottom + 4;
+    const adjTop = (top + calH > window.innerHeight) ? r.top - calH - 4 : top;
+    setPos({ top: adjTop, left: r.left, width: Math.max(r.width, 240) });
+    if (value) { setVy(parseInt(value.slice(0,4))); setVm(parseInt(value.slice(5,7))-1); }
+    setOpen(o => !o);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (triggerRef.current?.contains(e.target as Node)) return;
+      const cal = document.getElementById(portalId);
+      if (cal?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open, portalId]);
+
+  const [pickMode, setPickMode] = useState<"day" | "month" | "year">("day");
+
+  const firstDay   = new Date(vy, vm, 1).getDay();
+  const startDay   = (firstDay + 6) % 7; // Mon-first
+  const daysInMon  = new Date(vy, vm + 1, 0).getDate();
+  const display    = value ? value.replace(/-/g, ".") : "";
+  const yearRange  = Array.from({ length: 16 }, (_, i) => today.getFullYear() - 5 + i);
+
+  const pick = (day: number) => {
+    const iso = `${vy}-${String(vm+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    onChange(iso);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={triggerRef}>
+      <div onClick={handleOpen}
+        className={inp + " flex cursor-pointer select-none items-center justify-between pr-3"}
+      >
+        <span className={value ? "" : "text-gray-300 dark:text-gray-600"}>{display || "жжжж.сс.өө"}</span>
+        <svg className="h-4 w-4 shrink-0 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 9v7.5m-9-6h.008v.008H12V9zm0 3.75h.008v.008H12v-.008zm0 3.75h.008v.008H12v-.008zm3.75-7.5h.008v.008H15.75V9zm0 3.75h.008v.008H15.75v-.008zm0 3.75h.008v.008H15.75v-.008zM8.25 9h.008v.008H8.25V9zm0 3.75h.008v.008H8.25v-.008zm0 3.75h.008v.008H8.25v-.008z" />
+        </svg>
+      </div>
+
+      {open && createPortal(
+        <div
+          id={portalId}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: pos.width, zIndex: 99999 }}
+          className="rounded-2xl border border-gray-100 bg-white p-4 shadow-2xl dark:border-gray-700 dark:bg-gray-800"
+        >
+          {/* Header */}
+          <div className="mb-3 flex items-center justify-between">
+            {pickMode === "day" ? (
+              <>
+                <button type="button" onClick={prevMonth}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                </button>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setPickMode("year")}
+                    className="rounded-lg px-2 py-1 text-sm font-bold text-gray-800 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-700">{vy}</button>
+                  <span className="text-gray-300">·</span>
+                  <button type="button" onClick={() => setPickMode("month")}
+                    className="rounded-lg px-2 py-1 text-sm font-semibold text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">{MN_MONTHS[vm]} сар</button>
+                </div>
+                <button type="button" onClick={nextMonth}
+                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  {pickMode === "year" ? "Tон сонгох" : "Сар сонгох"}
+                </span>
+                <button type="button" onClick={() => setPickMode("day")}
+                  className="rounded-lg px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">× Хаах</button>
+              </>
+            )}
+          </div>
+
+          {pickMode === "year" && (
+            <div className="grid grid-cols-4 gap-1">
+              {yearRange.map(y => (
+                <button key={y} type="button" onClick={() => { setVy(y); setPickMode("month"); }}
+                  className={`rounded-lg py-2 text-sm font-medium transition-colors ${
+                    y === vy ? "bg-brand-500 text-white" : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                  }`}>{y}</button>
+              ))}
+            </div>
+          )}
+
+          {pickMode === "month" && (
+            <div className="grid grid-cols-3 gap-1">
+              {MN_MONTHS.map((m, i) => (
+                <button key={i} type="button" onClick={() => { setVm(i); setPickMode("day"); }}
+                  className={`rounded-lg py-2 text-sm font-medium transition-colors ${
+                    i === vm ? "bg-brand-500 text-white" : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                  }`}>{m} сар</button>
+              ))}
+            </div>
+          )}
+
+          {pickMode === "day" && (<>
+          {/* Day headers */}
+          <div className="mb-1 grid grid-cols-7">
+            {MN_DAYS.map(d => (
+              <div key={d} className="text-center text-[10px] font-semibold text-gray-400">{d}</div>
+            ))}
+          </div>
+          {/* Day grid */}
+          <div className="grid grid-cols-7 gap-y-0.5">
+            {Array.from({ length: startDay }, (_, i) => <div key={`x${i}`} />)}
+            {Array.from({ length: daysInMon }, (_, i) => {
+              const day = i + 1;
+              const iso = `${vy}-${String(vm+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+              const sel = iso === value;
+              const isToday = iso === today.toISOString().slice(0,10);
+              return (
+                <button key={day} type="button" onClick={() => pick(day)}
+                  className={`flex h-8 w-full items-center justify-center rounded-lg text-sm transition-colors ${
+                    sel
+                      ? "bg-brand-500 font-bold text-white"
+                      : isToday
+                        ? "border border-brand-300 text-brand-600 dark:border-brand-700 dark:text-brand-400"
+                        : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                  }`}>
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+          </>)}
+          {value && (
+            <button type="button" onClick={() => { onChange(""); setOpen(false); }}
+              className="mt-3 w-full rounded-lg border border-gray-100 py-1.5 text-xs text-gray-400 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-500 dark:hover:bg-gray-700/50">
+              Арилгах
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 export default function UserFormModal({ isOpen, onClose, profile, organizations, onSuccess }: Props) {
@@ -251,17 +420,10 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                   <input type="text" value={ner} onChange={e => setNer(e.target.value)}
                     className={inp} placeholder="Мөнхбаяр" />
                 </div>
-                <div>
+                <div className="col-span-2">
                   <Label>Утас</Label>
                   <input type="text" value={phone} onChange={e => setPhone(e.target.value)}
                     className={inp} placeholder="9911xxxx" />
-                </div>
-                <div>
-                  <Label>Эрх</Label>
-                  <select value={role} onChange={e => setRole(e.target.value)} className={sel}>
-                    <option value="user">Гишүүн</option>
-                    <option value="admin">Админ</option>
-                  </select>
                 </div>
               </div>
 
@@ -353,15 +515,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Эхлэх огноо</Label>
-                  <input type="date" value={startedAt}
-                    onChange={e => setStartedAt(e.target.value)}
-                    className={inp} style={{ colorScheme: "light" }} />
+                  <DateField value={startedAt} onChange={setStartedAt} />
                 </div>
                 <div>
                   <Label>Дуусах огноо</Label>
-                  <input type="date" value={expiresAt}
-                    onChange={e => handleExpiresChange(e.target.value)}
-                    className={inp} style={{ colorScheme: "light" }} />
+                  <DateField value={expiresAt} onChange={handleExpiresChange} />
                 </div>
               </div>
               {expiresAt && !startedAt && (
