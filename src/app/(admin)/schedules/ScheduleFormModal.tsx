@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
+import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 
@@ -82,11 +83,7 @@ export default function ScheduleFormModal({
           {t("add")} {t("schedule")}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-2 rounded-lg bg-error-50 text-error-600 text-sm dark:bg-error-950 dark:text-error-400">
-              {error}
-            </div>
-          )}
+          <FormError message={error} />
           <div>
             <Label>{t("classes")} *</Label>
             <select
@@ -144,7 +141,7 @@ export default function ScheduleFormModal({
               {t("cancel")}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "..." : t("save")}
+              <SubmitLabel loading={loading} loadingText="Хадгалж байна..." idleText={t("save")} />
             </Button>
           </div>
         </form>

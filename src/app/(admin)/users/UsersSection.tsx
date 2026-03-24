@@ -13,19 +13,30 @@ import { exportToCsv } from "@/lib/csv-export";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
 import type { Density } from "./UsersTable";
+import { toMnErrorMessage } from "@/lib/error-message";
 
 export type Profile = {
   id: string;
   full_name: string | null;
   phone: string | null;
   role: string | null;
+  organization_id: string | null;
   organization: string | null;
+  organizations?: { name: string | null } | Array<{ name: string | null }> | null;
   membership_tier: string | null;
   membership_status: string | null;
   membership_started_at: string | null;
   membership_expires_at: string | null;
   created_at: string;
 };
+
+export type OrganizationOption = { id: string; name: string };
+
+function profileOrgName(p: Profile): string | null {
+  const rel = p.organizations;
+  if (Array.isArray(rel)) return rel[0]?.name ?? p.organization;
+  return rel?.name ?? p.organization;
+}
 
 const PAGE_SIZES = [25, 50, 100, 500];
 
@@ -45,9 +56,10 @@ export default function UsersSection() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
+  const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
   const toast = useToast();
 
-  const PROFILE_SELECT = "id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
 
   const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
     const supabase = createBrowserSupabaseClient();
@@ -70,36 +82,51 @@ export default function UsersSection() {
 
   const fetchProfiles = async () => {
     setLoading(true);
-    const { data, error: err } = await fetchAllProfilePages();
+    const [profilesRes, orgsRes] = await Promise.all([
+      fetchAllProfilePages(),
+      createBrowserSupabaseClient().from("organizations").select("id,name").order("name"),
+    ]);
+    const { data, error: err } = profilesRes;
     setProfiles(data);
     setError(err);
+    setOrganizationOptions((orgsRes.data ?? []) as OrganizationOption[]);
     setLoading(false);
   };
 
   const silentRefresh = async () => {
-    const { data, error: err } = await fetchAllProfilePages();
+    const [profilesRes, orgsRes] = await Promise.all([
+      fetchAllProfilePages(),
+      createBrowserSupabaseClient().from("organizations").select("id,name").order("name"),
+    ]);
+    const { data, error: err } = profilesRes;
     setProfiles(data);
+    setOrganizationOptions((orgsRes.data ?? []) as OrganizationOption[]);
     if (err) setError(err);
   };
 
   useEffect(() => { fetchProfiles(); }, []);
 
   const organizations = useMemo(() => {
-    const orgs = [...new Set(profiles.map((p) => p.organization).filter(Boolean))] as string[];
+    const orgs = [...new Set(
+      profiles
+        .map((p) => profileOrgName(p))
+        .filter(Boolean)
+    )] as string[];
     return orgs.sort((a, b) => a.localeCompare(b));
   }, [profiles]);
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
       if ((p.role ?? "user") !== tab) return false;
-      if (orgFilter && p.organization !== orgFilter) return false;
+      const orgName = profileOrgName(p);
+      if (orgFilter && orgName !== orgFilter) return false;
       if (statusFilter && (p.membership_status ?? "active") !== statusFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         const matches =
           p.full_name?.toLowerCase().includes(q) ||
           p.phone?.toLowerCase().includes(q) ||
-          p.organization?.toLowerCase().includes(q);
+          orgName?.toLowerCase().includes(q);
         if (!matches) return false;
       }
       return true;
@@ -118,7 +145,7 @@ export default function UsersSection() {
       .from("profiles")
       .update({ role: newRole })
       .eq("id", profileId);
-    if (err) { alert(err.message); silentRefresh(); }
+    if (err) { alert(toMnErrorMessage(err.message)); silentRefresh(); }
   };
 
   const handleDelete = async (profileId: string) => {
@@ -133,7 +160,7 @@ export default function UsersSection() {
     toast.show("Хэрэглэгчийн бүртгэл амжилттай устгагдлаа.");
     const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     const data = await res.json();
-    if (!res.ok) { alert(data.error ?? "Алдаа гарлаа"); silentRefresh(); }
+    if (!res.ok) { alert(toMnErrorMessage((data && (data.message || data.error)) ?? "")); silentRefresh(); }
   };
 
   const handleBulkDeleteConfirmed = async () => {
@@ -149,7 +176,7 @@ export default function UsersSection() {
       await Promise.all(ids.map((id) =>
         fetch(`/api/admin/users/${id}`, { method: "DELETE" })
       ));
-    } catch { alert("Устгахад алдаа гарлаа"); silentRefresh(); }
+    } catch { alert("Хэрэглэгч устгах үед алдаа гарлаа. Дахин оролдоно уу."); silentRefresh(); }
     finally { setBulkDeleting(false); }
   };
 
@@ -164,7 +191,7 @@ export default function UsersSection() {
       .from("profiles")
       .update({ role: newRole })
       .in("id", ids);
-    if (err) { alert(err.message); silentRefresh(); }
+    if (err) { alert(toMnErrorMessage(err.message)); silentRefresh(); }
   };
 
   const toggleSelectAll = () => {
@@ -394,7 +421,7 @@ export default function UsersSection() {
         isOpen={formProfile !== null}
         onClose={() => setFormProfile(null)}
         profile={formProfile === "new" ? null : formProfile}
-        organizations={organizations}
+        organizations={organizationOptions}
         onSuccess={() => { setFormProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
       />
 

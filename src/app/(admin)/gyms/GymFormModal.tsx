@@ -7,6 +7,7 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Checkbox from "@/components/form/input/Checkbox";
+import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 
@@ -170,11 +171,7 @@ export default function GymFormModal({
           {gym ? t("edit") : t("add")} {t("gyms")}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-2 rounded-lg bg-error-50 text-error-600 text-sm dark:bg-error-950 dark:text-error-400">
-              {error}
-            </div>
-          )}
+          <FormError message={error} />
           <div>
             <Label>{t("gymName")} *</Label>
             <Input
@@ -296,7 +293,7 @@ export default function GymFormModal({
               {t("cancel")}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "..." : t("save")}
+              <SubmitLabel loading={loading} loadingText="Хадгалж байна..." idleText={t("save")} />
             </Button>
           </div>
         </form>

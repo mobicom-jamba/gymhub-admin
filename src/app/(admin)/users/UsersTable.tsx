@@ -41,6 +41,12 @@ function daysUntil(expiresAt: string | null) {
   return Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000);
 }
 
+function orgNameOfProfile(p: Profile): string | null {
+  const rel = p.organizations;
+  if (Array.isArray(rel)) return rel[0]?.name ?? p.organization;
+  return rel?.name ?? p.organization;
+}
+
 export type Density = "comfortable" | "compact";
 
 export default function UsersTable({
@@ -151,7 +157,9 @@ export default function UsersTable({
                   </TableCell>
 
                   <TableCell className={`px-4 ${py} max-w-[160px] text-sm text-gray-600 dark:text-gray-400`}>
-                    <span className="block truncate" title={p.organization ?? ""}>{p.organization ?? "—"}</span>
+                    <span className="block truncate" title={orgNameOfProfile(p) ?? ""}>
+                      {orgNameOfProfile(p) ?? "—"}
+                    </span>
                   </TableCell>
 
                   <TableCell className={`px-4 ${py}`}>

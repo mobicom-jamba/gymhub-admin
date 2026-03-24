@@ -4,13 +4,16 @@ import React, { useState, useEffect, useRef, useId } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "@/components/ui/modal";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { Profile } from "./UsersSection";
+import type { OrganizationOption, Profile } from "./UsersSection";
+import { parseApiError } from "@/lib/api-response";
+import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
+import { toMnErrorMessage } from "@/lib/error-message";
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   profile: Profile | null;
-  organizations: string[];
+  organizations: OrganizationOption[];
   onSuccess: () => void;
 };
 
@@ -280,6 +283,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [ner, setNer]                   = useState("");
   const [phone, setPhone]               = useState("");
   const [role, setRole]                 = useState("user");
+  const [organizationId, setOrganizationId] = useState<string>("");
   const [organization, setOrganization] = useState("");
   const [orgSearch, setOrgSearch]       = useState("");
   const [orgOpen, setOrgOpen]           = useState(false);
@@ -297,6 +301,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setNer(parts.slice(1).join(" "));
       setPhone(profile.phone ?? "");
       setRole(profile.role ?? "user");
+      setOrganizationId(profile.organization_id ?? "");
       setOrganization(profile.organization ?? "");
       setTier(profile.membership_tier ?? "early");
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
@@ -305,6 +310,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     } else {
       setEmail(""); setPassword("123456");
       setOvog(""); setNer(""); setPhone(""); setRole("user");
+      setOrganizationId("");
       setOrganization(""); setTier("early"); setStartedAt(""); setExpiresAt("");
     }
     setOrgSearch(""); setOrgOpen(false); setFormError("");
@@ -325,6 +331,10 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     setLoading(true);
     const fullName = [ovog, ner].filter(Boolean).join(" ") || null;
     try {
+      if (expiresAt && startedAt && new Date(startedAt) > new Date(expiresAt)) {
+        setFormError("Эхлэх огноо нь дуусах огнооноос өмнө байх ёстой.");
+        return;
+      }
       if (isCreate) {
         if (!email || !password) { setFormError("И-мэйл болон нууц үг оруулна уу"); return; }
         const res = await fetch("/api/admin/users", {
@@ -333,32 +343,33 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           body: JSON.stringify({
             email, password, full_name: fullName,
             phone: phone || null, role,
+            organization_id: organizationId || null,
             organization: organization || null,
             membership_tier: tier, membership_status: "active",
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
             membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
           }),
         });
-        const data = await res.json();
-        if (!res.ok) { setFormError(data.error ?? "Алдаа гарлаа"); return; }
+        if (!res.ok) { setFormError(await parseApiError(res)); return; }
       } else {
         const supabase = createBrowserSupabaseClient();
         const { error: err } = await supabase.from("profiles").update({
           full_name: fullName, phone: phone || null, role,
+          organization_id: organizationId || null,
           organization: organization || null, membership_tier: tier,
           membership_status: "active",
           membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
           membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
           updated_at: new Date().toISOString(),
         }).eq("id", profile!.id);
-        if (err) { setFormError(err.message); return; }
+        if (err) { setFormError(toMnErrorMessage(err.message)); return; }
       }
       onSuccess(); onClose();
     } finally { setLoading(false); }
   };
 
-  const filteredOrgs = organizations.filter(o =>
-    o.toLowerCase().includes(orgSearch.toLowerCase())
+  const filteredOrgs = organizations.filter((o) =>
+    o.name.toLowerCase().includes(orgSearch.toLowerCase())
   );
 
   const displayName = [ovog, ner].filter(Boolean).join(" ");
@@ -417,14 +428,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         <div className="flex-1 overflow-y-auto">
           <form id="user-form" onSubmit={handleSubmit}>
 
-            {formError && (
-              <div className="mx-5 mt-4 flex items-center gap-2 rounded-xl bg-red-50 px-4 py-2.5 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-400">
-                <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
-                </svg>
-                {formError}
-              </div>
-            )}
+            <div className="mx-5 mt-4">
+              <FormError message={formError} />
+            </div>
 
             {/* Login section (create only) */}
             {isCreate && (
@@ -494,12 +500,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                   <input
                     type="text"
                     value={orgOpen ? orgSearch : organization}
-                    onChange={e => { setOrgSearch(e.target.value); setOrganization(""); }}
+                    onChange={e => { setOrgSearch(e.target.value); setOrganization(""); setOrganizationId(""); }}
                     onFocus={() => { setOrgOpen(true); setOrgSearch(organization); }}
                     onBlur={() =>
                       setTimeout(() => {
                         const typed = orgSearch.trim();
-                        if (typed && !organization) setOrganization(typed);
+                        if (typed && !organization) {
+                          setOrganization(typed);
+                          setOrganizationId("");
+                        }
                         setOrgOpen(false);
                       }, 150)
                     }
@@ -516,15 +525,20 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <ul className="absolute z-50 mt-1 max-h-44 w-full overflow-y-auto rounded-xl border border-gray-100 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
                       {filteredOrgs.slice(0, 30).map(o => (
                         <li
-                          key={o}
-                          onMouseDown={() => { setOrganization(o); setOrgSearch(""); setOrgOpen(false); }}
+                          key={o.id}
+                          onMouseDown={() => {
+                            setOrganization(o.name);
+                            setOrganizationId(o.id);
+                            setOrgSearch("");
+                            setOrgOpen(false);
+                          }}
                           className={`cursor-pointer px-3.5 py-2 text-sm transition ${
-                            o === organization
+                            o.name === organization
                               ? "bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
                               : "text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/[0.04]"
                           }`}
                         >
-                          {o}
+                          {o.name}
                         </li>
                       ))}
                     </ul>
@@ -605,12 +619,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             className={`flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${
               isCreate ? "bg-brand-500 hover:bg-brand-600" : "bg-gray-800 hover:bg-gray-700 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
             }`}>
-            {loading ? (
-              <>
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                Мэдээлэл хадгалж байна...
-              </>
-            ) : isCreate ? "Хэрэглэгч бүртгэх" : "Өөрчлөлтийг хадгалах"}
+            <SubmitLabel
+              loading={loading}
+              loadingText="Мэдээлэл хадгалж байна..."
+              idleText={isCreate ? "Хэрэглэгч бүртгэх" : "Өөрчлөлтийг хадгалах"}
+            />
           </button>
         </div>
       </div>

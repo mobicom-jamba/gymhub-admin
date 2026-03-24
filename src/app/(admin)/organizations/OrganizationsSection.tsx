@@ -17,7 +17,9 @@ type Member = {
   membership_status: string | null;
   membership_started_at: string | null;
   membership_expires_at: string | null;
+  organization_id: string | null;
   organization: string | null;
+  organizations?: { id: string; name: string | null } | Array<{ id: string; name: string | null }> | null;
   created_at: string;
 };
 
@@ -42,6 +44,12 @@ function isExpired(exp: string | null) {
   return exp ? new Date(exp) < new Date() : false;
 }
 
+function orgNameOf(member: Member): string | null {
+  const rel = member.organizations;
+  if (Array.isArray(rel)) return rel[0]?.name ?? member.organization;
+  return rel?.name ?? member.organization;
+}
+
 export default function OrganizationsSection() {
   const [members, setMembers] = useState<Member[]>([]);
   const [orgRecords, setOrgRecords] = useState<OrgRecord[]>([]);
@@ -58,7 +66,7 @@ export default function OrganizationsSection() {
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
   const toast = useToast();
 
-  const MEMBER_SELECT = "id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization, created_at";
+  const MEMBER_SELECT = "id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization_id, organization, organizations(id,name), created_at";
 
   const fetchAllMemberPages = useCallback(async (): Promise<Member[]> => {
     const supabase = createBrowserSupabaseClient();
@@ -105,7 +113,7 @@ export default function OrganizationsSection() {
   const orgs: OrgGroup[] = useMemo(() => {
     const map: Record<string, Member[]> = {};
     members.forEach(m => {
-      const key = m.organization?.trim() || "";
+      const key = orgNameOf(m)?.trim() || "";
       if (!key) return;
       if (!map[key]) map[key] = [];
       map[key].push(m);
@@ -120,7 +128,10 @@ export default function OrganizationsSection() {
       .sort((a, b) => b.members.length - a.members.length);
   }, [members]);
 
-  const unassigned = useMemo(() => members.filter(m => !m.organization?.trim()), [members]);
+  const unassigned = useMemo(
+    () => members.filter((m) => !m.organization_id && !(m.organization?.trim())),
+    [members]
+  );
 
   const filteredOrgs = useMemo(() =>
     orgs.filter(o => o.name.toLowerCase().includes(search.toLowerCase())),
@@ -149,18 +160,19 @@ export default function OrganizationsSection() {
     if (!confirmRemove) return;
     const { memberId } = confirmRemove;
     setConfirmRemove(null);
-    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: null } : m));
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: null, organization_id: null, organizations: null } : m));
     toast.show("Гишүүний байгууллагын холбоос амжилттай цуцлагдлаа.");
     const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.from("profiles").update({ organization: null }).eq("id", memberId);
+    const { error } = await supabase.from("profiles").update({ organization: null, organization_id: null }).eq("id", memberId);
     if (error) silentRefresh();
   };
 
   const handleAdd = async (memberId: string, orgName: string) => {
-    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: orgName } : m));
+    const orgRecord = orgRecords.find((o) => o.name === orgName);
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: orgName, organization_id: orgRecord?.id ?? null } : m));
     toast.show("Гишүүн байгууллагад амжилттай холбогдлоо.");
     const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
+    const { error } = await supabase.from("profiles").update({ organization: orgName, organization_id: orgRecord?.id ?? null }).eq("id", memberId);
     if (error) silentRefresh();
   };
 
@@ -174,11 +186,15 @@ export default function OrganizationsSection() {
     setConfirmDeleteOrg(null);
     setSelected(null);
     setOrgRecords(prev => recordId ? prev.filter(r => r.id !== recordId) : prev);
-    setMembers(prev => prev.map(m => m.organization === orgName ? { ...m, organization: null } : m));
+    setMembers(prev => prev.map(m => orgNameOf(m) === orgName ? { ...m, organization: null, organization_id: null, organizations: null } : m));
     toast.show("Байгууллагын мэдээлэл амжилттай устгагдлаа.");
     const supabase = createBrowserSupabaseClient();
     if (recordId) await supabase.from("organizations").delete().eq("id", recordId);
-    await supabase.from("profiles").update({ organization: null }).eq("organization", orgName);
+    if (recordId) {
+      await supabase.from("profiles").update({ organization: null, organization_id: null }).eq("organization_id", recordId);
+    } else {
+      await supabase.from("profiles").update({ organization: null, organization_id: null }).eq("organization", orgName);
+    }
   };
 
   if (loading) {
@@ -338,7 +354,7 @@ export default function OrganizationsSection() {
         isOpen={editProfile !== null}
         onClose={() => setEditProfile(null)}
         profile={editProfile}
-        organizations={orgRecords.map(r => r.name)}
+        organizations={orgRecords.map((r) => ({ id: r.id, name: r.name }))}
         onSuccess={() => { setEditProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
       />
 

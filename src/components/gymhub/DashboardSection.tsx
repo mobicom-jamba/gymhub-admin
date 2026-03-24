@@ -11,7 +11,7 @@ import NewGymsCard from "./NewGymsCard";
 import ComponentCard from "../common/ComponentCard";
 import { t } from "@/lib/i18n";
 import UserFormModal from "@/app/(admin)/users/UserFormModal";
-import type { Profile } from "@/app/(admin)/users/UsersSection";
+import type { OrganizationOption, Profile } from "@/app/(admin)/users/UsersSection";
 
 type MonthPoint = { month: string; count: number };
 type UserRow = { id: string; full_name: string | null; phone: string | null; company?: string | null; created_at: string };
@@ -29,7 +29,7 @@ export default function DashboardSection() {
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannels>({ qpay: 0, sono: 0, pocket: 0, gift: 0 });
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
-  const [orgs, setOrgs] = useState<string[]>([]);
+  const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editProfile, setEditProfile] = useState<Profile | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,7 +54,7 @@ export default function DashboardSection() {
       supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "gift"),
       supabase.from("profiles").select("id, full_name, phone, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
-      supabase.from("organizations").select("name").order("name", { ascending: true }),
+      supabase.from("organizations").select("id,name").order("name", { ascending: true }),
     ]);
 
     setUserCount(usersRes.count ?? 0);
@@ -90,7 +90,7 @@ export default function DashboardSection() {
 
     setNewUsers((recentUsersRes.data ?? []) as UserRow[]);
     setNewGyms((recentGymsRes.data ?? []) as GymRow[]);
-    setOrgs((orgsListRes.data ?? []).map((o: { name: string }) => o.name));
+    setOrgs((orgsListRes.data ?? []) as OrganizationOption[]);
     setLoading(false);
   }, []);
 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Modal } from "@/components/ui/modal";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 
 export type OrgRecord = {
   id: string;
@@ -120,10 +121,6 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
         if (finalLogo) {
           await supabase.from("organizations").update({ logo_url: finalLogo }).eq("id", inserted.id);
         }
-        // If opened from a stub (existing org name pre-filled), update profiles if name changed
-        if (org?.name && name.trim() !== org.name) {
-          await supabase.from("profiles").update({ organization: name.trim() }).eq("organization", org.name);
-        }
       } else {
         const finalLogo = await uploadLogo(org!.id);
         const { error: updateErr } = await supabase
@@ -136,10 +133,6 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
           })
           .eq("id", org!.id);
         if (updateErr) { setFormError(updateErr.message); return; }
-        // Rename profiles if name changed
-        if (name.trim() !== org!.name) {
-          await supabase.from("profiles").update({ organization: name.trim() }).eq("organization", org!.name);
-        }
       }
       onSuccess(); onClose();
     } finally { setLoading(false); }
@@ -171,11 +164,9 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
         <div className="flex-1 overflow-y-auto">
           <form id="org-form" onSubmit={handleSubmit}>
 
-            {formError && (
-              <div className="mx-5 mt-4 rounded-xl bg-red-50 px-4 py-2.5 text-xs text-red-700 dark:bg-red-900/20 dark:text-red-400">
-                {formError}
-              </div>
-            )}
+            <div className="mx-5 mt-4">
+              <FormError message={formError} />
+            </div>
 
             {/* Logo upload */}
             <div className="flex items-center gap-4 px-6 py-5">
@@ -306,12 +297,11 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
           </button>
           <button form="org-form" type="submit" disabled={loading}
             className="flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60 transition">
-            {loading ? (
-              <>
-                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                Хадгалж байна...
-              </>
-            ) : isCreate ? "Байгууллага нэмэх" : "Хадгалах"}
+            <SubmitLabel
+              loading={loading}
+              loadingText="Мэдээлэл хадгалж байна..."
+              idleText={isCreate ? "Байгууллага бүртгэх" : "Өөрчлөлтийг хадгалах"}
+            />
           </button>
         </div>
       </div>
