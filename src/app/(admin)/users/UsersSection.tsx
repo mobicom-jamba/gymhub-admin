@@ -70,6 +70,7 @@ export default function UsersSection() {
   const initializedFromQuery = useRef(false);
 
   const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const ORG_SELECT = "id,name";
 
   const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
     const supabase = createBrowserSupabaseClient();
@@ -90,27 +91,45 @@ export default function UsersSection() {
     return { data: all, error: null };
   };
 
+  const fetchAllOrganizationPages = async (): Promise<OrganizationOption[]> => {
+    const supabase = createBrowserSupabaseClient();
+    const all: OrganizationOption[] = [];
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
+      const { data } = await supabase
+        .from("organizations")
+        .select(ORG_SELECT)
+        .order("name", { ascending: true })
+        .range(from, from + PAGE - 1);
+      all.push(...((data ?? []) as OrganizationOption[]));
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  };
+
   const fetchProfiles = async () => {
     setLoading(true);
     const [profilesRes, orgsRes] = await Promise.all([
       fetchAllProfilePages(),
-      createBrowserSupabaseClient().from("organizations").select("id,name").order("name"),
+      fetchAllOrganizationPages(),
     ]);
     const { data, error: err } = profilesRes;
     setProfiles(data);
     setError(err);
-    setOrganizationOptions((orgsRes.data ?? []) as OrganizationOption[]);
+    setOrganizationOptions(orgsRes);
     setLoading(false);
   };
 
   const silentRefresh = async () => {
     const [profilesRes, orgsRes] = await Promise.all([
       fetchAllProfilePages(),
-      createBrowserSupabaseClient().from("organizations").select("id,name").order("name"),
+      fetchAllOrganizationPages(),
     ]);
     const { data, error: err } = profilesRes;
     setProfiles(data);
-    setOrganizationOptions((orgsRes.data ?? []) as OrganizationOption[]);
+    setOrganizationOptions(orgsRes);
     if (err) setError(err);
   };
 

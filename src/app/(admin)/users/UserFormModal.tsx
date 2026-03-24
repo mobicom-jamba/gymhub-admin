@@ -535,7 +535,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                   </div>
                   {orgOpen && filteredOrgs.length > 0 && (
                     <ul className="absolute z-50 mt-1 max-h-44 w-full overflow-y-auto rounded-xl border border-gray-100 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
-                      {filteredOrgs.slice(0, 30).map(o => (
+                      {filteredOrgs.map(o => (
                         <li
                           key={o.id}
                           onMouseDown={() => {
