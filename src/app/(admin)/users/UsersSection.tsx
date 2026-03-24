@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
@@ -15,6 +15,8 @@ import { useToast } from "@/components/ui/Toast";
 import type { Density } from "./UsersTable";
 import { toMnErrorMessage } from "@/lib/error-message";
 import ColumnToggle from "@/components/ui/ColumnToggle";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 export type Profile = {
   id: string;
@@ -57,11 +59,15 @@ export default function UsersSection() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+  const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
     member: true, phone: true, organization: true, tier: true, startDate: true, expireDate: true,
   });
   const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
   const toast = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const initializedFromQuery = useRef(false);
 
   const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
 
@@ -109,6 +115,31 @@ export default function UsersSection() {
   };
 
   useEffect(() => { fetchProfiles(); }, []);
+
+  useEffect(() => {
+    if (initializedFromQuery.current) return;
+    const q = searchParams.get("q");
+    const status = searchParams.get("status");
+    const org = searchParams.get("org");
+    const role = searchParams.get("role");
+    if (q) setSearch(q);
+    if (status) setStatusFilter(status);
+    if (org) setOrgFilter(org);
+    if (role === "user" || role === "admin") setTab(role);
+    initializedFromQuery.current = true;
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!initializedFromQuery.current) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (search) params.set("q", search); else params.delete("q");
+    if (statusFilter) params.set("status", statusFilter); else params.delete("status");
+    if (orgFilter) params.set("org", orgFilter); else params.delete("org");
+    if (tab && tab !== "user") params.set("role", tab); else params.delete("role");
+    params.delete("page");
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname);
+  }, [search, statusFilter, orgFilter, tab, pathname, router, searchParams]);
 
   const organizations = useMemo(() => {
     const orgs = [...new Set(
@@ -224,6 +255,11 @@ export default function UsersSection() {
 
   const adminCount = profiles.filter(p => (p.role ?? "user") === "admin").length;
   const userCount  = profiles.filter(p => (p.role ?? "user") === "user").length;
+  const filterChips = [
+    search ? { key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") } : null,
+    statusFilter ? { key: "status", label: `Төлөв: ${statusFilter}`, clear: () => setStatusFilter("") } : null,
+    orgFilter ? { key: "org", label: `Байгууллага: ${orgFilter}`, clear: () => setOrgFilter("") } : null,
+  ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
 
   return (
     <>
@@ -361,6 +397,25 @@ export default function UsersSection() {
               CSV
             </button>
           </div>
+          {filterChips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {filterChips.map((chip) => (
+                <button
+                  key={chip.key}
+                  onClick={chip.clear}
+                  className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                >
+                  {chip.label} ✕
+                </button>
+              ))}
+              <button
+                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); resetPage(); }}
+                className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+              >
+                Бүгдийг цэвэрлэх
+              </button>
+            </div>
+          )}
         </div>
 
         <UsersTable

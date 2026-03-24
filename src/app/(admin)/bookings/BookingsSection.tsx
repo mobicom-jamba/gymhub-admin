@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import BookingsTable from "./BookingsTable";
 import CreateBookingModal from "./CreateBookingModal";
@@ -13,6 +13,8 @@ import { exportToCsv } from "@/lib/csv-export";
 import { useToast } from "@/components/ui/Toast";
 import ColumnToggle from "@/components/ui/ColumnToggle";
 import { toMnErrorMessage } from "@/lib/error-message";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Booking = any;
@@ -28,11 +30,15 @@ export default function BookingsSection() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [page, setPage] = useState(0);
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+  const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("bookings.table.visibleColumns", {
     user: true, class: true, time: true, status: true,
   });
   const PAGE_SIZE = 20;
   const toast = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const initializedFromQuery = useRef(false);
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -81,6 +87,23 @@ export default function BookingsSection() {
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  useEffect(() => {
+    if (initializedFromQuery.current) return;
+    setSearch(searchParams.get("q") ?? "");
+    setStatusFilter(searchParams.get("status") ?? "");
+    initializedFromQuery.current = true;
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!initializedFromQuery.current) return;
+    const params = new URLSearchParams(searchParams.toString());
+    if (search) params.set("q", search); else params.delete("q");
+    if (statusFilter) params.set("status", statusFilter); else params.delete("status");
+    params.delete("page");
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname);
+  }, [search, statusFilter, pathname, router, searchParams]);
 
   const handleCancel = async (bookingId: string) => {
     const supabase = createBrowserSupabaseClient();
@@ -137,6 +160,12 @@ export default function BookingsSection() {
     page * PAGE_SIZE,
     (page + 1) * PAGE_SIZE
   );
+  const filterChips = useMemo(() => {
+    const chips: Array<{ key: "q" | "status"; label: string; clear: () => void }> = [];
+    if (search) chips.push({ key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") });
+    if (statusFilter) chips.push({ key: "status", label: `Төлөв: ${statusFilter}`, clear: () => setStatusFilter("") });
+    return chips;
+  }, [search, statusFilter]);
 
   return (
     <>
@@ -209,6 +238,25 @@ export default function BookingsSection() {
             onChange={setVisibleColumns}
           />
         </div>
+        {filterChips.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {filterChips.map((chip) => (
+              <button
+                key={chip.key}
+                onClick={chip.clear}
+                className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+              >
+                {chip.label} ✕
+              </button>
+            ))}
+            <button
+              onClick={() => { setSearch(""); setStatusFilter(""); }}
+              className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+            >
+              Бүгдийг цэвэрлэх
+            </button>
+          </div>
+        )}
         <BookingsTable
           bookings={paginatedBookings}
           profileMap={profileMap}

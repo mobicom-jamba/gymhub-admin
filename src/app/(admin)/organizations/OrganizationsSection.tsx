@@ -9,6 +9,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
 import ColumnToggle from "@/components/ui/ColumnToggle";
 import EmptyState from "@/components/ui/EmptyState";
+import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 
 type Member = {
   id: string;
@@ -404,7 +405,7 @@ function OrgDetailPanel({
   const [tierFilter, setTierFilter]     = useState<"" | "early" | "premium">("" );
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
   const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
-  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+  const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("organizations.members.visibleColumns", {
     member: true, phone: true, tier: true, expires: true,
   });
 
