@@ -12,7 +12,18 @@ export async function POST(request: Request) {
   }
   const admin = createClient(supabaseUrl, serviceRoleKey);
   const body = await request.json();
-  const { email, password, full_name, phone, role, membership_tier } = body;
+  const {
+    email,
+    password,
+    full_name,
+    phone,
+    role,
+    organization,
+    membership_tier,
+    membership_status,
+    membership_started_at,
+    membership_expires_at,
+  } = body;
   if (!email || !password) {
     return NextResponse.json(
       { error: "Email and password required" },
@@ -29,15 +40,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: authError.message }, { status: 400 });
   }
   if (authData.user) {
-    await admin
+    const { error: profileUpdateError } = await admin
       .from("profiles")
       .update({
         full_name: full_name || null,
         phone: phone || null,
         role: role || "user",
+        organization: organization || null,
         membership_tier: membership_tier || null,
+        membership_status: membership_status || null,
+        membership_started_at: membership_started_at || null,
+        membership_expires_at: membership_expires_at || null,
       })
       .eq("id", authData.user.id);
+    if (profileUpdateError) {
+      return NextResponse.json({ error: profileUpdateError.message }, { status: 400 });
+    }
   }
   return NextResponse.json({ id: authData.user?.id });
 }

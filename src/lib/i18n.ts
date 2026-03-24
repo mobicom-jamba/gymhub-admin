@@ -1,6 +1,6 @@
 const mn: Record<string, string> = {
   // Nav
-  dashboard: "Эхлэл",
+  dashboard: "Тойм",
   gyms: "Фитнес төвүүд",
   users: "Хэрэглэгчид",
   bookings: "Захиалгууд",
@@ -29,9 +29,9 @@ const mn: Record<string, string> = {
   time: "Цаг",
 
   // Dashboard
-  totalGyms: "Фитнес төвүүд",
-  totalUsers: "Хэрэглэгчид",
-  totalBookings: "Захиалгууд",
+  totalGyms: "Нийт фитнес төв",
+  totalUsers: "Нийт хэрэглэгч",
+  totalBookings: "Нийт захиалга",
   recentActivity: "Сүүлийн үйл ажиллагаа",
 
   // Gyms
@@ -95,21 +95,21 @@ const mn: Record<string, string> = {
   saveChanges: "Өөрчлөлт хадгалах",
   
   // Messages
-  notFound: "олдсонгүй",
+  notFound: "Олдсонгүй",
   select: "Сонгох",
   schedule: "цагийн хуваарь",
   schedules: "Цагийн хуваарь",
   pleaseSelectClass: "Хичээл сонгоно уу",
   pleaseSelectGym: "Фитнес төв сонгоно уу",
   pleaseSelectUserAndSchedule: "Хэрэглэгч болон цагийн хуваарь сонгоно уу",
-  confirmDelete: "устгах уу?",
+  confirmDelete: "устгахыг хүсэж байна уу?",
   confirmDeleteUser: "Хэрэглэгчийг устгах уу? Энэ үйлдэл буцаагдахгүй.",
   confirmDeleteSchedule: "Цагийн хуваарийг устгах уу?",
   pleaseEnterTitle: "Гарчиг оруулна уу",
   capacityMustBeGreaterThanOne: "Багтаамж 1-ээс их байх ёстой",
   pleaseEnterName: "Нэр оруулна уу",
   pleaseEnterEmailAndPassword: "Имэйл болон нууц үг оруулна уу",
-  errorOccurred: "Алдаа гарлаа",
+  errorOccurred: "Системийн алдаа гарлаа",
   visits: "Ирц",
   method: "Арга",
   backToDashboard: "Эхлэл рүү буцах",

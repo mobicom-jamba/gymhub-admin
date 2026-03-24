@@ -121,6 +121,14 @@ export default function GymFormModal({
       setError(t("pleaseEnterName"));
       return;
     }
+    if (openDays.size === 0) {
+      setError("Дор хаяж нэг ажиллах өдөр сонгоно уу");
+      return;
+    }
+    if (openTime >= closeTime) {
+      setError("Эхлэх цаг нь дуусах цагаас өмнө байх ёстой");
+      return;
+    }
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
@@ -238,7 +246,7 @@ export default function GymFormModal({
           </div>
           {/* Schedule */}
           <div>
-            <Label>Ажллах цаг</Label>
+            <Label>Ажиллах цаг</Label>
             {/* Shared open/close time */}
             <div className="mb-2 flex items-center gap-3">
               <div className="flex flex-1 items-center gap-2">

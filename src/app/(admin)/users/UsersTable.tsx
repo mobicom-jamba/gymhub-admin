@@ -87,7 +87,13 @@ export default function UsersTable({
   }
 
   if (profiles.length === 0) {
-    return <EmptyState icon="users" title="Хэрэглэгч олдсонгүй" description="Шүүгэлэх хэрэглэгч байхгүй эсвэл хайлтын үр дүн харицаа үр байхгүй байна" />;
+    return (
+      <EmptyState
+        icon="users"
+        title="Хэрэглэгч олдсонгүй"
+        description="Таны сонгосон шүүлтүүрт тохирох хэрэглэгч олдсонгүй."
+      />
+    );
   }
 
   const hdr = `px-4 ${py} text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400`;
@@ -113,7 +119,7 @@ export default function UsersTable({
               <TableCell isHeader className={hdr}>Эхлэх огноо</TableCell>
               <TableCell isHeader className={hdr}>Дуусах огноо</TableCell>
               {(onEdit || onDelete) && (
-                <TableCell isHeader className={`${hdr} text-end`}>Үйлдэл</TableCell>
+                <TableCell isHeader className={`${hdr} text-end`}>Үйлдлүүд</TableCell>
               )}
             </TableRow>
           </TableHeader>

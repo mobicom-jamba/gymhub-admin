@@ -150,7 +150,7 @@ export default function OrganizationsSection() {
     const { memberId } = confirmRemove;
     setConfirmRemove(null);
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: null } : m));
-    toast.show("Гишүүн амжилттай хасагдлаа ✓");
+    toast.show("Гишүүний байгууллагын холбоос амжилттай цуцлагдлаа.");
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.from("profiles").update({ organization: null }).eq("id", memberId);
     if (error) silentRefresh();
@@ -158,7 +158,7 @@ export default function OrganizationsSection() {
 
   const handleAdd = async (memberId: string, orgName: string) => {
     setMembers(prev => prev.map(m => m.id === memberId ? { ...m, organization: orgName } : m));
-    toast.show("Гишүүн амжилттай нэмэгдлээ ✓");
+    toast.show("Гишүүн байгууллагад амжилттай холбогдлоо.");
     const supabase = createBrowserSupabaseClient();
     const { error } = await supabase.from("profiles").update({ organization: orgName }).eq("id", memberId);
     if (error) silentRefresh();
@@ -175,7 +175,7 @@ export default function OrganizationsSection() {
     setSelected(null);
     setOrgRecords(prev => recordId ? prev.filter(r => r.id !== recordId) : prev);
     setMembers(prev => prev.map(m => m.organization === orgName ? { ...m, organization: null } : m));
-    toast.show("Байгууллага амжилттай устгагдлаа ✓");
+    toast.show("Байгууллагын мэдээлэл амжилттай устгагдлаа.");
     const supabase = createBrowserSupabaseClient();
     if (recordId) await supabase.from("organizations").delete().eq("id", recordId);
     await supabase.from("profiles").update({ organization: null }).eq("organization", orgName);
@@ -339,7 +339,7 @@ export default function OrganizationsSection() {
         onClose={() => setEditProfile(null)}
         profile={editProfile}
         organizations={orgRecords.map(r => r.name)}
-        onSuccess={() => { setEditProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); silentRefresh(); }}
+        onSuccess={() => { setEditProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
       />
 
       <ConfirmModal
@@ -749,7 +749,7 @@ function UnassignedPanel({ members, orgs, onAssign, avatarColors }: {
                 className="h-8 rounded-lg border border-brand-300 bg-white px-2 text-xs focus:outline-none dark:border-brand-700 dark:bg-gray-800 dark:text-white"
                 defaultValue=""
               >
-                <option value="" disabled>Байгууллага сонгох...</option>
+                <option value="" disabled>Байгууллага сонгоно уу</option>
                 {orgs.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             ) : (
@@ -757,7 +757,7 @@ function UnassignedPanel({ members, orgs, onAssign, avatarColors }: {
                 onClick={() => setAssigningId(m.id)}
                 className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700 dark:border-gray-700 dark:text-gray-400"
               >
-                Оноох
+                Холбох
               </button>
             )}
           </div>

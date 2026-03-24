@@ -70,7 +70,7 @@ export default function BookingsTable({
   if (bookings.length === 0) {
     return (
       <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-        {t("bookings")} олдсонгүй
+        Захиалгын мэдээлэл олдсонгүй.
       </div>
     );
   }

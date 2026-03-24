@@ -382,11 +382,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-bold text-gray-800 dark:text-white">
-              {isCreate ? "Шинэ гишүүн нэмэх" : (displayName || "Гишүүн засах")}
+              {isCreate ? "Хэрэглэгч бүртгэх" : (displayName || "Хэрэглэгчийн мэдээлэл засах")}
             </h3>
             <p className="text-xs text-gray-400">
               {isCreate
-                ? "Шинэ хэрэглэгч болон профайл үүсгэнэ"
+                ? "Шинэ хэрэглэгчийн бүртгэл болон профайл үүсгэнэ."
                 : `${organization || "Байгууллагагүй"} · ${tier === "premium" ? "Premium" : "Early"}`
               }
             </p>
@@ -450,7 +450,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                         <input type="text" value={password} onChange={e => setPassword(e.target.value)}
                           className={inp} required minLength={6} />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-400 dark:bg-gray-700">
-                          default
+                          түр
                         </span>
                       </div>
                     </div>
@@ -496,9 +496,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     value={orgOpen ? orgSearch : organization}
                     onChange={e => { setOrgSearch(e.target.value); setOrganization(""); }}
                     onFocus={() => { setOrgOpen(true); setOrgSearch(organization); }}
-                    onBlur={() => setTimeout(() => setOrgOpen(false), 150)}
+                    onBlur={() =>
+                      setTimeout(() => {
+                        const typed = orgSearch.trim();
+                        if (typed && !organization) setOrganization(typed);
+                        setOrgOpen(false);
+                      }, 150)
+                    }
                     className={inp + " pr-8"}
-                    placeholder="Байгууллага хайх..."
+                    placeholder="Байгууллагын нэрээр хайх..."
                     autoComplete="off"
                   />
                   <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-300">
@@ -583,7 +589,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 </div>
               </div>
               {expiresAt && !startedAt && (
-                <p className="mt-1.5 text-[11px] text-gray-400">↑ Эхлэх огноо автоматаар −1 жил тохируулагдана</p>
+                <p className="mt-1.5 text-[11px] text-gray-400">Эхлэх огноог дуусах огнооноос нэг жилийн өмнө автоматаар тооцоолно.</p>
               )}
             </div>
           </form>
@@ -602,9 +608,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             {loading ? (
               <>
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                Хадгалж байна...
+                Мэдээлэл хадгалж байна...
               </>
-            ) : isCreate ? "Гишүүн нэмэх" : "Өөрчлөлт хадгалах"}
+            ) : isCreate ? "Хэрэглэгч бүртгэх" : "Өөрчлөлтийг хадгалах"}
           </button>
         </div>
       </div>

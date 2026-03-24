@@ -43,8 +43,20 @@ export default function ScheduleFormModal({
       setError(t("pleaseSelectClass"));
       return;
     }
+    if (!startDate || !startTime) {
+      setError("Огноо болон цагаа бүрэн оруулна уу");
+      return;
+    }
     const start = new Date(`${startDate}T${startTime}`);
     const dur = parseInt(durationMinutes, 10) || 60;
+    if (Number.isNaN(start.getTime())) {
+      setError("Огноо/цаг буруу байна");
+      return;
+    }
+    if (dur < 15) {
+      setError("Үргэлжлэх хугацаа дор хаяж 15 минут байна");
+      return;
+    }
     const end = new Date(start.getTime() + dur * 60 * 1000);
     setError("");
     setLoading(true);

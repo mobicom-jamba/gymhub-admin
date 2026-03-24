@@ -15,7 +15,7 @@ export default function NewGymsCard({ gyms }: { gyms: GymRow[] }) {
   if (gyms.length === 0) {
     return (
       <div className="py-8 text-center text-gray-500 dark:text-gray-400">
-        Шинэ фитнес олдсонгүй
+        Шинээр бүртгэгдсэн фитнес төв байхгүй байна.
       </div>
     );
   }

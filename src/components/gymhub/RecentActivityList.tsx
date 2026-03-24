@@ -27,7 +27,7 @@ export default function RecentActivityList({
   if (logs.length === 0) {
     return (
       <div className="py-8 text-center text-gray-500 dark:text-gray-400">
-        {t("recentActivity")} олдсонгүй
+        Сүүлийн үйл ажиллагааны бүртгэл байхгүй байна.
       </div>
     );
   }

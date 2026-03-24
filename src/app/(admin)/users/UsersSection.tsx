@@ -130,7 +130,7 @@ export default function UsersSection() {
     const { id } = confirmDelete;
     setConfirmDelete(null);
     setProfiles(prev => prev.filter(p => p.id !== id));
-    toast.show("Хэрэглэгч амжилттай устгагдлаа ✓");
+    toast.show("Хэрэглэгчийн бүртгэл амжилттай устгагдлаа.");
     const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) { alert(data.error ?? "Алдаа гарлаа"); silentRefresh(); }
@@ -144,7 +144,7 @@ export default function UsersSection() {
     setConfirmBulk(false);
     setProfiles(prev => prev.filter(p => !selectedIds.has(p.id)));
     setSelectedIds(new Set());
-    toast.show(`${count} хэрэглэгч устгагдлаа ✓`);
+    toast.show(`${count} хэрэглэгчийн бүртгэл амжилттай устгагдлаа.`);
     try {
       await Promise.all(ids.map((id) =>
         fetch(`/api/admin/users/${id}`, { method: "DELETE" })
@@ -395,7 +395,7 @@ export default function UsersSection() {
         onClose={() => setFormProfile(null)}
         profile={formProfile === "new" ? null : formProfile}
         organizations={organizations}
-        onSuccess={() => { setFormProfile(null); toast.show("Хэрэглэгч амжилттай хадгалагдлаа ✓"); silentRefresh(); }}
+        onSuccess={() => { setFormProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
       />
 
       <ConfirmModal
@@ -410,7 +410,7 @@ export default function UsersSection() {
         isOpen={confirmBulk}
         title={`${selectedIds.size} хэрэглэгч устгах уу?`}
         message="Сонгосон хэрэглэгчдийг бүрмөсөн устгана. Энэ үйлдлийг буцаах боломжгүй."
-        confirmLabel={bulkDeleting ? "..." : `${selectedIds.size} устгах`}
+        confirmLabel={bulkDeleting ? "Түр хүлээнэ үү..." : `${selectedIds.size} хэрэглэгч устгах`}
         onConfirm={handleBulkDeleteConfirmed}
         onCancel={() => setConfirmBulk(false)}
         loading={bulkDeleting}

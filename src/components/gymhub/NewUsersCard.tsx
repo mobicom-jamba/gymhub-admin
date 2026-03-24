@@ -27,7 +27,7 @@ export default function NewUsersCard({ users, onEdit }: { users: UserRow[]; onEd
   if (users.length === 0) {
     return (
       <div className="py-8 text-center text-gray-500 dark:text-gray-400">
-        Шинэ хэрэглэгч олдсонгүй
+        Шинээр бүртгэгдсэн хэрэглэгч байхгүй байна.
       </div>
     );
   }

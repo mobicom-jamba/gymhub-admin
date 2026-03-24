@@ -37,7 +37,7 @@ export default function GymsTable({
   if (gyms.length === 0) {
     return (
       <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-        {t("gyms")} олдсонгүй
+        Фитнес төвийн бүртгэл олдсонгүй.
       </div>
     );
   }
