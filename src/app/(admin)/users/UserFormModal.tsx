@@ -292,6 +292,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [orgOpen, setOrgOpen]           = useState(false);
   const [quickCreateOrgOpen, setQuickCreateOrgOpen] = useState(false);
   const [tier, setTier]                 = useState("early");
+  const [membershipStatus, setMembershipStatus] = useState("active");
   const [startedAt, setStartedAt]       = useState("");
   const [expiresAt, setExpiresAt]       = useState("");
   const [formError, setFormError]       = useState("");
@@ -308,6 +309,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setOrganizationId(profile.organization_id ?? "");
       setOrganization(profile.organization ?? "");
       setTier(profile.membership_tier ?? "early");
+      setMembershipStatus(profile.membership_status ?? "active");
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
       setExpiresAt(profile.membership_expires_at?.slice(0, 10) ?? "");
       setEmail(""); setPassword("");
@@ -315,7 +317,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setEmail(""); setPassword("123456");
       setOvog(""); setNer(""); setPhone(""); setRole("user");
       setOrganizationId("");
-      setOrganization(""); setTier("early"); setStartedAt(""); setExpiresAt("");
+      setOrganization(""); setTier("early"); setMembershipStatus("active"); setStartedAt(""); setExpiresAt("");
     }
     setOrgSearch(""); setOrgOpen(false); setFormError("");
   }, [isOpen, profile]);
@@ -351,7 +353,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             phone: phone || null, role,
             organization_id: safeOrganizationId,
             organization: organization || null,
-            membership_tier: tier, membership_status: "active",
+            membership_tier: tier, membership_status: membershipStatus,
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
             membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
           }),
@@ -363,7 +365,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           full_name: fullName, phone: phone || null, role,
           organization_id: safeOrganizationId,
           organization: organization || null, membership_tier: tier,
-          membership_status: "active",
+          membership_status: membershipStatus,
           membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
           membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
           updated_at: new Date().toISOString(),
@@ -632,6 +634,30 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 <div>
                   <Label>Дуусах огноо</Label>
                   <DateField value={expiresAt} onChange={handleExpiresChange} />
+                </div>
+              </div>
+              <div className="mt-3">
+                <Label>Төлөв</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { key: "active", label: "Идэвхтэй" },
+                    { key: "inactive", label: "Идэвхгүй" },
+                  ] as const).map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => setMembershipStatus(s.key)}
+                      className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        membershipStatus === s.key
+                          ? s.key === "active"
+                            ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                            : "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                          : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
                 </div>
               </div>
               {expiresAt && !startedAt && (

@@ -46,7 +46,8 @@ function isMembershipExpired(expiresAt: string | null): boolean {
   return new Date(expiresAt) < new Date();
 }
 
-function profileStatus(p: Profile): "active" | "expired" {
+function profileStatus(p: Profile): "active" | "expired" | "inactive" {
+  if (p.membership_status === "inactive") return "inactive";
   if (isMembershipExpired(p.membership_expires_at)) return "expired";
   if (p.membership_status === "expired") return "expired";
   return "active";
@@ -326,7 +327,13 @@ export default function UsersSection() {
     statusFilter
       ? {
           key: "status",
-          label: `Төлөв: ${statusFilter === "active" ? "Идэвхтэй" : "Дууссан"}`,
+          label: `Төлөв: ${
+            statusFilter === "active"
+              ? "Идэвхтэй"
+              : statusFilter === "inactive"
+                  ? "Идэвхгүй"
+                  : "Дууссан"
+          }`,
           clear: () => setStatusFilter(""),
         }
       : null,
@@ -388,12 +395,18 @@ export default function UsersSection() {
             </select>
 
             <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
-              {([["", "Бүгд"], ["active", "✅ Идэвх"], ["expired", "⛔ Дууссан"]] as const).map(([v, label]) => (
+              {([
+                ["", "Бүгд"],
+                ["active", "✅ Идэвх"],
+                ["inactive", "⏸ Идэвхгүй"],
+                ["expired", "⛔ Дууссан"],
+              ] as const).map(([v, label]) => (
                 <button key={v} type="button"
                   onClick={() => { setStatusFilter(v); resetPage(); }}
                   className={`h-8 rounded-lg px-3 text-xs font-medium transition-all ${
                     statusFilter === v
                       ? v === "active" ? "bg-emerald-500 text-white shadow-sm"
+                        : v === "inactive" ? "bg-amber-500 text-white shadow-sm"
                         : v === "expired" ? "bg-red-500 text-white shadow-sm"
                         : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
                       : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
