@@ -111,7 +111,7 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
 
     try {
       if (isCreate) {
-        const { data: inserted, error: insertErr } = await supabase
+        let { data: inserted, error: insertErr } = await supabase
           .from("organizations")
           .insert({ name: normalizedName, description: description || null, phone: phone || null,
             facebook_url: facebookUrl || null, website_url: websiteUrl || null, partner_url: partnerUrl || null })
@@ -124,10 +124,31 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
             msg.includes("organizations_name_key") ||
             msg.includes("duplicate key");
           if (duplicate) {
-            setFormError("Ижил нэртэй байгууллага бүртгэлтэй байна. Өөр нэр оруулна уу.");
+            // Fallback: if the organization already exists, continue using that record
+            // instead of blocking user on a duplicate-name race/format issue.
+            const { data: existing, error: existingErr } = await supabase
+              .from("organizations")
+              .select("id")
+              .ilike("name", normalizedName)
+              .limit(1)
+              .maybeSingle();
+            if (existingErr) {
+              setFormError("Ижил нэртэй байгууллага бүртгэлтэй байна. Өөр нэр оруулна уу.");
+              return;
+            }
+            if (!existing?.id) {
+              setFormError("Ижил нэртэй байгууллага бүртгэлтэй байна. Өөр нэр оруулна уу.");
+              return;
+            }
+            inserted = existing;
+            insertErr = null;
           } else {
             setFormError("Байгууллага бүртгэх үед алдаа гарлаа. Дахин оролдоно уу.");
+            return;
           }
+        }
+        if (!inserted?.id) {
+          setFormError("Байгууллага бүртгэх үед алдаа гарлаа. Дахин оролдоно уу.");
           return;
         }
         const finalLogo = await uploadLogo(inserted.id);
