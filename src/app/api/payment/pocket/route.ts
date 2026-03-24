@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { safeUpdateBookingById } from "../_lib/bookings";
 
 /**
  * POST /api/payment/pocket — Create a Pocket lending payment
@@ -39,14 +40,11 @@ export async function POST(request: Request) {
     );
 
     // Update booking with pocket payment channel
-    await supabase
-      .from("bookings")
-      .update({
-        payment_channel: "pocket",
-        payment_status: "pending",
-        amount,
-      })
-      .eq("id", booking_id);
+    await safeUpdateBookingById(supabase, booking_id, {
+      payment_channel: "pocket",
+      payment_status: "pending",
+      amount,
+    });
 
     // Create lending record
     const { data: lending, error: lendingErr } = await supabase
@@ -77,10 +75,10 @@ export async function POST(request: Request) {
         .update({ status: "approved" })
         .eq("id", lending.id);
 
-      await supabase
-        .from("bookings")
-        .update({ payment_status: "paid", paid_at: new Date().toISOString() })
-        .eq("id", booking_id);
+      await safeUpdateBookingById(supabase, booking_id, {
+        payment_status: "paid",
+        paid_at: new Date().toISOString(),
+      });
     }
 
     return NextResponse.json({

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { safeUpdateBookingById } from "../../_lib/bookings";
 
 async function handle(request: Request) {
   try {
@@ -20,13 +21,13 @@ async function handle(request: Request) {
       auth: { persistSession: false },
     });
 
-    await supabase
-      .from("bookings")
-      .update({
-        payment_status: "paid",
-        paid_at: new Date().toISOString(),
-      })
-      .eq("id", bookingId);
+    const updateError = await safeUpdateBookingById(supabase, bookingId, {
+      payment_status: "paid",
+      paid_at: new Date().toISOString(),
+    });
+    if (updateError) {
+      return NextResponse.json({ error: updateError }, { status: 500 });
+    }
 
     return NextResponse.json({ received: true, booking_id: bookingId });
   } catch (err: unknown) {

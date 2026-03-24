@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { safeUpdateBookingById } from "../_lib/bookings";
 
 /**
  * POST /api/payment/sono — Create a Sono lending payment
@@ -115,17 +116,14 @@ export async function POST(request: Request) {
     );
 
     // Update booking with sono payment channel (pending until paid check/callback)
-    const { error: bookingError } = await supabase
-      .from("bookings")
-      .update({
-        payment_channel: "sono",
-        payment_status: "pending",
-        qpay_invoice_id: returnedInvoiceId,
-        amount,
-      })
-      .eq("id", booking_id);
+    const bookingError = await safeUpdateBookingById(supabase, booking_id, {
+      payment_channel: "sono",
+      payment_status: "pending",
+      qpay_invoice_id: returnedInvoiceId,
+      amount,
+    });
     if (bookingError) {
-      return NextResponse.json({ error: bookingError.message }, { status: 500 });
+      return NextResponse.json({ error: bookingError }, { status: 500 });
     }
 
     // Create lending record

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { safeUpdateBookingById } from "../../_lib/bookings";
 
 export async function POST(request: Request) {
   try {
@@ -75,13 +76,10 @@ export async function POST(request: Request) {
         process.env.SUPABASE_SERVICE_ROLE_KEY,
         { auth: { persistSession: false } },
       );
-      await supabase
-        .from("bookings")
-        .update({
-          payment_status: "paid",
-          paid_at: new Date().toISOString(),
-        })
-        .eq("id", booking_id);
+      await safeUpdateBookingById(supabase, booking_id, {
+        payment_status: "paid",
+        paid_at: new Date().toISOString(),
+      });
     }
 
     return NextResponse.json({

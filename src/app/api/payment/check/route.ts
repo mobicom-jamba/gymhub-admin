@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { safeUpdateBookingById } from "../_lib/bookings";
 
 const QPAY_BASE = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
 const QPAY_USERNAME = process.env.QPAY_CLIENT_ID ?? process.env.QPAY_USERNAME ?? "";
@@ -82,13 +83,13 @@ export async function POST(request: Request) {
           serviceKey,
           { auth: { persistSession: false } }
         );
-        const { error: updateError } = await supabase.from("bookings").update({
+        const updateError = await safeUpdateBookingById(supabase, booking_id, {
           payment_status: "paid",
           paid_at: new Date().toISOString(),
-        }).eq("id", booking_id);
+        });
         if (updateError) {
           return NextResponse.json(
-            { error: `Booking төлөв шинэчлэхэд алдаа гарлаа: ${updateError.message}` },
+            { error: `Booking төлөв шинэчлэхэд алдаа гарлаа: ${updateError}` },
             { status: 500 },
           );
         }

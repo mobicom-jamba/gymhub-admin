@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { safeFindBookingIdByInvoice, safeUpdateBookingById } from "../_lib/bookings";
 
 async function handleCallback(request: Request) {
   try {
@@ -35,21 +36,16 @@ async function handleCallback(request: Request) {
 
     let resolvedBookingId = bookingId;
     if (!resolvedBookingId && invoiceId) {
-      const { data } = await supabase
-        .from("bookings")
-        .select("id")
-        .eq("qpay_invoice_id", invoiceId)
-        .maybeSingle();
-      resolvedBookingId = (data?.id as string | undefined) ?? null;
+      resolvedBookingId = await safeFindBookingIdByInvoice(supabase, invoiceId);
     }
 
     if (resolvedBookingId && (!paymentStatus || paymentStatus === "PAID")) {
-      const { error: updateError } = await supabase.from("bookings").update({
+      const updateError = await safeUpdateBookingById(supabase, resolvedBookingId, {
         payment_status: "paid",
         paid_at: new Date().toISOString(),
-      }).eq("id", resolvedBookingId);
+      });
       if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 });
+        return NextResponse.json({ error: updateError }, { status: 500 });
       }
     }
 
