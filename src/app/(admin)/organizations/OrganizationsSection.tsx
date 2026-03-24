@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 import UserFormModal from "../users/UserFormModal";
@@ -49,6 +49,79 @@ function orgNameOf(member: Member): string | null {
   return rel?.name ?? member.organization;
 }
 
+/** Lowercase, trim, collapse spaces; strip combining marks for forgiving match. */
+function normalizeSearchText(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/\s+/g, " ");
+}
+
+function searchTokens(query: string): string[] {
+  return normalizeSearchText(query)
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function buildOrgHaystack(name: string, rec: OrgRecord | undefined): string {
+  const parts: string[] = [name];
+  if (rec?.phone) {
+    parts.push(rec.phone);
+    parts.push(rec.phone.replace(/\D/g, ""));
+  }
+  if (rec?.description) parts.push(rec.description);
+  if (rec?.partner_url) parts.push(rec.partner_url);
+  if (rec?.website_url) parts.push(rec.website_url);
+  if (rec?.facebook_url) parts.push(rec.facebook_url);
+  return normalizeSearchText(parts.filter(Boolean).join(" "));
+}
+
+function haystackMatchesTokens(haystack: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return true;
+  return tokens.every((t) => haystack.includes(t));
+}
+
+/** Higher score = better match (prefix / word-start hits). */
+function orgSearchRank(nameNorm: string, haystack: string, tokens: string[]): number {
+  if (tokens.length === 0) return 0;
+  let score = 0;
+  const words = nameNorm.split(/\s+/).filter(Boolean);
+  for (const t of tokens) {
+    if (nameNorm.startsWith(t)) score += 120;
+    else if (nameNorm.includes(t)) score += 80;
+    if (words.some((w) => w.startsWith(t))) score += 40;
+    if (haystack.includes(t) && !nameNorm.includes(t)) score += 15;
+  }
+  return score;
+}
+
+function highlightOrgName(name: string, query: string): React.ReactNode {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0) return name;
+  const lower = name.toLowerCase();
+  let bestIdx = -1;
+  let bestLen = 0;
+  for (const t of tokens) {
+    const idx = lower.indexOf(t);
+    if (idx >= 0 && (bestIdx < 0 || idx < bestIdx)) {
+      bestIdx = idx;
+      bestLen = t.length;
+    }
+  }
+  if (bestIdx < 0 || bestLen === 0) return name;
+  return (
+    <>
+      {name.slice(0, bestIdx)}
+      <mark className="rounded bg-amber-200/90 px-0.5 font-medium text-gray-900 dark:bg-amber-500/35 dark:text-white">
+        {name.slice(bestIdx, bestIdx + bestLen)}
+      </mark>
+      {name.slice(bestIdx + bestLen)}
+    </>
+  );
+}
+
 export default function OrganizationsSection() {
   const [members, setMembers] = useState<Member[]>([]);
   const [orgRecords, setOrgRecords] = useState<OrgRecord[]>([]);
@@ -64,6 +137,7 @@ export default function OrganizationsSection() {
   const [confirmRemove, setConfirmRemove] = useState<{ memberId: string; name: string } | null>(null);
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
   const toast = useToast();
+  const orgSearchInputRef = useRef<HTMLInputElement>(null);
 
   const MEMBER_SELECT = "id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization_id, organization, organizations(id,name), created_at";
 
@@ -141,10 +215,30 @@ export default function OrganizationsSection() {
     [members]
   );
 
-  const filteredOrgs = useMemo(() =>
-    orgs.filter(o => o.name.toLowerCase().includes(search.toLowerCase())),
-    [orgs, search]
-  );
+  const filteredOrgs = useMemo(() => {
+    const tokens = searchTokens(search);
+    if (tokens.length === 0) return orgs;
+
+    const scored = orgs
+      .map((o) => {
+        const rec = orgRecords.find((r) => r.name === o.name);
+        const nameNorm = normalizeSearchText(o.name);
+        const haystack = buildOrgHaystack(o.name, rec);
+        if (!haystackMatchesTokens(haystack, tokens)) return null;
+        const score = orgSearchRank(nameNorm, haystack, tokens);
+        return { org: o, score };
+      })
+      .filter((x): x is { org: OrgGroup; score: number } => x !== null);
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.org.members.length !== a.org.members.length) {
+        return b.org.members.length - a.org.members.length;
+      }
+      return a.org.name.localeCompare(b.org.name, "mn");
+    });
+    return scored.map((s) => s.org);
+  }, [orgs, orgRecords, search]);
 
   const selectedOrg = selected ? orgs.find(o => o.name === selected) ?? null : null;
   const selectedRecord = selected ? orgRecords.find(r => r.name === selected) ?? null : null;
@@ -217,7 +311,7 @@ export default function OrganizationsSection() {
     <div className="flex h-[calc(100vh-120px)] gap-4 overflow-hidden">
 
       {/* ── Left panel: org list ── */}
-      <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/[0.08] dark:bg-gray-900">
+      <div className="flex w-[22rem] shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-white/[0.08] dark:bg-gray-900">
         {/* Header */}
         <div className="border-b border-gray-100 p-4 dark:border-white/[0.06]">
           <div className="flex items-center justify-between mb-3">
@@ -236,19 +330,78 @@ export default function OrganizationsSection() {
             </button>
           </div>
 
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Хайх..."
-            className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 text-sm focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-          />
+          <label htmlFor="org-list-search" className="sr-only">
+            Байгууллага хайх — нэр, олон үг, утас
+          </label>
+          <div className="relative">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </span>
+            <input
+              id="org-list-search"
+              ref={orgSearchInputRef}
+              type="search"
+              enterKeyHint="search"
+              autoComplete="off"
+              spellCheck={false}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setSearch("");
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              placeholder="Нэр, олон үг, утас…"
+              className="h-10 w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-9 pr-9 text-sm placeholder:text-gray-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500"
+            />
+            {search.trim() !== "" && (
+              <button
+                type="button"
+                title="Цэвэрлэх"
+                aria-label="Хайлт цэвэрлэх"
+                onClick={() => {
+                  setSearch("");
+                  orgSearchInputRef.current?.focus();
+                }}
+                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-200/80 hover:text-gray-600 dark:hover:bg-white/10 dark:hover:text-gray-200"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-gray-400">
+            {search.trim() === ""
+              ? "Олон үгээр зэрэгцүүлэн хайна. Жишээ: MEA Munkhada"
+              : `Олдсон: ${filteredOrgs.length} · Нийт ${orgs.length}`}
+          </p>
         </div>
 
         {/* Org list */}
         <div className="flex-1 overflow-y-auto">
-          {filteredOrgs.map((org, i) => {
-            const color = avatarColors[i % avatarColors.length];
+          {filteredOrgs.length === 0 && search.trim() !== "" && (
+            <div className="px-4 py-10 text-center">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Тохирох байгууллага олдсонгүй</p>
+              <p className="mt-1 text-xs text-gray-400">Өөр үгээр оролдоно уу эсвэл хайлт цэвэрлэнэ үү.</p>
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="mt-3 text-xs font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400"
+              >
+                Хайлт арилгах
+              </button>
+            </div>
+          )}
+          {filteredOrgs.map((org) => {
+            let hash = 0;
+            for (let i = 0; i < org.name.length; i++) {
+              hash = org.name.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const color = avatarColors[Math.abs(hash) % avatarColors.length];
             const isActive = selected === org.name;
             const rec = orgRecords.find(r => r.name === org.name);
             return (
@@ -271,7 +424,7 @@ export default function OrganizationsSection() {
                   )}
                   <div className="min-w-0 flex-1">
                     <p className={`truncate text-sm font-medium ${isActive ? "text-brand-700 dark:text-brand-400" : "text-gray-800 dark:text-white"}`}>
-                      {org.name}
+                      {highlightOrgName(org.name, search)}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-gray-400">{org.members.length} гишүүн</span>
