@@ -44,6 +44,10 @@ function Label({ children }: { children: React.ReactNode }) {
   return <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">{children}</p>;
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 const MN_MONTHS = ["1-р","2-р","3-р","4-р","5-р","6-р","7-р","8-р","9-р","10-р","11-р","12-р"];
 const MN_DAYS   = ["Да","Мя","Лх","Пү","Ба","Бя","Ня"];
 
@@ -325,6 +329,8 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     }
   };
 
+  const safeOrganizationId = organizationId && isUuid(organizationId) ? organizationId : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
@@ -343,7 +349,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           body: JSON.stringify({
             email, password, full_name: fullName,
             phone: phone || null, role,
-            organization_id: organizationId || null,
+            organization_id: safeOrganizationId,
             organization: organization || null,
             membership_tier: tier, membership_status: "active",
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
@@ -355,7 +361,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         const supabase = createBrowserSupabaseClient();
         const { error: err } = await supabase.from("profiles").update({
           full_name: fullName, phone: phone || null, role,
-          organization_id: organizationId || null,
+          organization_id: safeOrganizationId,
           organization: organization || null, membership_tier: tier,
           membership_status: "active",
           membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
