@@ -107,16 +107,29 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
     e.preventDefault();
     if (!name.trim()) { setFormError("Нэр оруулна уу"); return; }
     setFormError(""); setLoading(true);
+    const normalizedName = name.trim();
 
     try {
       if (isCreate) {
         const { data: inserted, error: insertErr } = await supabase
           .from("organizations")
-          .insert({ name: name.trim(), description: description || null, phone: phone || null,
+          .insert({ name: normalizedName, description: description || null, phone: phone || null,
             facebook_url: facebookUrl || null, website_url: websiteUrl || null, partner_url: partnerUrl || null })
           .select("id")
           .single();
-        if (insertErr) { setFormError(insertErr.message); return; }
+        if (insertErr) {
+          const msg = insertErr.message?.toLowerCase() ?? "";
+          const duplicate =
+            insertErr.code === "23505" ||
+            msg.includes("organizations_name_key") ||
+            msg.includes("duplicate key");
+          if (duplicate) {
+            setFormError("Ижил нэртэй байгууллага бүртгэлтэй байна. Өөр нэр оруулна уу.");
+          } else {
+            setFormError("Байгууллага бүртгэх үед алдаа гарлаа. Дахин оролдоно уу.");
+          }
+          return;
+        }
         const finalLogo = await uploadLogo(inserted.id);
         if (finalLogo) {
           await supabase.from("organizations").update({ logo_url: finalLogo }).eq("id", inserted.id);
@@ -126,13 +139,25 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
         const { error: updateErr } = await supabase
           .from("organizations")
           .update({
-            name: name.trim(), description: description || null, phone: phone || null,
+            name: normalizedName, description: description || null, phone: phone || null,
             facebook_url: facebookUrl || null, website_url: websiteUrl || null,
             partner_url: partnerUrl || null, logo_url: finalLogo,
             updated_at: new Date().toISOString(),
           })
           .eq("id", org!.id);
-        if (updateErr) { setFormError(updateErr.message); return; }
+        if (updateErr) {
+          const msg = updateErr.message?.toLowerCase() ?? "";
+          const duplicate =
+            updateErr.code === "23505" ||
+            msg.includes("organizations_name_key") ||
+            msg.includes("duplicate key");
+          if (duplicate) {
+            setFormError("Ижил нэртэй байгууллага бүртгэлтэй байна. Өөр нэр оруулна уу.");
+          } else {
+            setFormError("Байгууллагын мэдээлэл хадгалах үед алдаа гарлаа. Дахин оролдоно уу.");
+          }
+          return;
+        }
       }
       onSuccess(); onClose();
     } finally { setLoading(false); }
