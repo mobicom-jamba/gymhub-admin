@@ -60,6 +60,7 @@ export default function UsersTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
+  visibleColumns,
 }: {
   profiles: Profile[];
   error?: string;
@@ -71,6 +72,7 @@ export default function UsersTable({
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: () => void;
+  visibleColumns?: Record<string, boolean>;
 }) {
   const py = density === "compact" ? "py-1.5" : "py-3";
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -118,14 +120,14 @@ export default function UsersTable({
                     className="size-4 cursor-pointer" />
                 </TableCell>
               )}
-              <TableCell isHeader className={`sticky left-0 z-10 bg-white dark:bg-gray-900 ${hdr}`}>Гишүүн</TableCell>
-              <TableCell isHeader className={hdr}>Утас</TableCell>
-              <TableCell isHeader className={hdr}>Байгууллага</TableCell>
-              <TableCell isHeader className={hdr}>Тариф</TableCell>
-              <TableCell isHeader className={hdr}>Эхлэх огноо</TableCell>
-              <TableCell isHeader className={hdr}>Дуусах огноо</TableCell>
+              {(visibleColumns?.member ?? true) && <TableCell isHeader className={`sticky top-0 left-0 z-20 bg-white dark:bg-gray-900 ${hdr} w-[240px]`}>Гишүүн</TableCell>}
+              {(visibleColumns?.phone ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[130px]`}>Утас</TableCell>}
+              {(visibleColumns?.organization ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[180px]`}>Байгууллага</TableCell>}
+              {(visibleColumns?.tier ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[120px]`}>Тариф</TableCell>}
+              {(visibleColumns?.startDate ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[130px]`}>Эхлэх огноо</TableCell>}
+              {(visibleColumns?.expireDate ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[130px]`}>Дуусах огноо</TableCell>}
               {(onEdit || onDelete) && (
-                <TableCell isHeader className={`${hdr} text-end`}>Үйлдлүүд</TableCell>
+                <TableCell isHeader className={`${hdr} text-end sticky top-0 bg-white dark:bg-gray-900 w-[110px]`}>Үйлдлүүд</TableCell>
               )}
             </TableRow>
           </TableHeader>
@@ -143,38 +145,38 @@ export default function UsersTable({
                   )}
 
                   {/* Name + avatar — sticky */}
-                  <TableCell className={`sticky left-0 z-10 bg-white px-4 dark:bg-gray-900 ${py}`}>
+                  {(visibleColumns?.member ?? true) && <TableCell className={`sticky left-0 z-10 bg-white px-4 dark:bg-gray-900 ${py}`}>
                     <div className="flex items-center gap-3">
                       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${colorClass}`}>
                         {getInitials(p.full_name)}
                       </div>
                       <span className="font-medium text-gray-800 text-sm dark:text-white/90 whitespace-nowrap">{p.full_name ?? "—"}</span>
                     </div>
-                  </TableCell>
+                  </TableCell>}
 
-                  <TableCell className={`px-4 ${py}`}>
+                  {(visibleColumns?.phone ?? true) && <TableCell className={`px-4 ${py}`}>
                     <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-700 dark:bg-white/[0.06] dark:text-gray-300">{p.phone ?? "—"}</span>
-                  </TableCell>
+                  </TableCell>}
 
-                  <TableCell className={`px-4 ${py} max-w-[160px] text-sm text-gray-600 dark:text-gray-400`}>
+                  {(visibleColumns?.organization ?? true) && <TableCell className={`px-4 ${py} max-w-[160px] text-sm text-gray-600 dark:text-gray-400`}>
                     <span className="block truncate" title={orgNameOfProfile(p) ?? ""}>
                       {orgNameOfProfile(p) ?? "—"}
                     </span>
-                  </TableCell>
+                  </TableCell>}
 
-                  <TableCell className={`px-4 ${py}`}>
+                  {(visibleColumns?.tier ?? true) && <TableCell className={`px-4 ${py}`}>
                     {p.membership_tier === "premium" ? (
                       <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">Premium</span>
                     ) : p.membership_tier === "early" ? (
                       <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">Early</span>
                     ) : <span className="text-gray-400 text-xs">—</span>}
-                  </TableCell>
+                  </TableCell>}
 
-                  <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>
+                  {(visibleColumns?.startDate ?? true) && <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>
                     {p.membership_started_at ? new Date(p.membership_started_at).toLocaleDateString("mn-MN") : "—"}
-                  </TableCell>
+                  </TableCell>}
 
-                  <TableCell className={`px-4 ${py} text-sm whitespace-nowrap`}>
+                  {(visibleColumns?.expireDate ?? true) && <TableCell className={`px-4 ${py} text-sm whitespace-nowrap`}>
                     {p.membership_expires_at ? (() => {
                       const days = daysUntil(p.membership_expires_at);
                       if (days !== null && days < 0)
@@ -183,7 +185,7 @@ export default function UsersTable({
                         return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">⏳ {days} өдөр</span>;
                       return <span className="text-gray-500 dark:text-gray-400">{new Date(p.membership_expires_at).toLocaleDateString("mn-MN")}</span>;
                     })() : <span className="text-gray-400">—</span>}
-                  </TableCell>
+                  </TableCell>}
 
 
                   {(onEdit || onDelete) && (

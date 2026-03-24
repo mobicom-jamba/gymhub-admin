@@ -13,6 +13,9 @@ import Button from "@/components/ui/button/Button";
 import { t } from "@/lib/i18n";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { TrashBinIcon, PencilIcon } from "@/icons";
+import { useToast } from "@/components/ui/Toast";
+import EmptyState from "@/components/ui/EmptyState";
+import { toMnErrorMessage } from "@/lib/error-message";
 
 type Schedule = {
   id: string;
@@ -35,6 +38,7 @@ export default function SchedulesTable({
   onEdit?: (schedule: Schedule) => void;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const toast = useToast();
 
   const getClassInfo = (s: Schedule) => {
     const c = s.classes;
@@ -52,7 +56,7 @@ export default function SchedulesTable({
       .delete()
       .eq("id", s.id);
     setDeletingId(null);
-    if (err) alert(err.message);
+    if (err) toast.show(toMnErrorMessage(err.message), "error");
     else onRefresh();
   };
 
@@ -66,9 +70,7 @@ export default function SchedulesTable({
 
   if (schedules.length === 0) {
     return (
-      <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-        {t("schedules")} {t("notFound")}
-      </div>
+      <EmptyState title="Хуваарь олдсонгүй" description="Одоогоор харуулах хуваарь алга." icon="calendar" />
     );
   }
 

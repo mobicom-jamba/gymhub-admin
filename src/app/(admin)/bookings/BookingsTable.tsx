@@ -11,6 +11,7 @@ import {
 import Badge from "@/components/ui/badge/Badge";
 import Button from "@/components/ui/button/Button";
 import { t } from "@/lib/i18n";
+import EmptyState from "@/components/ui/EmptyState";
 
 const statusLabels: Record<string, string> = {
   booked: t("booked"),
@@ -36,12 +37,14 @@ export default function BookingsTable({
   error,
   onCancel,
   onMarkAttended,
+  visibleColumns,
 }: {
   bookings: Booking[];
   profileMap: Record<string, string | null>;
   error?: string;
   onCancel?: (bookingId: string) => void;
   onMarkAttended?: (bookingId: string) => void;
+  visibleColumns?: Record<string, boolean>;
 }) {
   const [actioningId, setActioningId] = useState<string | null>(null);
 
@@ -69,9 +72,7 @@ export default function BookingsTable({
 
   if (bookings.length === 0) {
     return (
-      <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-        Захиалгын мэдээлэл олдсонгүй.
-      </div>
+      <EmptyState title="Захиалга олдсонгүй" description="Шүүлтүүрээ өөрчлөөд дахин оролдоно уу." icon="calendar" />
     );
   }
 
@@ -81,30 +82,30 @@ export default function BookingsTable({
         <Table>
           <TableHeader className="border-b border-gray-100 dark:border-white/[0.05]">
             <TableRow>
-              <TableCell
+              {(visibleColumns?.user ?? true) && <TableCell
                 isHeader
-                className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                className="px-5 py-3 sticky top-0 bg-white dark:bg-gray-900 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400 w-[180px]"
               >
                 {t("user")}
-              </TableCell>
-              <TableCell
+              </TableCell>}
+              {(visibleColumns?.class ?? true) && <TableCell
                 isHeader
-                className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                className="px-5 py-3 sticky top-0 bg-white dark:bg-gray-900 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400 w-[220px]"
               >
                 {t("classTitle")}
-              </TableCell>
-              <TableCell
+              </TableCell>}
+              {(visibleColumns?.time ?? true) && <TableCell
                 isHeader
-                className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                className="px-5 py-3 sticky top-0 bg-white dark:bg-gray-900 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400 w-[180px]"
               >
                 {t("time")}
-              </TableCell>
-              <TableCell
+              </TableCell>}
+              {(visibleColumns?.status ?? true) && <TableCell
                 isHeader
-                className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                className="px-5 py-3 sticky top-0 bg-white dark:bg-gray-900 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400 w-[110px]"
               >
                 {t("status")}
-              </TableCell>
+              </TableCell>}
               {(onCancel || onMarkAttended) && (
                 <TableCell
                   isHeader
@@ -132,20 +133,20 @@ export default function BookingsTable({
               const canAct = b.status === "booked" && actioningId !== b.id;
               return (
                 <TableRow key={b.id}>
-                  <TableCell className="px-5 py-4 font-medium text-gray-800 text-theme-sm dark:text-white/90">
+                  {(visibleColumns?.user ?? true) && <TableCell className="px-5 py-4 font-medium text-gray-800 text-theme-sm dark:text-white/90">
                     {profileMap[b.user_id] ?? "—"}
-                  </TableCell>
-                  <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
+                  </TableCell>}
+                  {(visibleColumns?.class ?? true) && <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
                     {cls?.title ?? "—"} ({gym?.name ?? "—"})
-                  </TableCell>
-                  <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
+                  </TableCell>}
+                  {(visibleColumns?.time ?? true) && <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
                     {start}
-                  </TableCell>
-                  <TableCell className="px-5 py-4">
+                  </TableCell>}
+                  {(visibleColumns?.status ?? true) && <TableCell className="px-5 py-4">
                     <Badge size="sm" color={statusColors[b.status] ?? "primary"}>
                       {statusLabels[b.status] ?? b.status}
                     </Badge>
-                  </TableCell>
+                  </TableCell>}
                   {(onCancel || onMarkAttended) && (
                     <TableCell className="px-5 py-4 text-end">
                       {b.status === "booked" && (

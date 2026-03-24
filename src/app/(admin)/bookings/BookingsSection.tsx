@@ -10,6 +10,9 @@ import { PlusIcon } from "@/icons";
 import { t } from "@/lib/i18n";
 import SearchInput from "@/components/common/SearchInput";
 import { exportToCsv } from "@/lib/csv-export";
+import { useToast } from "@/components/ui/Toast";
+import ColumnToggle from "@/components/ui/ColumnToggle";
+import { toMnErrorMessage } from "@/lib/error-message";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Booking = any;
@@ -25,7 +28,11 @@ export default function BookingsSection() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [page, setPage] = useState(0);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    user: true, class: true, time: true, status: true,
+  });
   const PAGE_SIZE = 20;
+  const toast = useToast();
 
   const fetchBookings = async () => {
     setLoading(true);
@@ -82,7 +89,7 @@ export default function BookingsSection() {
       .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
       .eq("id", bookingId);
     if (err) {
-      alert(err.message);
+      toast.show(toMnErrorMessage(err.message), "error");
       return;
     }
     fetchBookings();
@@ -95,7 +102,7 @@ export default function BookingsSection() {
       .update({ status: "attended", checked_in_at: new Date().toISOString() })
       .eq("id", bookingId);
     if (err) {
-      alert(err.message);
+      toast.show(toMnErrorMessage(err.message), "error");
       return;
     }
     fetchBookings();
@@ -191,6 +198,16 @@ export default function BookingsSection() {
           >
             CSV
           </Button>
+          <ColumnToggle
+            options={[
+              { key: "user", label: "Хэрэглэгч" },
+              { key: "class", label: "Анги" },
+              { key: "time", label: "Цаг" },
+              { key: "status", label: "Төлөв" },
+            ]}
+            visible={visibleColumns}
+            onChange={setVisibleColumns}
+          />
         </div>
         <BookingsTable
           bookings={paginatedBookings}
@@ -198,6 +215,7 @@ export default function BookingsSection() {
           error={error ?? undefined}
           onCancel={handleCancel}
           onMarkAttended={handleMarkAttended}
+          visibleColumns={visibleColumns}
         />
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">

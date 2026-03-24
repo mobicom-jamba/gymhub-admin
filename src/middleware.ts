@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const ADMIN_PATHS = ["/", "/gyms", "/users", "/bookings", "/schedules", "/calendar", "/profile", "/visits", "/form-elements", "/basic-tables", "/blank", "/error-404", "/line-chart", "/bar-chart", "/alerts", "/avatars", "/badge", "/buttons", "/images", "/videos", "/modals"];
+const ADMIN_PATHS = ["/", "/gyms", "/users", "/bookings", "/schedules", "/calendar", "/profile", "/visits", "/organizations"];
+const HIDDEN_TEMPLATE_PATHS = ["/form-elements", "/basic-tables", "/blank", "/error-404", "/line-chart", "/bar-chart", "/alerts", "/avatars", "/badge", "/buttons", "/images", "/videos", "/modals"];
 const AUTH_PATHS = ["/signin", "/signup", "/auth"];
 
 function isAdminPath(pathname: string) {
@@ -10,6 +11,10 @@ function isAdminPath(pathname: string) {
 
 function isAuthPath(pathname: string) {
   return AUTH_PATHS.some((p) => pathname.startsWith(p));
+}
+
+function isHiddenTemplatePath(pathname: string) {
+  return HIDDEN_TEMPLATE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
 export async function middleware(request: NextRequest) {
@@ -43,6 +48,10 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/", request.url));
     }
     return response;
+  }
+
+  if (isHiddenTemplatePath(pathname)) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (isAdminPath(pathname) && !user) {

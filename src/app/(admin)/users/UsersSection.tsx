@@ -14,6 +14,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
 import type { Density } from "./UsersTable";
 import { toMnErrorMessage } from "@/lib/error-message";
+import ColumnToggle from "@/components/ui/ColumnToggle";
 
 export type Profile = {
   id: string;
@@ -56,6 +57,9 @@ export default function UsersSection() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    member: true, phone: true, organization: true, tier: true, startDate: true, expireDate: true,
+  });
   const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
   const toast = useToast();
 
@@ -145,7 +149,7 @@ export default function UsersSection() {
       .from("profiles")
       .update({ role: newRole })
       .eq("id", profileId);
-    if (err) { alert(toMnErrorMessage(err.message)); silentRefresh(); }
+    if (err) { toast.show(toMnErrorMessage(err.message), "error"); silentRefresh(); }
   };
 
   const handleDelete = async (profileId: string) => {
@@ -160,7 +164,7 @@ export default function UsersSection() {
     toast.show("Хэрэглэгчийн бүртгэл амжилттай устгагдлаа.");
     const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     const data = await res.json();
-    if (!res.ok) { alert(toMnErrorMessage((data && (data.message || data.error)) ?? "")); silentRefresh(); }
+    if (!res.ok) { toast.show(toMnErrorMessage((data && (data.message || data.error)) ?? ""), "error"); silentRefresh(); }
   };
 
   const handleBulkDeleteConfirmed = async () => {
@@ -176,7 +180,7 @@ export default function UsersSection() {
       await Promise.all(ids.map((id) =>
         fetch(`/api/admin/users/${id}`, { method: "DELETE" })
       ));
-    } catch { alert("Хэрэглэгч устгах үед алдаа гарлаа. Дахин оролдоно уу."); silentRefresh(); }
+    } catch { toast.show("Хэрэглэгч устгах үед алдаа гарлаа. Дахин оролдоно уу.", "error"); silentRefresh(); }
     finally { setBulkDeleting(false); }
   };
 
@@ -191,7 +195,7 @@ export default function UsersSection() {
       .from("profiles")
       .update({ role: newRole })
       .in("id", ids);
-    if (err) { alert(toMnErrorMessage(err.message)); silentRefresh(); }
+    if (err) { toast.show(toMnErrorMessage(err.message), "error"); silentRefresh(); }
   };
 
   const toggleSelectAll = () => {
@@ -325,6 +329,18 @@ export default function UsersSection() {
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6h16.5M3.75 9.75h16.5M3.75 13.5h16.5M3.75 17.25h16.5M3.75 21h16.5"/></svg>
               </button>
             </div>
+            <ColumnToggle
+              options={[
+                { key: "member", label: "Гишүүн" },
+                { key: "phone", label: "Утас" },
+                { key: "organization", label: "Байгууллага" },
+                { key: "tier", label: "Тариф" },
+                { key: "startDate", label: "Эхлэх огноо" },
+                { key: "expireDate", label: "Дуусах огноо" },
+              ]}
+              visible={visibleColumns}
+              onChange={setVisibleColumns}
+            />
 
             <button onClick={() => setFormProfile("new")}
               className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors">
@@ -358,6 +374,7 @@ export default function UsersSection() {
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
+          visibleColumns={visibleColumns}
         />
 
         {/* ── Pagination ── */}
@@ -422,6 +439,7 @@ export default function UsersSection() {
         onClose={() => setFormProfile(null)}
         profile={formProfile === "new" ? null : formProfile}
         organizations={organizationOptions}
+        onOrganizationsRefresh={silentRefresh}
         onSuccess={() => { setFormProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
       />
 

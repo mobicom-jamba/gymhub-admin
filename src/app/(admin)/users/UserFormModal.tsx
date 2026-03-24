@@ -8,12 +8,14 @@ import type { OrganizationOption, Profile } from "./UsersSection";
 import { parseApiError } from "@/lib/api-response";
 import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import { toMnErrorMessage } from "@/lib/error-message";
+import OrgFormModal from "../organizations/OrgFormModal";
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   profile: Profile | null;
   organizations: OrganizationOption[];
+  onOrganizationsRefresh?: () => void;
   onSuccess: () => void;
 };
 
@@ -273,7 +275,7 @@ function DateField({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
-export default function UserFormModal({ isOpen, onClose, profile, organizations, onSuccess }: Props) {
+export default function UserFormModal({ isOpen, onClose, profile, organizations, onOrganizationsRefresh, onSuccess }: Props) {
   const isCreate = !profile;
   const orgDropRef = useRef<HTMLDivElement>(null);
 
@@ -287,6 +289,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [organization, setOrganization] = useState("");
   const [orgSearch, setOrgSearch]       = useState("");
   const [orgOpen, setOrgOpen]           = useState(false);
+  const [quickCreateOrgOpen, setQuickCreateOrgOpen] = useState(false);
   const [tier, setTier]                 = useState("early");
   const [startedAt, setStartedAt]       = useState("");
   const [expiresAt, setExpiresAt]       = useState("");
@@ -495,7 +498,16 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
 
               {/* Org searchable combobox */}
               <div className="mt-3" ref={orgDropRef}>
-                <Label>Байгууллага</Label>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <Label>Байгууллага</Label>
+                  <button
+                    type="button"
+                    onClick={() => setQuickCreateOrgOpen(true)}
+                    className="rounded-lg border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    + Шинэ байгууллага
+                  </button>
+                </div>
                 <div className="relative">
                   <input
                     type="text"
@@ -544,6 +556,24 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     </ul>
                   )}
                 </div>
+                {organization && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-900/20 dark:text-brand-300">
+                      🏢 {organization}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOrganization("");
+                        setOrganizationId("");
+                        setOrgSearch("");
+                      }}
+                      className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400"
+                    >
+                      Цэвэрлэх
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -627,6 +657,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           </button>
         </div>
       </div>
+      <OrgFormModal
+        isOpen={quickCreateOrgOpen}
+        onClose={() => setQuickCreateOrgOpen(false)}
+        org={null}
+        onSuccess={() => {
+          setQuickCreateOrgOpen(false);
+          onOrganizationsRefresh?.();
+        }}
+      />
     </Modal>
   );
 }

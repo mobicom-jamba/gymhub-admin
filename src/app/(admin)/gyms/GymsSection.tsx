@@ -10,6 +10,8 @@ import { t } from "@/lib/i18n";
 import { PlusIcon, PencilIcon, TrashBinIcon } from "@/icons";
 import SearchInput from "@/components/common/SearchInput";
 import type { Gym } from "./types";
+import { useToast } from "@/components/ui/Toast";
+import { toMnErrorMessage } from "@/lib/error-message";
 
 export default function GymsSection() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -18,6 +20,7 @@ export default function GymsSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGym, setEditingGym] = useState<Gym | null>(null);
   const [search, setSearch] = useState("");
+  const toast = useToast();
 
   const fetchGyms = async () => {
     setLoading(true);
@@ -50,7 +53,7 @@ export default function GymsSection() {
     const supabase = createBrowserSupabaseClient();
     const { error: err } = await supabase.from("gyms").delete().eq("id", gym.id);
     if (err) {
-      alert(err.message);
+      toast.show(toMnErrorMessage(err.message), "error");
       return;
     }
     fetchGyms();

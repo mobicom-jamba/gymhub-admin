@@ -4,11 +4,13 @@ import React, { useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import Button from "@/components/ui/button/Button";
 import ComponentCard from "@/components/common/ComponentCard";
+import { useToast } from "@/components/ui/Toast";
 
 export default function BackupRestore() {
   const [backing, setBacking] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [backupData, setBackupData] = useState<any>(null);
+  const toast = useToast();
 
   const handleBackup = async () => {
     setBacking(true);
@@ -49,10 +51,10 @@ export default function BackupRestore() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      alert("Нөөцлөлт амжилттай үүсгэгдлээ!");
+      toast.show("Нөөцлөлт амжилттай үүсгэгдлээ!");
     } catch (err) {
       console.error(err);
-      alert("Нөөцлөлт үүсгэхэд алдаа гарлаа");
+      toast.show("Нөөцлөлт үүсгэхэд алдаа гарлаа", "error");
     } finally {
       setBacking(false);
     }
@@ -67,9 +69,9 @@ export default function BackupRestore() {
       try {
         const data = JSON.parse(event.target?.result as string);
         setBackupData(data);
-        alert("Нөөцлөлтийн файл уншигдлаа. 'Сэргээх' товч дээр дарна уу.");
+        toast.show("Нөөцлөлтийн файл амжилттай уншигдлаа.");
       } catch (err) {
-        alert("Буруу файл формат");
+        toast.show("Файлын формат буруу байна.", "error");
       }
     };
     reader.readAsText(file);
@@ -77,7 +79,7 @@ export default function BackupRestore() {
 
   const handleRestore = async () => {
     if (!backupData) {
-      alert("Эхлээд нөөцлөлтийн файл сонгоно уу");
+      toast.show("Эхлээд нөөцлөлтийн файл сонгоно уу.", "info");
       return;
     }
 
@@ -110,11 +112,11 @@ export default function BackupRestore() {
         await supabase.from("visit_logs").upsert(restoredData.visit_logs);
       }
 
-      alert("Өгөгдөл амжилттай сэргээгдлээ!");
+      toast.show("Өгөгдөл амжилттай сэргээгдлээ!");
       setBackupData(null);
     } catch (err) {
       console.error(err);
-      alert("Сэргээхэд алдаа гарлаа");
+      toast.show("Сэргээх үед алдаа гарлаа.", "error");
     } finally {
       setRestoring(false);
     }

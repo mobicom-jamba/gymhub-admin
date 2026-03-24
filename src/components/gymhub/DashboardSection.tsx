@@ -234,6 +234,7 @@ export default function DashboardSection() {
       onClose={() => setEditProfile(null)}
       profile={editProfile}
       organizations={orgs}
+      onOrganizationsRefresh={fetchFast}
       onSuccess={() => { setEditProfile(null); fetchFast(); }}
     />
     </>

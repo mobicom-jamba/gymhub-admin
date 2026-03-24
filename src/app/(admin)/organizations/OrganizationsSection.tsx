@@ -7,6 +7,8 @@ import UserFormModal from "../users/UserFormModal";
 import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
+import ColumnToggle from "@/components/ui/ColumnToggle";
+import EmptyState from "@/components/ui/EmptyState";
 
 type Member = {
   id: string;
@@ -355,6 +357,7 @@ export default function OrganizationsSection() {
         onClose={() => setEditProfile(null)}
         profile={editProfile}
         organizations={orgRecords.map((r) => ({ id: r.id, name: r.name }))}
+        onOrganizationsRefresh={silentRefresh}
         onSuccess={() => { setEditProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
       />
 
@@ -401,6 +404,9 @@ function OrgDetailPanel({
   const [tierFilter, setTierFilter]     = useState<"" | "early" | "premium">("" );
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
   const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    member: true, phone: true, tier: true, expires: true,
+  });
 
   const filteredMembers = useMemo(() => {
     let list = org.members;
@@ -628,6 +634,16 @@ function OrgDetailPanel({
           <option value="expires_asc">Дуусах ↑ хамгийн</option>
           <option value="expires_desc">Дуусах ↓ хоцойн</option>
         </select>
+        <ColumnToggle
+          options={[
+            { key: "member", label: "Гишүүн" },
+            { key: "phone", label: "Утас" },
+            { key: "tier", label: "Тариф" },
+            { key: "expires", label: "Дуусах" },
+          ]}
+          visible={visibleColumns}
+          onChange={setVisibleColumns}
+        />
 
         {(memberSearch || tierFilter || statusFilter) && (
           <button onClick={() => { setMemberSearch(""); setTierFilter(""); setStatusFilter(""); }}
@@ -642,15 +658,15 @@ function OrgDetailPanel({
       {/* Member list */}
       <div className="flex-1 overflow-y-auto">
         {org.members.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-gray-400">Гишүүн байхгүй</div>
+          <EmptyState title="Гишүүн байхгүй" description="Энэ байгууллагад гишүүн нэмэгдээгүй байна." icon="users" />
         ) : (
           <table className="w-full">
             <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/60">
               <tr>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Гишүүн</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Утас</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Тариф</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Дуусах</th>
+                {(visibleColumns.member ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Гишүүн</th>}
+                {(visibleColumns.phone ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Утас</th>}
+                {(visibleColumns.tier ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Тариф</th>}
+                {(visibleColumns.expires ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Дуусах</th>}
                 <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-400"></th>
               </tr>
             </thead>
@@ -661,27 +677,27 @@ function OrgDetailPanel({
                   : null;
                 return (
                   <tr key={m.id} className="group transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
-                    <td className="px-4 py-3">
+                    {(visibleColumns.member ?? true) && <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${avatarColors[i % avatarColors.length]}`}>
                           {initials(m.full_name)}
                         </div>
                         <span className="text-sm font-medium text-gray-800 dark:text-white whitespace-nowrap">{m.full_name ?? "—"}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {(visibleColumns.phone ?? true) && <td className="px-4 py-3">
                       <span className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
                         {m.phone ?? "—"}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {(visibleColumns.tier ?? true) && <td className="px-4 py-3">
                       {m.membership_tier === "premium" ? (
                         <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">Premium</span>
                       ) : m.membership_tier === "early" ? (
                         <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">Early</span>
                       ) : <span className="text-gray-400 text-xs">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
+                    </td>}
+                    {(visibleColumns.expires ?? true) && <td className="px-4 py-3">
                       {m.membership_expires_at ? (
                         days !== null && days < 0
                           ? <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:bg-red-900/20 dark:text-red-400">⚠️ {new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
@@ -689,7 +705,7 @@ function OrgDetailPanel({
                             ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">⏳ {days} өдөр</span>
                             : <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
                       ) : <span className="text-xs text-gray-400">—</span>}
-                    </td>
+                    </td>}
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
