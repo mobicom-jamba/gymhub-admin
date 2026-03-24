@@ -41,6 +41,17 @@ function profileOrgName(p: Profile): string | null {
   return rel?.name ?? p.organization;
 }
 
+function isMembershipExpired(expiresAt: string | null): boolean {
+  if (!expiresAt) return false;
+  return new Date(expiresAt) < new Date();
+}
+
+function profileStatus(p: Profile): "active" | "expired" {
+  if (isMembershipExpired(p.membership_expires_at)) return "expired";
+  if (p.membership_status === "expired") return "expired";
+  return "active";
+}
+
 const PAGE_SIZES = [25, 50, 100, 500];
 
 export default function UsersSection() {
@@ -210,7 +221,7 @@ export default function UsersSection() {
       if ((p.role ?? "user") !== tab) return false;
       const orgName = profileOrgName(p);
       if (orgFilter && orgName !== orgFilter) return false;
-      if (statusFilter && (p.membership_status ?? "active") !== statusFilter) return false;
+      if (statusFilter && profileStatus(p) !== statusFilter) return false;
       if (search) {
         const q = search.toLowerCase();
         const matches =
@@ -312,7 +323,13 @@ export default function UsersSection() {
   const userCount  = profiles.filter(p => (p.role ?? "user") === "user").length;
   const filterChips = [
     search ? { key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") } : null,
-    statusFilter ? { key: "status", label: `Төлөв: ${statusFilter}`, clear: () => setStatusFilter("") } : null,
+    statusFilter
+      ? {
+          key: "status",
+          label: `Төлөв: ${statusFilter === "active" ? "Идэвхтэй" : "Дууссан"}`,
+          clear: () => setStatusFilter(""),
+        }
+      : null,
     orgFilter ? { key: "org", label: `Байгууллага: ${orgFilter}`, clear: () => setOrgFilter("") } : null,
   ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
 
