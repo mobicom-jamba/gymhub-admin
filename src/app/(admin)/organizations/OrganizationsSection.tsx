@@ -117,6 +117,12 @@ export default function OrganizationsSection() {
       if (!map[key]) map[key] = [];
       map[key].push(m);
     });
+    // Canonical rows from `organizations` with zero members must still appear in the list.
+    for (const rec of orgRecords) {
+      const name = rec.name?.trim() || "";
+      if (!name) continue;
+      if (!map[name]) map[name] = [];
+    }
     return Object.entries(map)
       .map(([name, mems]) => ({
         name,
@@ -124,8 +130,11 @@ export default function OrganizationsSection() {
         premiumCount: mems.filter(m => m.membership_tier === "premium").length,
         earlyCount: mems.filter(m => m.membership_tier === "early").length,
       }))
-      .sort((a, b) => b.members.length - a.members.length);
-  }, [members]);
+      .sort((a, b) => {
+        if (b.members.length !== a.members.length) return b.members.length - a.members.length;
+        return a.name.localeCompare(b.name, "mn");
+      });
+  }, [members, orgRecords]);
 
   const unassigned = useMemo(
     () => members.filter((m) => !m.organization_id && !(m.organization?.trim())),

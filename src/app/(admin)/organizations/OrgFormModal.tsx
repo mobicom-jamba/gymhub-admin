@@ -21,7 +21,7 @@ type Props = {
   isOpen: boolean;
   onClose: () => void;
   org: OrgRecord | null;
-  onSuccess: () => void;
+  onSuccess: (saved?: { id: string; name: string }) => void;
 };
 
 const inp =
@@ -108,6 +108,7 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
     if (!name.trim()) { setFormError("Нэр оруулна уу"); return; }
     setFormError(""); setLoading(true);
     const normalizedName = name.trim();
+    let savedOrgId: string | null = null;
 
     try {
       if (isCreate) {
@@ -151,11 +152,13 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
           setFormError("Байгууллага бүртгэх үед алдаа гарлаа. Дахин оролдоно уу.");
           return;
         }
+        savedOrgId = inserted.id;
         const finalLogo = await uploadLogo(inserted.id);
         if (finalLogo) {
           await supabase.from("organizations").update({ logo_url: finalLogo }).eq("id", inserted.id);
         }
       } else {
+        savedOrgId = org!.id;
         const finalLogo = await uploadLogo(org!.id);
         const { error: updateErr } = await supabase
           .from("organizations")
@@ -180,7 +183,11 @@ export default function OrgFormModal({ isOpen, onClose, org, onSuccess }: Props)
           return;
         }
       }
-      onSuccess(); onClose();
+      onSuccess({
+        id: savedOrgId!,
+        name: normalizedName,
+      });
+      onClose();
     } finally { setLoading(false); }
   };
 

@@ -689,9 +689,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         isOpen={quickCreateOrgOpen}
         onClose={() => setQuickCreateOrgOpen(false)}
         org={null}
-        onSuccess={() => {
+        onSuccess={(savedOrg) => {
           setQuickCreateOrgOpen(false);
           onOrganizationsRefresh?.();
+          if (savedOrg?.id && savedOrg?.name) {
+            setOrganization(savedOrg.name);
+            setOrganizationId(savedOrg.id);
+            setOrgSearch("");
+            setOrgOpen(false);
+          }
         }}
       />
     </Modal>
