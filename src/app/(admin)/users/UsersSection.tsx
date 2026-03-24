@@ -95,6 +95,8 @@ export default function UsersSection() {
     const supabase = createBrowserSupabaseClient();
     const all: OrganizationOption[] = [];
     const PAGE = 1000;
+
+    // 1) Canonical organizations table
     let from = 0;
     while (true) {
       const { data } = await supabase
@@ -106,7 +108,39 @@ export default function UsersSection() {
       if (!data || data.length < PAGE) break;
       from += PAGE;
     }
-    return all;
+
+    // 2) Legacy profile organization strings (for rows not yet mapped to organization_id)
+    const legacyNames: string[] = [];
+    from = 0;
+    while (true) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("organization")
+        .not("organization", "is", null)
+        .neq("organization", "")
+        .range(from, from + PAGE - 1);
+      const pageNames = (data ?? [])
+        .map((r) => (r as { organization: string | null }).organization?.trim() ?? "")
+        .filter(Boolean);
+      legacyNames.push(...pageNames);
+      if (!data || data.length < PAGE) break;
+      from += PAGE;
+    }
+
+    // Merge unique names (prefer real organization id when exists)
+    const map = new Map<string, OrganizationOption>();
+    for (const org of all) {
+      const key = org.name.trim().toLowerCase();
+      if (!key) continue;
+      map.set(key, org);
+    }
+    for (const name of legacyNames) {
+      const key = name.toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, { id: `legacy:${name}`, name });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   };
 
   const fetchProfiles = async () => {
@@ -157,6 +191,8 @@ export default function UsersSection() {
     if (tab && tab !== "user") params.set("role", tab); else params.delete("role");
     params.delete("page");
     const next = params.toString();
+    const current = searchParams.toString();
+    if (next === current) return;
     router.replace(next ? `${pathname}?${next}` : pathname);
   }, [search, statusFilter, orgFilter, tab, pathname, router, searchParams]);
 

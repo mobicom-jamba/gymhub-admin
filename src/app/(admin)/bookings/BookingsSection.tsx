@@ -102,6 +102,8 @@ export default function BookingsSection() {
     if (statusFilter) params.set("status", statusFilter); else params.delete("status");
     params.delete("page");
     const next = params.toString();
+    const current = searchParams.toString();
+    if (next === current) return;
     router.replace(next ? `${pathname}?${next}` : pathname);
   }, [search, statusFilter, pathname, router, searchParams]);
 

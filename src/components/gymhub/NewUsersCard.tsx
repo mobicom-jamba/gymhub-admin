@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 
 type UserRow = {
   id: string;
@@ -9,19 +10,6 @@ type UserRow = {
   company?: string | null;
   created_at: string;
 };
-
-const colors = [
-  "from-violet-500 to-purple-600",
-  "from-blue-500 to-indigo-600",
-  "from-emerald-500 to-teal-600",
-  "from-orange-500 to-amber-600",
-  "from-pink-500 to-rose-600",
-  "from-cyan-500 to-blue-600",
-  "from-fuchsia-500 to-purple-600",
-  "from-lime-500 to-green-600",
-  "from-red-500 to-pink-600",
-  "from-sky-500 to-blue-600",
-];
 
 export default function NewUsersCard({ users, onEdit }: { users: UserRow[]; onEdit?: (id: string) => void }) {
   if (users.length === 0) {
@@ -34,14 +22,16 @@ export default function NewUsersCard({ users, onEdit }: { users: UserRow[]; onEd
 
   return (
     <div className="space-y-1">
-      {users.map((u, i) => (
+      {users.map((u) => (
         <div
           key={u.id}
           className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-gray-50 dark:hover:bg-white/[0.03]"
         >
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${colors[i % colors.length]} text-white text-xs font-bold`}>
-            {(u.full_name ?? "?")[0]?.toUpperCase()}
-          </div>
+          <img
+            src={getUserPlaceholderAvatar(u.id || u.full_name)}
+            alt="avatar"
+            className="h-9 w-9 shrink-0 rounded-full object-cover"
+          />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-gray-800 dark:text-white/90 text-sm truncate">
               {u.full_name ?? "—"}

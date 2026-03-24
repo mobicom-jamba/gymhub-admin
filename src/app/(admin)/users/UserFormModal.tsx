@@ -9,6 +9,7 @@ import { parseApiError } from "@/lib/api-response";
 import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import { toMnErrorMessage } from "@/lib/error-message";
 import OrgFormModal from "../organizations/OrgFormModal";
+import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 
 type Props = {
   isOpen: boolean;
@@ -28,10 +29,6 @@ function getColor(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
-function initials(ovog: string, ner: string) {
-  return [(ovog[0] ?? ""), (ner[0] ?? "")].join("").toUpperCase() || "?";
 }
 
 const inp =
@@ -388,12 +385,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           style={{ background: `linear-gradient(135deg, ${avatarColor}22 0%, ${avatarColor}08 100%)` }}
         >
           {/* Avatar */}
-          <div
-            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-bold text-white shadow-sm"
-            style={{ background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}bb)` }}
-          >
-            {initials(ovog, ner)}
-          </div>
+          <img
+            src={getUserPlaceholderAvatar(profile?.id || displayName)}
+            alt="avatar"
+            className="h-14 w-14 shrink-0 rounded-2xl object-cover shadow-sm"
+          />
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-bold text-gray-800 dark:text-white">
               {isCreate ? "Хэрэглэгч бүртгэх" : (displayName || "Хэрэглэгчийн мэдээлэл засах")}

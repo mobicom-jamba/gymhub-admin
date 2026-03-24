@@ -13,6 +13,7 @@ import { PencilIcon, TrashBinIcon } from "@/icons";
 import type { Profile } from "./UsersSection";
 import TableSkeleton from "@/components/ui/TableSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
+import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 
 const roleLabels: Record<string, string> = {
   user: "Гишүүн",
@@ -20,16 +21,6 @@ const roleLabels: Record<string, string> = {
 };
 
 const ROLES = ["user", "admin"] as const;
-
-const avatarColors = [
-  "bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-orange-500",
-  "bg-pink-500", "bg-cyan-500", "bg-fuchsia-500", "bg-rose-500",
-];
-
-function getInitials(name: string | null) {
-  if (!name) return "?";
-  return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-}
 
 function isExpired(expiresAt: string | null) {
   if (!expiresAt) return false;
@@ -133,8 +124,7 @@ export default function UsersTable({
           </TableHeader>
 
           <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
-            {profiles.map((p, i) => {
-              const colorClass = avatarColors[i % avatarColors.length];
+            {profiles.map((p) => {
               return (
                 <TableRow key={p.id} className="transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
                   {selectedIds && onToggleSelect && (
@@ -147,9 +137,11 @@ export default function UsersTable({
                   {/* Name + avatar — sticky */}
                   {(visibleColumns?.member ?? true) && <TableCell className={`sticky left-0 z-10 bg-white px-4 dark:bg-gray-900 ${py}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${colorClass}`}>
-                        {getInitials(p.full_name)}
-                      </div>
+                      <img
+                        src={getUserPlaceholderAvatar(p.id || p.full_name)}
+                        alt="avatar"
+                        className="h-9 w-9 shrink-0 rounded-full object-cover"
+                      />
                       <span className="font-medium text-gray-800 text-sm dark:text-white/90 whitespace-nowrap">{p.full_name ?? "—"}</span>
                     </div>
                   </TableCell>}

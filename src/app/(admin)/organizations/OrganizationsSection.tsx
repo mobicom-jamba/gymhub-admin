@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import ColumnToggle from "@/components/ui/ColumnToggle";
 import EmptyState from "@/components/ui/EmptyState";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 
 type Member = {
   id: string;
@@ -37,11 +38,6 @@ const avatarColors = [
   "bg-violet-500","bg-blue-500","bg-emerald-500","bg-orange-500",
   "bg-pink-500","bg-cyan-500","bg-fuchsia-500","bg-rose-500","bg-teal-500","bg-amber-500",
 ];
-
-function initials(name: string | null) {
-  if (!name) return "?";
-  return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
-}
 
 function isExpired(exp: string | null) {
   return exp ? new Date(exp) < new Date() : false;
@@ -324,7 +320,7 @@ export default function OrganizationsSection() {
             <p className="text-sm">Байгууллага сонгоно уу</p>
           </div>
         ) : selected === "__unassigned__" ? (
-          <UnassignedPanel members={unassigned} orgs={orgs.map(o => o.name)} onAssign={async (memberId, orgName) => { await handleAdd(memberId, orgName); }} avatarColors={avatarColors} />
+          <UnassignedPanel members={unassigned} orgs={orgs.map(o => o.name)} onAssign={async (memberId, orgName) => { await handleAdd(memberId, orgName); }} />
         ) : selectedOrg ? (
           <OrgDetailPanel
             org={selectedOrg}
@@ -562,9 +558,11 @@ function OrgDetailPanel({
                 {addCandidates.map((m, i) => (
                   <li key={m.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/[0.03]">
                     <div className="flex items-center gap-2">
-                      <div className={`flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white ${avatarColors[i % avatarColors.length]}`}>
-                        {initials(m.full_name)}
-                      </div>
+                      <img
+                        src={getUserPlaceholderAvatar(m.id || m.full_name)}
+                        alt="avatar"
+                        className="h-7 w-7 rounded-full object-cover"
+                      />
                       <div>
                         <p className="text-xs font-medium text-gray-800 dark:text-white">{m.full_name ?? "—"}</p>
                         <p className="text-[10px] text-gray-400">{m.phone ?? ""}</p>
@@ -680,9 +678,11 @@ function OrgDetailPanel({
                   <tr key={m.id} className="group transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
                     {(visibleColumns.member ?? true) && <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${avatarColors[i % avatarColors.length]}`}>
-                          {initials(m.full_name)}
-                        </div>
+                        <img
+                          src={getUserPlaceholderAvatar(m.id || m.full_name)}
+                          alt="avatar"
+                          className="h-8 w-8 shrink-0 rounded-full object-cover"
+                        />
                         <span className="text-sm font-medium text-gray-800 dark:text-white whitespace-nowrap">{m.full_name ?? "—"}</span>
                       </div>
                     </td>}
@@ -741,10 +741,9 @@ function OrgDetailPanel({
 }
 
 /* ── Unassigned Panel ── */
-function UnassignedPanel({ members, orgs, onAssign, avatarColors }: {
+function UnassignedPanel({ members, orgs, onAssign }: {
   members: Member[]; orgs: string[];
   onAssign: (memberId: string, orgName: string) => Promise<void>;
-  avatarColors: string[];
 }) {
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -765,11 +764,13 @@ function UnassignedPanel({ members, orgs, onAssign, avatarColors }: {
         />
       </div>
       <div className="flex-1 overflow-y-auto">
-        {filtered.map((m, i) => (
+        {filtered.map((m) => (
           <div key={m.id} className="flex items-center gap-3 border-b border-gray-50 px-4 py-3 dark:border-white/[0.04]">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${avatarColors[i % avatarColors.length]}`}>
-              {initials(m.full_name)}
-            </div>
+            <img
+              src={getUserPlaceholderAvatar(m.id || m.full_name)}
+              alt="avatar"
+              className="h-8 w-8 shrink-0 rounded-full object-cover"
+            />
             <div className="flex-1 min-w-0">
               <p className="truncate text-sm font-medium text-gray-800 dark:text-white">{m.full_name ?? "—"}</p>
               <p className="text-xs text-gray-400">{m.phone ?? ""}</p>
