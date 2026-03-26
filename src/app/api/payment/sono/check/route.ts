@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../../_lib/bookings";
 
 export async function POST(request: Request) {
   try {
+    const blocked = await requirePaymentChannel("sono");
+    if (blocked) return blocked;
+
     const body = await request.json();
     const { invoice_id, booking_id } = body as {
       invoice_id: string;

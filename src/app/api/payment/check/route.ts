@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../_lib/bookings";
 
 const QPAY_BASE = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
@@ -28,6 +29,9 @@ async function getToken(): Promise<string> {
 
 export async function POST(request: Request) {
   try {
+    const blocked = await requirePaymentChannel("qpay");
+    if (blocked) return blocked;
+
     const { invoice_id, booking_id } = await request.json() as {
       invoice_id: string;
       booking_id?: string;

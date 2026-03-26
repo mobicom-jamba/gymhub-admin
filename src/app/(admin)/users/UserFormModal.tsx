@@ -280,7 +280,6 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const isCreate = !profile;
   const orgDropRef = useRef<HTMLDivElement>(null);
 
-  const [email, setEmail]               = useState("");
   const [password, setPassword]         = useState("123456");
   const [ovog, setOvog]                 = useState("");
   const [ner, setNer]                   = useState("");
@@ -312,9 +311,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setMembershipStatus(profile.membership_status ?? "active");
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
       setExpiresAt(profile.membership_expires_at?.slice(0, 10) ?? "");
-      setEmail(""); setPassword("");
+      setPassword("");
     } else {
-      setEmail(""); setPassword("123456");
+      setPassword("123456");
       setOvog(""); setNer(""); setPhone(""); setRole("user");
       setOrganizationId("");
       setOrganization(""); setTier("early"); setMembershipStatus("active"); setStartedAt(""); setExpiresAt("");
@@ -344,13 +343,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         return;
       }
       if (isCreate) {
-        if (!email || !password) { setFormError("И-мэйл болон нууц үг оруулна уу"); return; }
+        const digits = phone.replace(/\D/g, "");
+        if (!digits || digits.length < 8) { setFormError("8 оронтой утасны дугаар оруулна уу."); return; }
+        if (!password) { setFormError("Нууц үг оруулна уу."); return; }
         const res = await fetch("/api/admin/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            email, password, full_name: fullName,
-            phone: phone || null, role,
+            phone: digits, password, full_name: fullName,
+            role,
             organization_id: safeOrganizationId,
             organization: organization || null,
             membership_tier: tier, membership_status: membershipStatus,
@@ -451,11 +452,14 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     </div>
                     <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Нэвтрэх мэдээлэл</span>
                   </div>
+                  <p className="mb-3 text-[11px] text-gray-400 dark:text-gray-500">
+                    Хэрэглэгч утасны дугаар + нууц үгээр нэвтэрнэ.
+                  </p>
                   <div className="space-y-3">
                     <div>
-                      <Label>И-мэйл хаяг *</Label>
-                      <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                        className={inp} required placeholder="user@example.com" autoFocus />
+                      <Label>Утасны дугаар *</Label>
+                      <input type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))}
+                        className={inp} required placeholder="99112233" maxLength={8} autoFocus />
                     </div>
                     <div>
                       <Label>Нууц үг *</Label>
@@ -494,9 +498,14 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     className={inp} placeholder="Мөнхбаяр" />
                 </div>
                 <div className="col-span-2">
-                  <Label>Утас</Label>
-                  <input type="text" value={phone} onChange={e => setPhone(e.target.value)}
-                    className={inp} placeholder="9911xxxx" />
+                  <Label>Утас{isCreate ? "" : ""}</Label>
+                  <input type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))}
+                    className={inp} placeholder="99112233" maxLength={8}
+                    disabled={isCreate}
+                  />
+                  {isCreate && (
+                    <p className="mt-1 text-[10px] text-gray-400">Дээрх нэвтрэх хэсэгт оруулсан дугаараар автоматаар бөглөнө.</p>
+                  )}
                 </div>
               </div>
 
