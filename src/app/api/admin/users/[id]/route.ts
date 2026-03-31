@@ -1,6 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
 
+function resolveMembershipStatus(
+  membershipStartedAt: string | null | undefined,
+  membershipExpiresAt: string | null | undefined
+): "active" | "inactive" {
+  if (!membershipStartedAt && !membershipExpiresAt) return "inactive";
+  const now = new Date();
+  const start = membershipStartedAt ? new Date(membershipStartedAt) : null;
+  const end = membershipExpiresAt ? new Date(membershipExpiresAt) : null;
+  if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) return "inactive";
+  const isStarted = start ? now >= start : true;
+  const isNotExpired = end ? now <= end : true;
+  return isStarted && isNotExpired ? "active" : "inactive";
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -14,12 +28,59 @@ export async function PATCH(
     }
     const admin = createClient(supabaseUrl, serviceRoleKey);
     const body = await request.json();
-    const { password } = body;
+    const {
+      password,
+      full_name,
+      phone,
+      role,
+      organization_id,
+      organization,
+      membership_tier,
+      membership_started_at,
+      membership_expires_at,
+    } = body;
 
     if (password) {
       const { error } = await admin.auth.admin.updateUserById(id, { password });
       if (error) {
         return errorResponse("VALIDATION_ERROR", "Нууц үг шинэчлэхэд алдаа гарлаа.", 400, error.message);
+      }
+    }
+
+    const hasProfileFields =
+      full_name !== undefined ||
+      phone !== undefined ||
+      role !== undefined ||
+      organization_id !== undefined ||
+      organization !== undefined ||
+      membership_tier !== undefined ||
+      membership_started_at !== undefined ||
+      membership_expires_at !== undefined;
+
+    if (hasProfileFields) {
+      const computedMembershipStatus = resolveMembershipStatus(
+        membership_started_at,
+        membership_expires_at
+      );
+
+      const { error: profileError } = await admin
+        .from("profiles")
+        .update({
+          full_name: full_name ?? null,
+          phone: phone ?? null,
+          role: role ?? "user",
+          organization_id: organization_id ?? null,
+          organization: organization ?? null,
+          membership_tier: membership_tier ?? null,
+          membership_status: computedMembershipStatus,
+          membership_started_at: membership_started_at ?? null,
+          membership_expires_at: membership_expires_at ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+
+      if (profileError) {
+        return errorResponse("VALIDATION_ERROR", "Профайл шинэчлэхэд алдаа гарлаа.", 400, profileError.message);
       }
     }
 

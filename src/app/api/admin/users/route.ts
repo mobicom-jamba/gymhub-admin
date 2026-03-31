@@ -8,6 +8,20 @@ function phoneToEmail(phone: string): string {
   return `${digits}@${PHONE_DOMAIN}`;
 }
 
+function resolveMembershipStatus(
+  membershipStartedAt: string | null | undefined,
+  membershipExpiresAt: string | null | undefined
+): "active" | "inactive" {
+  if (!membershipStartedAt && !membershipExpiresAt) return "inactive";
+  const now = new Date();
+  const start = membershipStartedAt ? new Date(membershipStartedAt) : null;
+  const end = membershipExpiresAt ? new Date(membershipExpiresAt) : null;
+  if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) return "inactive";
+  const isStarted = start ? now >= start : true;
+  const isNotExpired = end ? now <= end : true;
+  return isStarted && isNotExpired ? "active" : "inactive";
+}
+
 export async function POST(request: Request) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -30,7 +44,6 @@ export async function POST(request: Request) {
       organization_id,
       organization,
       membership_tier,
-      membership_status,
       membership_started_at,
       membership_expires_at,
     } = body;
@@ -44,6 +57,11 @@ export async function POST(request: Request) {
     }
 
     const email = rawEmail || phoneToEmail(phone);
+
+    const computedMembershipStatus = resolveMembershipStatus(
+      membership_started_at,
+      membership_expires_at
+    );
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -67,7 +85,7 @@ export async function POST(request: Request) {
           organization_id: organization_id || null,
           organization: organization || null,
           membership_tier: membership_tier || null,
-          membership_status: membership_status || null,
+          membership_status: computedMembershipStatus,
           membership_started_at: membership_started_at || null,
           membership_expires_at: membership_expires_at || null,
         })

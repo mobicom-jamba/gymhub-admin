@@ -134,15 +134,40 @@ export default function PaymentAppSettingsSection() {
               Төлбөрийн суваг (апп дээр харагдах)
             </p>
             {[
-              { id: "qpay", label: "QPay", checked: qpay, set: setQpay },
-              { id: "sono", label: "Sono зээл", checked: sono, set: setSono },
-              { id: "pocket", label: "Pocket хуваалт", checked: pocket, set: setPocket },
+              {
+                id: "qpay",
+                label: "QPay",
+                logo: "/logos/qpay.png",
+                checked: qpay,
+                set: setQpay,
+              },
+              {
+                id: "sono",
+                label: "Sono зээл",
+                logo: "/logos/sono.png",
+                checked: sono,
+                set: setSono,
+              },
+              {
+                id: "pocket",
+                label: "Pocket хуваалт",
+                logo: "/logos/pocket.png",
+                checked: pocket,
+                set: setPocket,
+              },
             ].map((row) => (
               <label
                 key={row.id}
                 className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-2 hover:bg-white dark:hover:bg-white/5"
               >
-                <span className="text-sm text-gray-700 dark:text-gray-300">{row.label}</span>
+                <span className="flex items-center gap-3">
+                  <img
+                    src={row.logo}
+                    alt={row.label}
+                    className="h-8 w-8 rounded-md border border-gray-200 object-contain bg-white p-1 dark:border-gray-700 dark:bg-gray-900"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{row.label}</span>
+                </span>
                 <input
                   type="checkbox"
                   checked={row.checked}

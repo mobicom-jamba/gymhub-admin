@@ -3,11 +3,9 @@
 import React, { useState, useEffect, useRef, useId } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "@/components/ui/modal";
-import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import type { OrganizationOption, Profile } from "./UsersSection";
 import { parseApiError } from "@/lib/api-response";
 import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
-import { toMnErrorMessage } from "@/lib/error-message";
 import OrgFormModal from "../organizations/OrgFormModal";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 
@@ -46,6 +44,17 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function resolveMembershipStatus(startedAt: string, expiresAt: string): "active" | "inactive" {
+  if (!startedAt && !expiresAt) return "inactive";
+  const now = new Date();
+  const start = startedAt ? new Date(startedAt) : null;
+  const end = expiresAt ? new Date(expiresAt) : null;
+  if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) return "inactive";
+  const isStarted = start ? now >= start : true;
+  const isNotExpired = end ? now <= end : true;
+  return isStarted && isNotExpired ? "active" : "inactive";
 }
 
 const MN_MONTHS = ["1-р","2-р","3-р","4-р","5-р","6-р","7-р","8-р","9-р","10-р","11-р","12-р"];
@@ -321,6 +330,10 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     setOrgSearch(""); setOrgOpen(false); setFormError("");
   }, [isOpen, profile]);
 
+  useEffect(() => {
+    setMembershipStatus(resolveMembershipStatus(startedAt, expiresAt));
+  }, [startedAt, expiresAt]);
+
   const handleExpiresChange = (val: string) => {
     setExpiresAt(val);
     if (val) {
@@ -337,6 +350,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     setFormError("");
     setLoading(true);
     const fullName = [ovog, ner].filter(Boolean).join(" ") || null;
+    const computedMembershipStatus = resolveMembershipStatus(startedAt, expiresAt);
     try {
       if (expiresAt && startedAt && new Date(startedAt) > new Date(expiresAt)) {
         setFormError("Эхлэх огноо нь дуусах огнооноос өмнө байх ёстой.");
@@ -354,24 +368,29 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             role,
             organization_id: safeOrganizationId,
             organization: organization || null,
-            membership_tier: tier, membership_status: membershipStatus,
+            membership_tier: tier, membership_status: computedMembershipStatus,
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
             membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
           }),
         });
         if (!res.ok) { setFormError(await parseApiError(res)); return; }
       } else {
-        const supabase = createBrowserSupabaseClient();
-        const { error: err } = await supabase.from("profiles").update({
-          full_name: fullName, phone: phone || null, role,
-          organization_id: safeOrganizationId,
-          organization: organization || null, membership_tier: tier,
-          membership_status: membershipStatus,
-          membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
-          membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-          updated_at: new Date().toISOString(),
-        }).eq("id", profile!.id);
-        if (err) { setFormError(toMnErrorMessage(err.message)); return; }
+        const res = await fetch(`/api/admin/users/${profile!.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: fullName,
+            phone: phone || null,
+            role,
+            organization_id: safeOrganizationId,
+            organization: organization || null,
+            membership_tier: tier,
+            membership_status: computedMembershipStatus,
+            membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+            membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+          }),
+        });
+        if (!res.ok) { setFormError(await parseApiError(res)); return; }
       }
       onSuccess(); onClose();
     } finally { setLoading(false); }
@@ -655,19 +674,20 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <button
                       key={s.key}
                       type="button"
-                      onClick={() => setMembershipStatus(s.key)}
+                      disabled
                       className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                         membershipStatus === s.key
                           ? s.key === "active"
                             ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
                             : "border-amber-400 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
-                          : "border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+                          : "border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300 opacity-70"
                       }`}
                     >
                       {s.label}
                     </button>
                   ))}
                 </div>
+                <p className="mt-1.5 text-[11px] text-gray-400">Төлөв нь эхлэх/дуусах огнооноос автоматаар тооцогдоно.</p>
               </div>
               {expiresAt && !startedAt && (
                 <p className="mt-1.5 text-[11px] text-gray-400">Эхлэх огноог дуусах огнооноос нэг жилийн өмнө автоматаар тооцоолно.</p>
