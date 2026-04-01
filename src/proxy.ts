@@ -17,7 +17,29 @@ function isHiddenTemplatePath(pathname: string) {
   return HIDDEN_TEMPLATE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
+};
+
 export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Handle CORS for API routes
+  if (pathname.startsWith("/api/")) {
+    if (request.method === "OPTIONS") {
+      return new NextResponse(null, {
+        status: 204,
+        headers: { ...CORS_HEADERS, "Access-Control-Max-Age": "86400" },
+      });
+    }
+    const response = NextResponse.next({ request: { headers: request.headers } });
+    Object.entries(CORS_HEADERS).forEach(([k, v]) => response.headers.set(k, v));
+    return response;
+  }
+
   let response = NextResponse.next({ request: { headers: request.headers } });
 
   const supabase = createServerClient(
@@ -40,8 +62,6 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const pathname = request.nextUrl.pathname;
 
   if (isAuthPath(pathname)) {
     if (user && !pathname.startsWith("/auth")) {
