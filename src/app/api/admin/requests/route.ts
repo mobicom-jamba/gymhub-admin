@@ -43,7 +43,10 @@ export async function GET(request: Request) {
     // Enrich with user profile info
     const userIds = [...new Set((data ?? []).map((v) => v.user_id))];
     let profiles: Record<string, { full_name?: string; phone?: string; email?: string }> = {};
+    let authUsers: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
+
     if (userIds.length > 0) {
+      // Get profiles
       const { data: profileData } = await supabase
         .from("profiles")
         .select("id, full_name, phone, email")
@@ -51,14 +54,43 @@ export async function GET(request: Request) {
       if (profileData) {
         profiles = Object.fromEntries(profileData.map((p) => [p.id, p]));
       }
+
+      // Fallback: get auth.users for users with missing profile data
+      const missingIds = userIds.filter((id) => {
+        const p = profiles[id];
+        return !p || (!p.full_name && !p.phone && !p.email);
+      });
+      if (missingIds.length > 0) {
+        try {
+          const { data: { users } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+          if (users) {
+            for (const u of users) {
+              if (missingIds.includes(u.id)) {
+                authUsers[u.id] = {
+                  email: u.email,
+                  phone: u.phone,
+                  user_metadata: u.user_metadata as Record<string, unknown>,
+                };
+              }
+            }
+          }
+        } catch { /* ignore auth fallback errors */ }
+      }
     }
 
-    const enriched = (data ?? []).map((v) => ({
-      ...v,
-      user_name: profiles[v.user_id]?.full_name || null,
-      user_phone: profiles[v.user_id]?.phone || null,
-      user_email: profiles[v.user_id]?.email || null,
-    }));
+    const enriched = (data ?? []).map((v) => {
+      const p = profiles[v.user_id];
+      const a = authUsers[v.user_id];
+      const name = p?.full_name || (a?.user_metadata?.full_name as string) || null;
+      const phone = p?.phone || a?.phone || (a?.email?.endsWith("@gymhub.mn") ? a.email.replace("@gymhub.mn", "") : null) || null;
+      const email = p?.email || (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) || null;
+      return {
+        ...v,
+        user_name: name,
+        user_phone: phone,
+        user_email: email,
+      };
+    });
 
     return NextResponse.json({ requests: enriched });
   } catch (err: unknown) {
