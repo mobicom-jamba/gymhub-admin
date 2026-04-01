@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const todayStart = getTodayStartUTC8();
     const { data, error } = await supabase
       .from("gym_visits")
-      .select("id, gym_name, status, checked_in_at")
+      .select("id, gym_id, gym_name, status, checked_in_at")
       .eq("user_id", userId)
       .gte("checked_in_at", todayStart)
       .order("checked_in_at", { ascending: false })
