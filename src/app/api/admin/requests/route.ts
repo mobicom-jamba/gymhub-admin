@@ -42,11 +42,11 @@ export async function GET(request: Request) {
 
     // Enrich with user profile info
     const userIds = [...new Set((data ?? []).map((v) => v.user_id))];
-    let profiles: Record<string, { full_name?: string; phone?: string }> = {};
+    let profiles: Record<string, { full_name?: string; phone?: string; email?: string }> = {};
     if (userIds.length > 0) {
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, phone")
+        .select("id, full_name, phone, email")
         .in("id", userIds);
       if (profileData) {
         profiles = Object.fromEntries(profileData.map((p) => [p.id, p]));
@@ -57,6 +57,7 @@ export async function GET(request: Request) {
       ...v,
       user_name: profiles[v.user_id]?.full_name || null,
       user_phone: profiles[v.user_id]?.phone || null,
+      user_email: profiles[v.user_id]?.email || null,
     }));
 
     return NextResponse.json({ requests: enriched });
