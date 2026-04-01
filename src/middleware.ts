@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const ALLOWED_HEADERS =
+  "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization";
+
 export function middleware(request: NextRequest) {
   // Handle CORS preflight (OPTIONS) requests for API routes
   if (request.method === "OPTIONS") {
@@ -8,7 +11,7 @@ export function middleware(request: NextRequest) {
       headers: {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Headers": ALLOWED_HEADERS,
         "Access-Control-Max-Age": "86400",
       },
     });
@@ -18,7 +21,7 @@ export function middleware(request: NextRequest) {
   const response = NextResponse.next();
   response.headers.set("Access-Control-Allow-Origin", "*");
   response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  response.headers.set("Access-Control-Allow-Headers", ALLOWED_HEADERS);
   return response;
 }
 
