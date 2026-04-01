@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../../_lib/bookings";
+import { proxyFetch } from "@/lib/proxy-fetch";
 
 export async function POST(request: Request) {
   try {
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const sonoRes = await fetch(`${sonoBaseUrl}/api/w/invoices/check`, {
+    const sonoRes = await proxyFetch(`${sonoBaseUrl}/api/w/invoices/check`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
