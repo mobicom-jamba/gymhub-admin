@@ -16,7 +16,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("gyms")
       .select(
-        "id, name, description, address, lat, lng, image_url, opening_hours, amenities, rating, is_active, created_at"
+        "id, name, description, address, lat, lng, image_url, opening_hours, amenities, is_active, created_at"
       )
       .eq("id", id)
       .limit(1)
