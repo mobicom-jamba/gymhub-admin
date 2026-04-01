@@ -32,9 +32,10 @@ export async function POST(request: Request) {
     const blocked = await requirePaymentChannel("qpay");
     if (blocked) return blocked;
 
-    const { invoice_id, booking_id } = await request.json() as {
+    const { invoice_id, booking_id, user_id } = await request.json() as {
       invoice_id: string;
       booking_id?: string;
+      user_id?: string;
     };
 
     if (!invoice_id) {
@@ -78,8 +79,8 @@ export async function POST(request: Request) {
       (typeof result.paid_amount === "number" && result.paid_amount > 0) ||
       rows.some((row) => row?.payment_status === "PAID");
 
-    // If paid and we have a booking_id, update Supabase
-    if (paid && booking_id) {
+    // If paid, update Supabase
+    if (paid) {
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (serviceKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
         const supabase = createClient(
@@ -87,15 +88,53 @@ export async function POST(request: Request) {
           serviceKey,
           { auth: { persistSession: false } }
         );
-        const updateError = await safeUpdateBookingById(supabase, booking_id, {
-          payment_status: "paid",
-          paid_at: new Date().toISOString(),
-        });
-        if (updateError) {
-          return NextResponse.json(
-            { error: `Booking төлөв шинэчлэхэд алдаа гарлаа: ${updateError}` },
-            { status: 500 },
-          );
+
+        // Update booking status
+        if (booking_id) {
+          await safeUpdateBookingById(supabase, booking_id, {
+            payment_status: "paid",
+            paid_at: new Date().toISOString(),
+          });
+        }
+
+        // Activate membership for 1 year (server-side safety net)
+        if (user_id && booking_id?.startsWith("membership-")) {
+          try {
+            const now = new Date();
+            // Check current membership — extend from expiry if still active
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("membership_expires_at, membership_status")
+              .eq("id", user_id)
+              .maybeSingle();
+
+            let baseDate = now;
+            if (profile?.membership_expires_at) {
+              const currentExpiry = new Date(profile.membership_expires_at);
+              if (currentExpiry > now && profile.membership_status === "active") {
+                baseDate = currentExpiry;
+              }
+            }
+
+            const expiresAt = new Date(baseDate);
+            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+            // Extract tier from booking_id: "membership-early-1234567890"
+            const tierMatch = booking_id.match(/^membership-([^-]+)-/);
+            const tier = tierMatch?.[1] || "early";
+
+            await supabase
+              .from("profiles")
+              .update({
+                membership_tier: tier,
+                membership_status: "active",
+                membership_started_at: now.toISOString(),
+                membership_expires_at: expiresAt.toISOString(),
+              })
+              .eq("id", user_id);
+          } catch (e) {
+            console.error("Server-side membership activation failed:", e);
+          }
         }
       }
     }

@@ -1,0 +1,627 @@
+{
+  "info": {
+    "_postman_id": "b99ae2d9-aefc-4857-9db1-f6a0ce4c0b23",
+    "name": "Sono shop with branch",
+    "description": "Sono shop -r nehemjleh uusgeh, nehemjlehiin tolov shalgah, salbar uusgeh, salbar zasvarlah bolomjtoi\n\nurl - [https://rico.mn](https://rico.mn)\n\nx-and-auth-user, x-and-auth-token -iig sono shop ajiltan-s huleen avna\n\n{  \n\"code\": 401,  \n\"response\": {  \n\"ErrorMessage\": \"Access denied\"  \n},  \n\"msg_code\": \"0\",  \n\"description\": \"\",  \n\"user_time_zone\": \"-06:00\",  \n\"user_time_now\": \"2026-01-09 01:51:20\",  \n\"app_last_check_date\": null,  \n\"date_time\": \"2026-01-09 15:51:20\",  \n\"random_code\": 713231  \n}  \nx-and-auth-token, x-and-auth-user zoruutei , esvel whitelist -d bhgui ip haygnaas duudah ued\n\n{  \n\"code\": \"\",  \n\"response\": \"\",  \n\"success\": false,  \n\"status_code\": 0,  \n\"msg_code\": \"0\",  \n\"description\": \"\",  \n\"msgfrom\": \"post_params\",  \n\"user_time_zone\": \"-06:00\",  \n\"user_time_now\": \"2026-01-09 01:33:46\",  \n\"app_last_check_date\": null,  \n\"date_time\": \"2026-01-09 15:33:46\",  \n\"random_code\": 882746  \n}  \npost parameter dutuu",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "23631478",
+    "_collection_link": "https://go.postman.co/collection/23631478-b99ae2d9-aefc-4857-9db1-f6a0ce4c0b23?source=collection_link"
+  },
+  "item": [
+    {
+      "name": "CheckInvoice",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-and-auth-token",
+            "value": "{{x-and-auth-token}}",
+            "type": "text"
+          },
+          {
+            "key": "x-and-auth-user",
+            "value": "{{x-and-auth-user}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"invoice_id\":\"20260114135333000001\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/w/invoices/check",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "w",
+            "invoices",
+            "check"
+          ]
+        },
+        "description": "invoice tolov shalgah huselt, uusgesen invoice_id gaaraa shalgana"
+      },
+      "response": [
+        {
+          "name": "CheckInvoice",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-and-auth-token",
+                "value": "{{x-and-auth-token}}",
+                "type": "text"
+              },
+              {
+                "key": "x-and-auth-user",
+                "value": "{{x-and-auth-user}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"invoice_id\":\"2026010909051150222223\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/api/w/invoices/check",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "api",
+                "w",
+                "invoices",
+                "check"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "Text",
+          "header": [
+            {
+              "key": "Server",
+              "value": "nginx"
+            },
+            {
+              "key": "Date",
+              "value": "Fri, 09 Jan 2026 07:31:02 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "max-age=0, private, must-revalidate"
+            },
+            {
+              "key": "Set-Cookie",
+              "value": "_ph_ses=sjb8antfk9tbh0s0ac01thvf8u;"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "deny"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-XSS-Protection",
+              "value": "1; mode=block"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=31536000; includeSubDomains; preload"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n    \"code\": 0,\n    \"response\": {\n        \"invoiceNumber\": \"8c3f684b0fa808ed5b893867953c4b5267207844\",\n        \"invoice_id\": \"2026010909051150222223\",\n        \"traking_data\": \"5050505051;1234567\",\n        \"description\": \"Shine nehemjleh\",\n        \"amount\": \"41000.00\",\n        \"payment_status\": \"NOTPAID\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:31:02\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:31:02\",\n    \"random_code\": 808624\n}\n\"payment_status\": \"NOTPAID\" ,\"PAID\"\n\n\n{\n    \"code\": 6083,\n    \"response\": \"\",\n    \"msg_code\": \"6083\",\n    \"description\": \"Нэхэмжлэлийн хугацаа дууссан байна\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:48:51\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:48:51\",\n    \"random_code\": 358836\n}"
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {}
+      },
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-and-auth-token",
+            "value": "{{x-and-auth-token}}",
+            "type": "text"
+          },
+          {
+            "key": "x-and-auth-user",
+            "value": "{{x-and-auth-user}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"amount\": 20000, //*nehemjlehiin dun. min=10000\n    \"description\": \"test nehemjleh\", //*nemehjlehiin tailbar\n    \"callback_url\": \"1\",  //*төлбөр амжиллтай төлөгдөхөд дуудах callback url\n    \"invoice_id\": \"20260116135333000001\" , //* davtagdahgui dugaarlalttai bn | max - 50 temdegt\n    \"phoneNumber\": \"86104449\", //sono burtgeltei dugaar | zaaval bish\n    \"duration\": \"\", //nehemjlehiin hugatsaa second-r | zaaval bish\n    \"trackingData\":\"\" // //salbartai bol ene talbart branch_code talbariin utgiig boglono | zaaval bish\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/w/pos/invoices",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "w",
+            "pos",
+            "invoices"
+          ]
+        },
+        "description": "shine invoice uusgeh huselt, invoice_id davhardahgui bn, 50 temdegt hurtelh urttai bn"
+      },
+      "response": [
+        {
+          "name": "Invoices",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-and-auth-token",
+                "value": "{{x-and-auth-token}}1",
+                "type": "text"
+              },
+              {
+                "key": "x-and-auth-user",
+                "value": "{{x-and-auth-user}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"amount\": 41000, //*nehemjlehiin dun. min=50000\n    \"description\": \"Shine nehemjleh\", //*nemehjlehiin tailbar\n    \"callback_url\": \"https://api.cody.mn/process/sono\",  //*butsaj duudah url\n    \"invoice_id\": \"2026010909051150222223\" , //* davtagdahgui dugaarlalttai bn \n    \"phoneNumber\": \"\", //sono burtgeltei dugaar | zaaval bish\n    \"duration\": \"\", //nehemjlehiin hugatsaa second-r | zaaval bish\n    \"trackingData\":\"5050505051;1234567\" //nemelteer tracking data | zaaval bish\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/api/w/pos/invoices",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "api",
+                "w",
+                "pos",
+                "invoices"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "Text",
+          "header": [
+            {
+              "key": "Server",
+              "value": "nginx"
+            },
+            {
+              "key": "Date",
+              "value": "Fri, 09 Jan 2026 07:17:20 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "max-age=0, private, must-revalidate"
+            },
+            {
+              "key": "Set-Cookie",
+              "value": "_ph_ses=n8gj269g6isf3q16hto2l5tg7k;"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "deny"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-XSS-Protection",
+              "value": "1; mode=block"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=31536000; includeSubDomains; preload"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n    \"code\": 0,\n    \"response\": {\n        \"invoiceNumber\": \"8c3f684b0fa808ed5b893867953c4b5267207844\",\n        \"qr_string\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANQAAADUAQMAAADeEJ9bAAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAACMElEQVRYhe2YTWrDMBCFx3ihpW4QXaTYFzPIoIs59CLKDbTUImT6nhUnNHTZjCh0FsbRZ8gw8+bHFvm3P24K20KdvLvJqCXmGnFS3sZwdZvIJHouy8mvQRaRoROL6j5zFY+D8cKzJeCxjkw3L3PBqWrtzLQOBSlMP/lpyZC/T3VnhZbk5JO+5NaSUdfIH3S9aym9at6S0caMi1NN2a/yYr/NkCPUtCIuG+OiKjzow9BU6sjg1LnESxmzW6VKNwYPnRa4mjKE667yyJE1E6kz9YIWozdoV69PP42ZJgZMAFTXoSzirsHda9qcIXNwlVXsr+h12Wk+tGTNUMWoafp6n0eoNbTg9zHcfgiaGRyILGto9+hn9gxhCPjF0KCmszz7mTWTmOWDjIkZWk0/zJ5xL5gESYsZknFrOGJmzahdzgCPLhMvLX98sgeDkhEtJM+xs7Cy4erWhxUJaL2KpWDCY4wVUnjrw3SVXUXEY+ZOO+ZjX3oTw/zDv3P+7T4sQSbpwjhlNk48JGa57wVHnzdn8HNufqpe4PU37RqzpG3iIWnIH/wcn33QnOW6q6cOmuAnR+CxF3RgrOlpX5KG9qrzqHdjRsMqyYyxuSRsCUHkfYwbwcYGwr1gjxLdKV3Y/l6VUdDs89wV6eddu+asvfue970gtBy9vBfbMuU+v/l1gHZRVd++T1iz3D6XYC/AvoSq0k6sfbeZ2Wwjex0XhaEPY7qoJYZNThxGcb/twf7tD9sXl3BYPaK6PlkAAAAASUVORK5CYII=\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:17:20\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:17:20\",\n    \"random_code\": 982588\n}\ninvoice amjilttai uusgesen\n\n{\n    \"code\": 6073,\n    \"response\": {\n        \"ErrorMessage\": \"Нэхэмжлэлийн дугаар давхцаж байна өөр дугаар явуулна уу\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:32:28\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:32:28\",\n    \"random_code\": 477013\n}\ninvoice_id davhardahgui bh ystoi\n\n{\n    \"code\": 30059,\n    \"response\": {\n        \"ErrorMessage\": \"Худалдан авалтын дүн 0-ээс дээш байх хэрэгтэй\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:35:23\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:35:23\",\n    \"random_code\": 542576\n}\n0 duntei invoice uusgej bolohgui\n"
+        }
+      ]
+    },
+    {
+      "name": "branch create",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {}
+      },
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-and-auth-token",
+            "value": "{{x-and-auth-token}}",
+            "type": "text"
+          },
+          {
+            "key": "x-and-auth-user",
+            "value": "{{x-and-auth-user}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"branch_register\": \"1234567\", //*Регистер\n    \"branch_type\": \"2\", //*НӨАТ илгээгчийн төрөл (1-хувь хүн, 2-Байгууллага)\n    \"branch_name\":\"Salbar2\" //*Салбар нэр зайгүй байна\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/w/branch/create",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "w",
+            "branch",
+            "create"
+          ]
+        },
+        "description": "Shine salbar burtgeh"
+      },
+      "response": [
+        {
+          "name": "branch create",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-and-auth-token",
+                "value": "{{x-and-auth-token}}",
+                "type": "text"
+              },
+              {
+                "key": "x-and-auth-user",
+                "value": "{{x-and-auth-user}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"branch_register\": \"1234567\", //*Регистер\n    \"branch_type\": \"2\", //*НӨАТ илгээгчийн төрөл (1-хувь хүн, 2-Байгууллага)\n    \"branch_name\":\"Salbar 1\" //*Салбар нэр\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/api/w/branch/create",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "api",
+                "w",
+                "branch",
+                "create"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "Text",
+          "header": [
+            {
+              "key": "Server",
+              "value": "nginx"
+            },
+            {
+              "key": "Date",
+              "value": "Fri, 09 Jan 2026 07:15:44 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "max-age=0, private, must-revalidate"
+            },
+            {
+              "key": "Set-Cookie",
+              "value": "_ph_ses=2pgvmmhd7coi7r94u6l5sa9bgr;"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "deny"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-XSS-Protection",
+              "value": "1; mode=block"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=31536000; includeSubDomains; preload"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n    \"code\": 0,\n    \"response\": {\n        \"branch_code\": \"5050505051;1234567\",\n        \"branch_id\": \"104\",\n        \"org_id\": \"1124\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:15:44\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:15:44\",\n    \"random_code\": 251459\n}\namjilttai uusgesen\n\n{\n    \"code\": 6099,\n    \"response\": {\n        \"ErrorMessage\": \"Уучлаарай, Салбарын мэдээлэл давхардаж байна.\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:49:48\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:49:48\",\n    \"random_code\": 431804\n}"
+        }
+      ]
+    },
+    {
+      "name": "branch edit",
+      "protocolProfileBehavior": {
+        "disabledSystemHeaders": {}
+      },
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-and-auth-token",
+            "value": "{{x-and-auth-token}}",
+            "type": "text"
+          },
+          {
+            "key": "x-and-auth-user",
+            "value": "{{x-and-auth-user}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"branch_id\": 105, //*Засах салбарын дугаар\n    \"status\": 1, //*Салбарын төлөв (1-идэвхтэй, 0-идэвхгүй)\n    \"branch_register\": \"1234567\", //*Регистер\n    \"branch_type\": \"2\", //*НӨАТ илгээгчийн төрөл (1-хувь хүн, 2-Байгууллага)\n    \"branch_name\":\"Salbar\" //*Салбар нэр\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{url}}/api/w/branch/edit",
+          "host": [
+            "{{url}}"
+          ],
+          "path": [
+            "api",
+            "w",
+            "branch",
+            "edit"
+          ]
+        },
+        "description": "salbariin medeelel zasvarlah"
+      },
+      "response": [
+        {
+          "name": "branch edit",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "x-and-auth-token",
+                "value": "{{x-and-auth-token}}",
+                "type": "text"
+              },
+              {
+                "key": "x-and-auth-user",
+                "value": "{{x-and-auth-user}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"branch_id\": 103, //*Засах салбарын дугаар\n    \"status\": 1, //*Салбарын төлөв (1-идэвхтэй, 0-идэвхгүй)\n    \"branch_register\": \"1234567\", //*Регистер\n    \"branch_type\": \"2\", //*НӨАТ илгээгчийн төрөл (1-хувь хүн, 2-Байгууллага)\n    \"branch_name\":\"Salbar 1\" //*Салбар нэр\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/api/w/branch/edit",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "api",
+                "w",
+                "branch",
+                "edit"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "Text",
+          "header": [
+            {
+              "key": "Server",
+              "value": "nginx"
+            },
+            {
+              "key": "Date",
+              "value": "Fri, 09 Jan 2026 07:13:14 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "max-age=0, private, must-revalidate"
+            },
+            {
+              "key": "Set-Cookie",
+              "value": "_ph_ses=2pgvmmhd7coi7r94u6l5sa9bgr;"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "deny"
+            },
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-XSS-Protection",
+              "value": "1; mode=block"
+            },
+            {
+              "key": "Strict-Transport-Security",
+              "value": "max-age=31536000; includeSubDomains; preload"
+            }
+          ],
+          "cookie": [
+            {
+              "expires": "Invalid Date",
+              "domain": "",
+              "path": ""
+            }
+          ],
+          "body": "{\n    \"code\": 0,\n    \"response\": {\n        \"branch_code\": \"5050505050;1234567\",\n        \"branch_id\": 104,\n        \"org_id\": \"1124\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 01:13:14\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 15:13:14\",\n    \"random_code\": 683377\n}\namjilttai zassan\n\n{\n    \"code\": 60991,\n    \"response\": {\n        \"ErrorMessage\": \"Уучлаарай, Салбарын мэдээлэл олдсонгүй.\"\n    },\n    \"msg_code\": \"0\",\n    \"description\": \"\",\n    \"user_time_zone\": \"-06:00\",\n    \"user_time_now\": \"2026-01-09 02:30:02\",\n    \"app_last_check_date\": null,\n    \"date_time\": \"2026-01-09 16:30:02\",\n    \"random_code\": 875323\n}\nbhgui salbar zasah ued"
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "url",
+      "value": "https://rico.mn"
+    },
+    {
+      "key": "x-and-auth-user",
+      "value": "auth_user"
+    },
+    {
+      "key": "x-and-auth-token",
+      "value": "auth_token"
+    }
+  ]
+}
