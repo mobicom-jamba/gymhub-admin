@@ -388,6 +388,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             membership_status: computedMembershipStatus,
             membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
             membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+            ...(password ? { password } : {}),
           }),
         });
         if (!res.ok) { setFormError(await parseApiError(res)); return; }
@@ -490,6 +491,35 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                         </span>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Password change (edit only) */}
+            {!isCreate && (
+              <div className="px-5 pt-5">
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-200 dark:bg-gray-700">
+                      <svg className="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                      </svg>
+                    </div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Нууц үг солих</span>
+                  </div>
+                  <div>
+                    <Label>Шинэ нууц үг</Label>
+                    <div className="relative">
+                      <input type="text" value={password} onChange={e => setPassword(e.target.value)}
+                        className={inp} placeholder="Хоосон бол хэвээр үлдэнэ" minLength={6} />
+                      {password && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-900/30 dark:text-amber-400">
+                          солигдоно
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-gray-400">Хоосон үлдээвэл одоогийн нууц үг хэвээр үлдэнэ.</p>
                   </div>
                 </div>
               </div>
