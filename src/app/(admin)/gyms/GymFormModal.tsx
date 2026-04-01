@@ -70,6 +70,13 @@ export default function GymFormModal({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Owner fields
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerPhone, setOwnerPhone] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [ownerLoading, setOwnerLoading] = useState(false);
+  const [hasExistingOwner, setHasExistingOwner] = useState(false);
+
   React.useEffect(() => {
     if (isOpen) {
       setName(gym?.name ?? "");
@@ -82,6 +89,25 @@ export default function GymFormModal({
       setCloseTime(parsed.closeTime);
       setOpenDays(parsed.openDays);
       setError("");
+      setOwnerName("");
+      setOwnerPhone("");
+      setOwnerPassword("");
+      setHasExistingOwner(false);
+      // Fetch existing owner for this gym
+      if (gym?.id) {
+        setOwnerLoading(true);
+        fetch(`/api/admin/gym-owner?gym_id=${gym.id}`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.owner) {
+              setOwnerName(d.owner.name || "");
+              setOwnerPhone(d.owner.phone || "");
+              setHasExistingOwner(true);
+            }
+          })
+          .catch(() => {})
+          .finally(() => setOwnerLoading(false));
+      }
     }
   }, [isOpen, gym]);
 
@@ -159,6 +185,35 @@ export default function GymFormModal({
         return;
       }
     }
+    // Save owner if phone is provided
+    if (ownerPhone.trim()) {
+      try {
+        const gymId = gym?.id;
+        if (gymId) {
+          const ownerRes = await fetch("/api/admin/gym-owner", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              gym_id: gymId,
+              name: ownerName.trim(),
+              phone: ownerPhone.trim(),
+              password: ownerPassword.trim() || undefined,
+            }),
+          });
+          const ownerData = await ownerRes.json();
+          if (!ownerRes.ok) {
+            setError(`Owner: ${ownerData.error}`);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        setError("Owner хадгалахад алдаа гарлаа");
+        setLoading(false);
+        return;
+      }
+    }
+
     setLoading(false);
     onSuccess();
     onClose();
@@ -288,6 +343,47 @@ export default function GymFormModal({
             />
             <Label className="!mb-0">{t("active")}</Label>
           </div>
+
+          {/* Owner Section */}
+          {gym && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">🔑 Эзэмшигчийн мэдээлэл</p>
+              {ownerLoading ? (
+                <div className="text-xs text-gray-400 py-2">Ачаалж байна...</div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <Label>Эзэмшигчийн нэр</Label>
+                    <Input
+                      value={ownerName}
+                      onChange={(e) => setOwnerName(e.target.value)}
+                      placeholder="Нэр"
+                    />
+                  </div>
+                  <div>
+                    <Label>Утасны дугаар (нэвтрэх нэр)</Label>
+                    <Input
+                      value={ownerPhone}
+                      onChange={(e) => setOwnerPhone(e.target.value)}
+                      placeholder="99001122"
+                    />
+                  </div>
+                  <div>
+                    <Label>{hasExistingOwner ? "Шинэ нууц үг (хоосон бол хэвээр)" : "Нууц үг"}</Label>
+                    <Input
+                      type="password"
+                      value={ownerPassword}
+                      onChange={(e) => setOwnerPassword(e.target.value)}
+                      placeholder={hasExistingOwner ? "Солих бол бичнэ үү" : "123456"}
+                    />
+                  </div>
+                  {hasExistingOwner && (
+                    <p className="text-[11px] text-gray-400">✅ Эзэмшигч бүртгэлтэй байна</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex gap-2 justify-end pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
               {t("cancel")}
