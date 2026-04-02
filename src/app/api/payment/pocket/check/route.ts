@@ -32,18 +32,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // Determine which lookup to use
-    // booking_id is truncated to 25 chars when used as orderNumber (Pocket API limit)
+    // Prefer invoice_id when provided — matches the exact Pocket row (avoids wrong order after uniquified orderNumber).
     const rawOrderNumber = order_number || booking_id;
-    const lookupOrderNumber = rawOrderNumber && rawOrderNumber.length > 25
-      ? rawOrderNumber.slice(0, 25)
-      : rawOrderNumber;
-    let status;
+    const lookupOrderNumber =
+      rawOrderNumber && rawOrderNumber.length > 25
+        ? rawOrderNumber.slice(0, 25)
+        : rawOrderNumber;
+    const invoiceNum =
+      invoice_id != null && String(invoice_id).trim() !== ""
+        ? Number(invoice_id)
+        : NaN;
 
-    if (lookupOrderNumber) {
+    let status;
+    if (Number.isFinite(invoiceNum) && invoiceNum > 0) {
+      status = await checkByInvoiceId(invoiceNum);
+    } else if (lookupOrderNumber) {
       status = await checkByOrderNumber(lookupOrderNumber);
     } else {
-      status = await checkByInvoiceId(Number(invoice_id));
+      return NextResponse.json(
+        { error: "invoice_id эсвэл order_number / booking_id шаардлагатай" },
+        { status: 400 },
+      );
     }
 
     const paid = status.state === "paid";
