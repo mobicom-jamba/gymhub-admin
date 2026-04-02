@@ -33,8 +33,11 @@ export async function POST(request: Request) {
     }
 
     // Determine which lookup to use
-    // booking_id is used as orderNumber when creating invoice
-    const lookupOrderNumber = order_number || booking_id;
+    // booking_id is truncated to 25 chars when used as orderNumber (Pocket API limit)
+    const rawOrderNumber = order_number || booking_id;
+    const lookupOrderNumber = rawOrderNumber && rawOrderNumber.length > 25
+      ? rawOrderNumber.slice(0, 25)
+      : rawOrderNumber;
     let status;
 
     if (lookupOrderNumber) {

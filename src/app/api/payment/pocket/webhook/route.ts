@@ -27,6 +27,7 @@ export async function POST(request: Request) {
       invoiceState,
       phoneNumber,
       orderNumber,
+      info,
     } = body as {
       id?: string;
       amount?: number;
@@ -42,10 +43,14 @@ export async function POST(request: Request) {
 
     // invoiceState 20 = paid
     const paid = invoiceState === 20;
-    const bookingId = orderNumber;
+    const fromInfo =
+      typeof info === "string"
+        ? info.match(/\[GHBID:([^\]]+)\]/)?.[1]?.trim()
+        : undefined;
+    const bookingId = fromInfo || orderNumber;
 
     if (!bookingId) {
-      console.warn("Pocket webhook: no orderNumber");
+      console.warn("Pocket webhook: no booking id (info tag or orderNumber)");
       return NextResponse.json({ received: true });
     }
 

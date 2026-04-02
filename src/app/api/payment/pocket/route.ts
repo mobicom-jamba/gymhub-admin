@@ -39,17 +39,56 @@ export async function POST(request: Request) {
       );
     }
 
-    // Use booking_id as the unique order number
-    const orderNumber = booking_id;
+    // Pocket API limits orderNumber to 25 chars max.
+    // Same booking_id twice → Pocket returns "order_number already exists"; retry with a short unique suffix.
+    const buildOrderNumber = (suffix: string): string => {
+      const sep = "-";
+      const max = 25;
+      const s = suffix.slice(0, 6);
+      const room = max - sep.length - s.length;
+      const base = booking_id.slice(0, Math.max(1, room));
+      return (base + sep + s).slice(0, max);
+    };
 
-    // Create real Pocket invoice
-    const pocketRes = await createInvoice({
-      amount,
-      orderNumber,
-      info: description ?? `GymHub гишүүнчлэл - ${orderNumber}`,
-      invoiceType: "ZERO",
-      channel: "ecommerce",
-    });
+    let pocketRes: Awaited<ReturnType<typeof createInvoice>> | undefined;
+    const primaryOrder =
+      booking_id.length > 25 ? booking_id.slice(0, 25) : booking_id;
+    const maxAttempts = 4;
+
+    // Webhook must resolve the real booking id when Pocket orderNumber is truncated or uniquified.
+    const infoPayload = `${description ?? `GymHub - ${booking_id}`} [GHBID:${booking_id}]`;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const orderNumber =
+        attempt === 0
+          ? primaryOrder
+          : buildOrderNumber(
+              `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+            );
+
+      try {
+        pocketRes = await createInvoice({
+          amount,
+          orderNumber,
+          info: infoPayload,
+          invoiceType: "ZERO",
+          channel: "ecommerce",
+        });
+        break;
+      } catch (e) {
+        const lastErr = e instanceof Error ? e : new Error(String(e));
+        const msg = lastErr.message.toLowerCase();
+        const duplicateOrder =
+          msg.includes("already exists") || msg.includes("duplicate");
+        if (!duplicateOrder || attempt === maxAttempts - 1) {
+          throw lastErr;
+        }
+      }
+    }
+
+    if (!pocketRes) {
+      throw new Error("Pocket invoice failed");
+    }
 
     // Generate QR code image from the Pocket QR payload
     const qrImageBase64 = await generateQrImage(pocketRes.qr);
