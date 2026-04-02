@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Pocket invoice error:", msg);
     return NextResponse.json(
-      { error: "Pocket нэхэмжлэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу." },
+      { error: msg || "Pocket нэхэмжлэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу." },
       { status: 500 },
     );
   }

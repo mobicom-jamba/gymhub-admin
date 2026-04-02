@@ -167,7 +167,12 @@ export async function createInvoice(opts: {
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Pocket invoice error (${res.status}): ${text}`);
+    let detail = text;
+    try {
+      const errJson = JSON.parse(text);
+      detail = errJson.message || errJson.detail || text;
+    } catch { /* use raw text */ }
+    throw new Error(`Pocket invoice error (${res.status}): ${detail}`);
   }
 
   return (await res.json()) as PocketInvoiceResponse;
