@@ -28,13 +28,29 @@ export async function GET(request: Request) {
       .eq("id", staff.user_id)
       .maybeSingle();
 
+    let name = profile?.full_name || null;
+    let phone = profile?.phone || null;
+    let email = profile?.email || null;
+
+    // Fallback to auth.users if profiles data is incomplete
+    if (!name || !phone) {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.admin.getUserById(staff.user_id);
+        if (authUser) {
+          if (!name) name = (authUser.user_metadata?.full_name as string) || null;
+          if (!phone) phone = authUser.phone || (authUser.email?.endsWith("@gymhub.mn") ? authUser.email.replace("@gymhub.mn", "") : null) || null;
+          if (!email) email = authUser.email && !authUser.email.endsWith("@gymhub.mn") ? authUser.email : null;
+        }
+      } catch { /* ignore */ }
+    }
+
     return NextResponse.json({
-      owner: profile ? {
-        user_id: profile.id,
-        name: profile.full_name,
-        phone: profile.phone,
-        email: profile.email,
-      } : null,
+      owner: {
+        user_id: staff.user_id,
+        name,
+        phone,
+        email,
+      },
     });
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown" }, { status: 500 });
