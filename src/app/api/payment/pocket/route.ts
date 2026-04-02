@@ -2,101 +2,93 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../_lib/bookings";
+import {
+  isPocketConfigured,
+  createInvoice,
+  generateQrImage,
+} from "@/lib/pocket";
 
 /**
- * POST /api/payment/pocket — Create a Pocket lending payment
- * Pocket is a "buy now, pay later" lending service with installments.
+ * POST /api/payment/pocket — Create a Pocket Payment Gateway invoice
+ * Returns QR code image (base64), deeplink, and invoice details for polling.
  */
 export async function POST(request: Request) {
   try {
     const blocked = await requirePaymentChannel("pocket");
     if (blocked) return blocked;
 
+    if (!isPocketConfigured()) {
+      return NextResponse.json(
+        { error: "Pocket төлбөрийн тохиргоо хийгдээгүй байна." },
+        { status: 500 },
+      );
+    }
+
     const body = await request.json();
-    const { booking_id, amount, description, user_id, phone, installments } = body as {
+    const { booking_id, amount, description, user_id } = body as {
       booking_id: string;
       amount: number;
-      description: string;
+      description?: string;
       user_id: string;
-      phone?: string;
-      installments?: number;
     };
 
     if (!booking_id || !amount || !user_id) {
       return NextResponse.json(
-        { error: "booking_id, amount, and user_id required" },
-        { status: 400 }
+        { error: "booking_id, amount, user_id шаардлагатай" },
+        { status: 400 },
       );
     }
 
-    const numInstallments = installments ?? 3;
-    const monthlyAmount = Math.ceil(amount / numInstallments);
+    // Use booking_id as the unique order number
+    const orderNumber = booking_id;
 
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!serviceKey) {
-      return NextResponse.json({ error: "Not configured" }, { status: 500 });
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceKey,
-      { auth: { persistSession: false } }
-    );
-
-    // Update booking with pocket payment channel
-    await safeUpdateBookingById(supabase, booking_id, {
-      payment_channel: "pocket",
-      payment_status: "pending",
+    // Create real Pocket invoice
+    const pocketRes = await createInvoice({
       amount,
+      orderNumber,
+      info: description ?? `GymHub гишүүнчлэл - ${orderNumber}`,
+      invoiceType: "ZERO",
+      channel: "ecommerce",
     });
 
-    // Create lending record
-    const { data: lending, error: lendingErr } = await supabase
-      .from("lending_records")
-      .insert({
-        booking_id,
-        user_id,
-        channel: "pocket",
-        amount,
-        phone: phone ?? null,
-        description: description ?? `Pocket зээл #${booking_id}`,
-        status: "pending",
-        installments: numInstallments,
-        monthly_amount: monthlyAmount,
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      })
-      .select()
-      .single();
+    // Generate QR code image from the Pocket QR payload
+    const qrImageBase64 = await generateQrImage(pocketRes.qr);
 
-    if (lendingErr) {
-      console.error("Lending record error:", lendingErr.message);
-    }
-
-    // Auto-approve
-    if (lending) {
-      await supabase
-        .from("lending_records")
-        .update({ status: "approved" })
-        .eq("id", lending.id);
+    // Track booking in Supabase
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (serviceKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        serviceKey,
+        { auth: { persistSession: false } },
+      );
 
       await safeUpdateBookingById(supabase, booking_id, {
-        payment_status: "paid",
-        paid_at: new Date().toISOString(),
+        payment_channel: "pocket",
+        payment_status: "pending",
+        amount,
       });
     }
 
+    // Return response compatible with both web and mobile frontends
     return NextResponse.json({
       success: true,
-      lending_id: lending?.id ?? null,
+      invoice_id: String(pocketRes.id),
+      id: String(pocketRes.id),
+      order_number: pocketRes.orderNumber,
+      qr_image: qrImageBase64,
+      qr_string: qrImageBase64,
+      deeplink: pocketRes.deeplink,
       channel: "pocket",
-      status: "approved",
-      installments: numInstallments,
-      monthly_amount: monthlyAmount,
-      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      message: `Pocket ${numInstallments} хуваалт амжилттай баталгаажлаа`,
+      status: "pending",
+      message: "Pocket апп-аар QR уншуулж төлнө үү",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("Pocket invoice error:", msg);
+    return NextResponse.json(
+      { error: "Pocket нэхэмжлэл үүсгэхэд алдаа гарлаа. Дахин оролдоно уу." },
+      { status: 500 },
+    );
   }
 }

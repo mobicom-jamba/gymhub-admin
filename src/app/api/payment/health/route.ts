@@ -71,12 +71,36 @@ function checkSonoHealth(): ProviderPayload {
   };
 }
 
-function checkPocketHealth(): ProviderPayload {
-  return {
-    enabled: true,
-    message: "Pocket идэвхтэй",
-    configured: true,
-  };
+async function checkPocketHealth(): Promise<ProviderPayload> {
+  const clientId = process.env.POCKET_CLIENT_ID ?? "";
+  const clientSecret = process.env.POCKET_CLIENT_SECRET ?? "";
+  const terminalId = process.env.POCKET_TERMINAL_ID ?? "";
+  const oauthHost = process.env.POCKET_OAUTH_HOST ?? "";
+  const merchantHost = process.env.POCKET_MERCHANT_HOST ?? "";
+
+  if (!clientId || !clientSecret || !terminalId || !oauthHost || !merchantHost) {
+    return {
+      enabled: false,
+      message: "Pocket тохиргоо дутуу байна",
+      configured: false,
+    };
+  }
+
+  try {
+    const { healthCheck } = await import("@/lib/pocket");
+    const result = await healthCheck();
+    return {
+      enabled: result.ok,
+      message: result.message,
+      configured: true,
+    };
+  } catch {
+    return {
+      enabled: false,
+      message: "Pocket үйлчилгээ түр тасалдалтай байна",
+      configured: true,
+    };
+  }
 }
 
 function applyAdminSwitch(
@@ -99,7 +123,7 @@ export async function GET() {
 
   const qpayTech = await checkQPayHealth();
   const sonoTech = checkSonoHealth();
-  const pocketTech = checkPocketHealth();
+  const pocketTech = await checkPocketHealth();
 
   const qpay = applyAdminSwitch(qpayTech, settings.payment_qpay_enabled, "QPay");
   const sono = applyAdminSwitch(sonoTech, settings.payment_sono_enabled, "Sono");
