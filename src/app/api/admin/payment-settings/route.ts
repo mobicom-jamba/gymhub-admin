@@ -12,6 +12,16 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
     if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
     out.early_membership_price_mnt = Math.floor(n);
   }
+  if ("early_first_month_price_mnt" in o) {
+    const n = Number(o.early_first_month_price_mnt);
+    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
+    out.early_first_month_price_mnt = Math.floor(n);
+  }
+  if ("early_remainder_price_mnt" in o) {
+    const n = Number(o.early_remainder_price_mnt);
+    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
+    out.early_remainder_price_mnt = Math.floor(n);
+  }
   if ("premium_membership_price_mnt" in o) {
     const n = Number(o.premium_membership_price_mnt);
     if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
@@ -72,6 +82,8 @@ export async function PATCH(request: Request) {
         {
           id: "default",
           early_membership_price_mnt: next.early_membership_price_mnt,
+          early_first_month_price_mnt: next.early_first_month_price_mnt,
+          early_remainder_price_mnt: next.early_remainder_price_mnt,
           premium_membership_price_mnt: next.premium_membership_price_mnt,
           payment_qpay_enabled: next.payment_qpay_enabled,
           payment_sono_enabled: next.payment_sono_enabled,
@@ -110,6 +122,8 @@ function normalizeFromDb(data: Record<string, unknown>): PaymentAppSettingsRow {
   return {
     id: (data.id as string) || "default",
     early_membership_price_mnt: Number(data.early_membership_price_mnt) || 480_000,
+    early_first_month_price_mnt: Number(data.early_first_month_price_mnt) || 150_000,
+    early_remainder_price_mnt: Number(data.early_remainder_price_mnt) || 330_000,
     premium_membership_price_mnt: Number(data.premium_membership_price_mnt) || 780_000,
     payment_qpay_enabled: data.payment_qpay_enabled !== false,
     payment_sono_enabled: data.payment_sono_enabled !== false,

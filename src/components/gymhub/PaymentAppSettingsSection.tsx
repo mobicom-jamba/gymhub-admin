@@ -7,6 +7,8 @@ import { useToast } from "@/components/ui/Toast";
 
 type Settings = {
   early_membership_price_mnt: number;
+  early_first_month_price_mnt: number;
+  early_remainder_price_mnt: number;
   premium_membership_price_mnt: number;
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
@@ -22,7 +24,9 @@ export default function PaymentAppSettingsSection() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [early, setEarly] = useState(480_000);
+  const [earlyLegacy, setEarlyLegacy] = useState(480_000);
+  const [earlyFirst, setEarlyFirst] = useState(150_000);
+  const [earlyRest, setEarlyRest] = useState(330_000);
   const [premium, setPremium] = useState(780_000);
   const [qpay, setQpay] = useState(true);
   const [sono, setSono] = useState(true);
@@ -38,7 +42,9 @@ export default function PaymentAppSettingsSection() {
         throw new Error(data.error || "Ачаалахад алдаа");
       }
       const s = data.settings as Settings;
-      setEarly(s.early_membership_price_mnt);
+      setEarlyLegacy(s.early_membership_price_mnt);
+      setEarlyFirst(s.early_first_month_price_mnt);
+      setEarlyRest(s.early_remainder_price_mnt);
       setPremium(s.premium_membership_price_mnt);
       setQpay(s.payment_qpay_enabled);
       setSono(s.payment_sono_enabled);
@@ -66,7 +72,9 @@ export default function PaymentAppSettingsSection() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          early_membership_price_mnt: early,
+          early_membership_price_mnt: earlyLegacy,
+          early_first_month_price_mnt: earlyFirst,
+          early_remainder_price_mnt: earlyRest,
           premium_membership_price_mnt: premium,
           payment_qpay_enabled: qpay,
           payment_sono_enabled: sono,
@@ -91,31 +99,66 @@ export default function PaymentAppSettingsSection() {
   return (
     <ComponentCard
       title="Төлбөр ба гишүүнчлэлийн үнэ"
-      subtitle="GymHub апп дээрх Early / Premium дүн, QPay · Sono · Pocket сонголтууд"
+      subtitle="Early (эхний сар + үлдсэн 11 сар), legacy нэг дор, Premium — QPay · Sono · Pocket"
       desc="Өөрчлөлт нь шууд /api/payment/health болон төлбөрийн API-д тусгагдана. Supabase дээр хүснэгт байхгүй бол эхлээд sql/payment_app_settings.sql ажиллуулна уу."
     >
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Ачаалж байна…</p>
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Early — хуваагдсан төлбөр (аппын үндсэн горим)
+              </p>
+            </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Early ® үнэ (₮)
+                Эхний 1 сар (₮)
               </label>
               <input
                 type="number"
                 min={0}
                 max={999_999_999}
-                value={early}
-                onChange={(e) => setEarly(Number(e.target.value) || 0)}
+                value={earlyFirst}
+                onChange={(e) => setEarlyFirst(Number(e.target.value) || 0)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(early)}</p>
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(earlyFirst)}</p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Premium ® үнэ (₮)
+                Үлдсэн 11 сар (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={earlyRest}
+                onChange={(e) => setEarlyRest(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(earlyRest)}</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Нэг дор Early (legacy, ₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={earlyLegacy}
+                onChange={(e) => setEarlyLegacy(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Хуучин нэхэмжлэл <code className="rounded bg-gray-100 px-1 dark:bg-white/10">membership-early-…</code>
+              </p>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Premium (₮)
               </label>
               <input
                 type="number"

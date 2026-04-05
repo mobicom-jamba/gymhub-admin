@@ -4,6 +4,8 @@
 create table if not exists public.payment_app_settings (
   id text primary key default 'default',
   early_membership_price_mnt integer not null default 480000,
+  early_first_month_price_mnt integer not null default 150000,
+  early_remainder_price_mnt integer not null default 330000,
   premium_membership_price_mnt integer not null default 780000,
   payment_qpay_enabled boolean not null default true,
   payment_sono_enabled boolean not null default true,

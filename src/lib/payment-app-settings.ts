@@ -3,7 +3,10 @@ import { createAdminClient } from "@/lib/supabase";
 
 export type PaymentAppSettingsRow = {
   id: string;
+  /** Legacy: нэг дор төлөх Early (membership-early-<ts>) */
   early_membership_price_mnt: number;
+  early_first_month_price_mnt: number;
+  early_remainder_price_mnt: number;
   premium_membership_price_mnt: number;
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
@@ -14,6 +17,8 @@ export type PaymentAppSettingsRow = {
 const DEFAULTS: Omit<PaymentAppSettingsRow, "updated_at"> = {
   id: "default",
   early_membership_price_mnt: 480_000,
+  early_first_month_price_mnt: 150_000,
+  early_remainder_price_mnt: 330_000,
   premium_membership_price_mnt: 780_000,
   payment_qpay_enabled: true,
   payment_sono_enabled: true,
@@ -22,11 +27,21 @@ const DEFAULTS: Omit<PaymentAppSettingsRow, "updated_at"> = {
 
 function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
   const early = Number(row.early_membership_price_mnt);
+  const earlyFirst = Number(row.early_first_month_price_mnt);
+  const earlyRest = Number(row.early_remainder_price_mnt);
   const premium = Number(row.premium_membership_price_mnt);
   return {
     id: (row.id as string) || "default",
     early_membership_price_mnt:
       Number.isFinite(early) && early >= 0 ? Math.floor(early) : DEFAULTS.early_membership_price_mnt,
+    early_first_month_price_mnt:
+      Number.isFinite(earlyFirst) && earlyFirst >= 0
+        ? Math.floor(earlyFirst)
+        : DEFAULTS.early_first_month_price_mnt,
+    early_remainder_price_mnt:
+      Number.isFinite(earlyRest) && earlyRest >= 0
+        ? Math.floor(earlyRest)
+        : DEFAULTS.early_remainder_price_mnt,
     premium_membership_price_mnt:
       Number.isFinite(premium) && premium >= 0
         ? Math.floor(premium)

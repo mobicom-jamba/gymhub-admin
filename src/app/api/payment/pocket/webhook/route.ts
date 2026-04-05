@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { safeUpdateBookingById } from "../../_lib/bookings";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
+import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
 
 /**
  * POST /api/payment/pocket/webhook — Receive Pocket payment webhook notifications
@@ -103,37 +104,10 @@ export async function POST(request: Request) {
           }
 
           if (userId) {
-            const now = new Date();
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("membership_expires_at, membership_status")
-              .eq("id", userId)
-              .maybeSingle();
-
-            let baseDate = now;
-            if (profile?.membership_expires_at) {
-              const currentExpiry = new Date(profile.membership_expires_at);
-              if (currentExpiry > now && profile.membership_status === "active") {
-                baseDate = currentExpiry;
-              }
-            }
-
-            const expiresAt = new Date(baseDate);
-            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-
-            const tierMatch = bookingId.match(/^membership-([^-]+)-/);
-            const tier = tierMatch?.[1] || "early";
-
-            await supabase
-              .from("profiles")
-              .update({
-                membership_tier: tier,
-                membership_status: "active",
-                membership_started_at: now.toISOString(),
-                membership_expires_at: expiresAt.toISOString(),
-              })
-              .eq("id", userId);
-
+            await applyMembershipActivationForPaidBooking(supabase, {
+              userId,
+              bookingId,
+            });
             const gross =
               typeof amount === "number" && amount > 0 ? amount : null;
             await recordSalesCommissionForPaidMembership(supabase, {
@@ -142,7 +116,7 @@ export async function POST(request: Request) {
               grossAmountFallback: gross,
             });
 
-            console.log(`Pocket webhook: membership activated for user ${userId}, tier=${tier}`);
+            console.log(`Pocket webhook: membership activation attempted for user ${userId}`);
           }
         } catch (e) {
           console.error("Pocket webhook membership activation error:", e);

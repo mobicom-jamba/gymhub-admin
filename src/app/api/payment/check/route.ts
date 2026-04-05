@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../_lib/bookings";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
+import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
 
 const QPAY_BASE = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
 const QPAY_USERNAME = process.env.QPAY_CLIENT_ID ?? process.env.QPAY_USERNAME ?? "";
@@ -99,42 +100,12 @@ export async function POST(request: Request) {
           });
         }
 
-        // Activate membership for 1 year (server-side safety net)
         if (user_id && booking_id?.startsWith("membership-")) {
           try {
-            const now = new Date();
-            // Check current membership — extend from expiry if still active
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("membership_expires_at, membership_status")
-              .eq("id", user_id)
-              .maybeSingle();
-
-            let baseDate = now;
-            if (profile?.membership_expires_at) {
-              const currentExpiry = new Date(profile.membership_expires_at);
-              if (currentExpiry > now && profile.membership_status === "active") {
-                baseDate = currentExpiry;
-              }
-            }
-
-            const expiresAt = new Date(baseDate);
-            expiresAt.setFullYear(expiresAt.getFullYear() + 1);
-
-            // Extract tier from booking_id: "membership-early-1234567890"
-            const tierMatch = booking_id.match(/^membership-([^-]+)-/);
-            const tier = tierMatch?.[1] || "early";
-
-            await supabase
-              .from("profiles")
-              .update({
-                membership_tier: tier,
-                membership_status: "active",
-                membership_started_at: now.toISOString(),
-                membership_expires_at: expiresAt.toISOString(),
-              })
-              .eq("id", user_id);
-
+            await applyMembershipActivationForPaidBooking(supabase, {
+              userId: user_id,
+              bookingId: booking_id,
+            });
             const paidAmt =
               typeof result.paid_amount === "number" && result.paid_amount > 0
                 ? result.paid_amount

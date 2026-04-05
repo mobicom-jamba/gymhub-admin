@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../../_lib/bookings";
 import { proxyFetch } from "@/lib/proxy-fetch";
+import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
+import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 
 export async function POST(request: Request) {
   try {
@@ -10,9 +12,10 @@ export async function POST(request: Request) {
     if (blocked) return blocked;
 
     const body = await request.json();
-    const { invoice_id, booking_id } = body as {
+    const { invoice_id, booking_id, user_id } = body as {
       invoice_id: string;
       booking_id?: string;
+      user_id?: string;
     };
 
     if (!invoice_id) {
@@ -86,6 +89,33 @@ export async function POST(request: Request) {
         payment_channel: "sono",
         paid_at: new Date().toISOString(),
       });
+
+      if (booking_id.startsWith("membership-")) {
+        let uid = typeof user_id === "string" && user_id.trim() ? user_id.trim() : "";
+        if (!uid) {
+          const { data: b } = await supabase
+            .from("bookings")
+            .select("user_id")
+            .eq("id", booking_id)
+            .maybeSingle();
+          uid = (b as { user_id?: string } | null)?.user_id ?? "";
+        }
+        if (uid) {
+          try {
+            await applyMembershipActivationForPaidBooking(supabase, {
+              userId: uid,
+              bookingId: booking_id,
+            });
+            await recordSalesCommissionForPaidMembership(supabase, {
+              buyerUserId: uid,
+              bookingId: booking_id,
+              grossAmountFallback: null,
+            });
+          } catch (e) {
+            console.error("Sono membership activation failed:", e);
+          }
+        }
+      }
     }
 
     return NextResponse.json({

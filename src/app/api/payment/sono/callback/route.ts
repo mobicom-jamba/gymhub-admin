@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { safeUpdateBookingById } from "../../_lib/bookings";
+import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
+import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 
 async function handle(request: Request) {
   try {
@@ -28,6 +30,30 @@ async function handle(request: Request) {
     });
     if (updateError) {
       return NextResponse.json({ error: updateError }, { status: 500 });
+    }
+
+    if (bookingId.startsWith("membership-")) {
+      const { data: row } = await supabase
+        .from("bookings")
+        .select("user_id")
+        .eq("id", bookingId)
+        .maybeSingle();
+      const uid = (row as { user_id?: string } | null)?.user_id;
+      if (uid) {
+        try {
+          await applyMembershipActivationForPaidBooking(supabase, {
+            userId: uid,
+            bookingId,
+          });
+          await recordSalesCommissionForPaidMembership(supabase, {
+            buyerUserId: uid,
+            bookingId,
+            grossAmountFallback: null,
+          });
+        } catch (e) {
+          console.error("Sono callback membership activation:", e);
+        }
+      }
     }
 
     return NextResponse.json({ received: true, booking_id: bookingId });

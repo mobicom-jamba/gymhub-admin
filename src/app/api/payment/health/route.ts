@@ -137,7 +137,11 @@ export async function GET() {
       pocket,
     },
     membership_prices: {
-      early_mnt: settings.early_membership_price_mnt,
+      early_mnt:
+        settings.early_first_month_price_mnt + settings.early_remainder_price_mnt,
+      early_legacy_full_mnt: settings.early_membership_price_mnt,
+      early_first_month_mnt: settings.early_first_month_price_mnt,
+      early_remainder_mnt: settings.early_remainder_price_mnt,
       premium_mnt: settings.premium_membership_price_mnt,
     },
   });
