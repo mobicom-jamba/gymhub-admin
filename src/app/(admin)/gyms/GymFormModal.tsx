@@ -62,6 +62,9 @@ export default function GymFormModal({
   const [address, setAddress] = useState(gym?.address ?? "");
   const [imageUrl, setImageUrl] = useState(gym?.image_url ?? "");
   const [isActive, setIsActive] = useState(gym?.is_active ?? true);
+  const [dailyVisitorLimit, setDailyVisitorLimit] = useState(
+    () => (gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : "")
+  );
   const [openTime, setOpenTime]   = useState(() => parseRaw(gym?.opening_hours).openTime);
   const [closeTime, setCloseTime] = useState(() => parseRaw(gym?.opening_hours).closeTime);
   const [openDays, setOpenDays]   = useState<Set<DayKey>>(() => parseRaw(gym?.opening_hours).openDays);
@@ -84,6 +87,7 @@ export default function GymFormModal({
       setAddress(gym?.address ?? "");
       setImageUrl(gym?.image_url ?? "");
       setIsActive(gym?.is_active ?? true);
+      setDailyVisitorLimit(gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : "");
       const parsed = parseRaw(gym?.opening_hours);
       setOpenTime(parsed.openTime);
       setCloseTime(parsed.closeTime);
@@ -156,6 +160,16 @@ export default function GymFormModal({
       setError("Эхлэх цаг нь дуусах цагаас өмнө байх ёстой");
       return;
     }
+    let daily_visitor_limit: number | null = null;
+    const limitTrim = dailyVisitorLimit.trim();
+    if (limitTrim !== "") {
+      const n = parseInt(limitTrim, 10);
+      if (!Number.isFinite(n) || n < 1) {
+        setError("Өдрийн зочлогчийн дээд тоо нь 1-ээс их бүхэл тоо эсвэл хоосон (хязгааргүй) байна");
+        return;
+      }
+      daily_visitor_limit = n;
+    }
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
@@ -165,8 +179,11 @@ export default function GymFormModal({
       address: address || null,
       image_url: imageUrl || null,
       is_active: isActive,
+      daily_visitor_limit,
       opening_hours: buildSchedule(openTime, closeTime, openDays),
     };
+    let savedGymId = gym?.id ?? null;
+
     if (gym) {
       const { error: err } = await supabase
         .from("gyms")
@@ -178,37 +195,39 @@ export default function GymFormModal({
         return;
       }
     } else {
-      const { error: err } = await supabase.from("gyms").insert(payload);
+      const { data: inserted, error: err } = await supabase
+        .from("gyms")
+        .insert(payload)
+        .select("id")
+        .single();
       if (err) {
         setError(err.message);
         setLoading(false);
         return;
       }
+      savedGymId = inserted?.id ?? null;
     }
-    // Save owner if phone is provided
-    if (ownerPhone.trim()) {
+
+    if (ownerPhone.trim() && savedGymId) {
       try {
-        const gymId = gym?.id;
-        if (gymId) {
-          const ownerRes = await fetch("/api/admin/gym-owner", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              gym_id: gymId,
-              name: ownerName.trim(),
-              phone: ownerPhone.trim(),
-              password: ownerPassword.trim() || undefined,
-            }),
-          });
-          const ownerData = await ownerRes.json();
-          if (!ownerRes.ok) {
-            setError(`Owner: ${ownerData.error}`);
-            setLoading(false);
-            return;
-          }
+        const ownerRes = await fetch("/api/admin/gym-owner", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gym_id: savedGymId,
+            name: ownerName.trim(),
+            phone: ownerPhone.trim(),
+            password: ownerPassword.trim() || undefined,
+          }),
+        });
+        const ownerData = await ownerRes.json();
+        if (!ownerRes.ok) {
+          setError(`Эзэмшигч: ${ownerData.error ?? "алдаа"}`);
+          setLoading(false);
+          return;
         }
       } catch {
-        setError("Owner хадгалахад алдаа гарлаа");
+        setError("Эзэмшигч хадгалахад алдаа гарлаа");
         setLoading(false);
         return;
       }
@@ -344,46 +363,63 @@ export default function GymFormModal({
             <Label className="!mb-0">{t("active")}</Label>
           </div>
 
-          {/* Owner Section */}
-          {gym && (
-            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">🔑 Эзэмшигчийн мэдээлэл</p>
-              {ownerLoading ? (
-                <div className="text-xs text-gray-400 py-2">Ачаалж байна...</div>
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <Label>Эзэмшигчийн нэр</Label>
-                    <Input
-                      value={ownerName}
-                      onChange={(e) => setOwnerName(e.target.value)}
-                      placeholder="Нэр"
-                    />
-                  </div>
-                  <div>
-                    <Label>Утасны дугаар (нэвтрэх нэр)</Label>
-                    <Input
-                      value={ownerPhone}
-                      onChange={(e) => setOwnerPhone(e.target.value)}
-                      placeholder="99001122"
-                    />
-                  </div>
-                  <div>
-                    <Label>{hasExistingOwner ? "Шинэ нууц үг (хоосон бол хэвээр)" : "Нууц үг"}</Label>
-                    <Input
-                      type="password"
-                      value={ownerPassword}
-                      onChange={(e) => setOwnerPassword(e.target.value)}
-                      placeholder={hasExistingOwner ? "Солих бол бичнэ үү" : "123456"}
-                    />
-                  </div>
-                  {hasExistingOwner && (
-                    <p className="text-[11px] text-gray-400">✅ Эзэмшигч бүртгэлтэй байна</p>
-                  )}
+          <div>
+            <Label>Өдөрт зөвшөөрөх зочлогчийн дээд тоо</Label>
+            <Input
+              type="number"
+              min="1"
+              value={dailyVisitorLimit}
+              onChange={(e) => setDailyVisitorLimit(e.target.value)}
+              placeholder="Хоосон = хязгааргүй (жишээ нь 20)"
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              Хоосон бол хязгааргүй. Тоо оруулбал өдөрт тийм олон хүн &quot;Одоо очих&quot; бүртгүүлнэ (хүлээгдэж буй + зөвшөөрөгдсөн).
+            </p>
+          </div>
+
+          {/* Owner Section — шинэ болон засварлахад */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">🔑 Эзэмшигчийн мэдээлэл</p>
+            {!gym && (
+              <p className="text-[11px] text-gray-500 mb-2">
+                Эхлээд фитнесээ хадгална. Утас оруулбал эзэмшигчийг автоматаар үүсгэж холбоно.
+              </p>
+            )}
+            {gym && ownerLoading ? (
+              <div className="text-xs text-gray-400 py-2">Ачаалж байна...</div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <Label>Эзэмшигчийн нэр</Label>
+                  <Input
+                    value={ownerName}
+                    onChange={(e) => setOwnerName(e.target.value)}
+                    placeholder="Нэр"
+                  />
                 </div>
-              )}
-            </div>
-          )}
+                <div>
+                  <Label>Утасны дугаар (нэвтрэх нэр)</Label>
+                  <Input
+                    value={ownerPhone}
+                    onChange={(e) => setOwnerPhone(e.target.value)}
+                    placeholder="99001122"
+                  />
+                </div>
+                <div>
+                  <Label>{hasExistingOwner ? "Шинэ нууц үг (хоосон бол хэвээр)" : "Нууц үг"}</Label>
+                  <Input
+                    type="password"
+                    value={ownerPassword}
+                    onChange={(e) => setOwnerPassword(e.target.value)}
+                    placeholder={hasExistingOwner ? "Солих бол бичнэ үү" : "123456"}
+                  />
+                </div>
+                {hasExistingOwner && gym && (
+                  <p className="text-[11px] text-gray-400">✅ Эзэмшигч бүртгэлтэй байна</p>
+                )}
+              </div>
+            )}
+          </div>
           <div className="flex gap-2 justify-end pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
               {t("cancel")}

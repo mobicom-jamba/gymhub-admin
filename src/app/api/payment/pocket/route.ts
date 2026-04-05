@@ -8,6 +8,8 @@ import {
   generateQrImage,
 } from "@/lib/pocket";
 
+const DEFAULT_MIN_AMOUNT_MNT = 10_000;
+
 /**
  * POST /api/payment/pocket — Create a Pocket Payment Gateway invoice
  * Returns QR code image (base64), deeplink, and invoice details for polling.
@@ -32,9 +34,29 @@ export async function POST(request: Request) {
       user_id: string;
     };
 
-    if (!booking_id || !amount || !user_id) {
+    if (!booking_id || amount == null || !user_id) {
       return NextResponse.json(
         { error: "booking_id, amount, user_id шаардлагатай" },
+        { status: 400 },
+      );
+    }
+
+    const minAmount = Number(process.env.POCKET_MIN_AMOUNT_MNT);
+    const floorMnt = Number.isFinite(minAmount) && minAmount > 0
+      ? Math.floor(minAmount)
+      : DEFAULT_MIN_AMOUNT_MNT;
+    const amountMnt = Math.round(Number(amount));
+    if (!Number.isFinite(amountMnt) || amountMnt < 1) {
+      return NextResponse.json(
+        { error: "amount тоо байх ёстой" },
+        { status: 400 },
+      );
+    }
+    if (amountMnt < floorMnt) {
+      return NextResponse.json(
+        {
+          error: `Pocket нэхэмжлэлийн доод дүн ${floorMnt.toLocaleString("mn-MN")}₮ байна.`,
+        },
         { status: 400 },
       );
     }
@@ -56,7 +78,10 @@ export async function POST(request: Request) {
     const maxAttempts = 4;
 
     // Webhook must resolve the real booking id when Pocket orderNumber is truncated or uniquified.
-    const infoPayload = `${description ?? `GymHub - ${booking_id}`} [GHBID:${booking_id}]`;
+    // Pocket validates `info` content; avoid special characters like `[` `]` and keep it short.
+    const ghidClean = booking_id.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40);
+    const baseInfo = description ?? `GymHub - ${booking_id}`;
+    const infoPayload = `${baseInfo} GHBID:${ghidClean}`.slice(0, 120);
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const orderNumber =
@@ -68,7 +93,7 @@ export async function POST(request: Request) {
 
       try {
         pocketRes = await createInvoice({
-          amount,
+          amount: amountMnt,
           orderNumber,
           info: infoPayload,
           invoiceType: "ZERO",
@@ -105,7 +130,7 @@ export async function POST(request: Request) {
       await safeUpdateBookingById(supabase, booking_id, {
         payment_channel: "pocket",
         payment_status: "pending",
-        amount,
+        amount: amountMnt,
       });
     }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { safeUpdateBookingById } from "../../_lib/bookings";
+import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 
 /**
  * POST /api/payment/pocket/webhook — Receive Pocket payment webhook notifications
@@ -45,7 +46,9 @@ export async function POST(request: Request) {
     const paid = invoiceState === 20;
     const fromInfo =
       typeof info === "string"
-        ? info.match(/\[GHBID:([^\]]+)\]/)?.[1]?.trim()
+        ? // Expected format from POST /api/payment/pocket:
+          // "... GHBID:<alnum-hyphen>"
+          info.match(/\bGHBID:([a-zA-Z0-9-]{6,80})\b/)?.[1]?.trim()
         : undefined;
     const bookingId = fromInfo || orderNumber;
 
@@ -129,6 +132,14 @@ export async function POST(request: Request) {
                 membership_expires_at: expiresAt.toISOString(),
               })
               .eq("id", userId);
+
+            const gross =
+              typeof amount === "number" && amount > 0 ? amount : null;
+            await recordSalesCommissionForPaidMembership(supabase, {
+              buyerUserId: userId,
+              bookingId,
+              grossAmountFallback: gross,
+            });
 
             console.log(`Pocket webhook: membership activated for user ${userId}, tier=${tier}`);
           }

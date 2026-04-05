@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../../_lib/bookings";
+import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 import { isPocketConfigured, checkByOrderNumber, checkByInvoiceId } from "@/lib/pocket";
 
 /**
@@ -109,6 +110,13 @@ export async function POST(request: Request) {
                 membership_expires_at: expiresAt.toISOString(),
               })
               .eq("id", user_id);
+
+            const amt = typeof status.amount === "number" && status.amount > 0 ? status.amount : null;
+            await recordSalesCommissionForPaidMembership(supabase, {
+              buyerUserId: user_id,
+              bookingId: effectiveBookingId,
+              grossAmountFallback: amt,
+            });
           } catch (e) {
             console.error("Pocket membership activation failed:", e);
           }

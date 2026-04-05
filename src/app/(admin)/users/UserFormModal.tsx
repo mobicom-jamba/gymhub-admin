@@ -556,6 +556,19 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <p className="mt-1 text-[10px] text-gray-400">Дээрх нэвтрэх хэсэгт оруулсан дугаараар автоматаар бөглөнө.</p>
                   )}
                 </div>
+                <div className="col-span-2">
+                  <Label>Системийн эрх</Label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    className={inp}
+                  >
+                    <option value="user">Хэрэглэгч</option>
+                    <option value="gym_owner">Фитнес эзэмшигч</option>
+                    <option value="sales">Борлуулалт</option>
+                    <option value="admin">Админ</option>
+                  </select>
+                </div>
               </div>
 
               {/* Org searchable combobox */}

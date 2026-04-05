@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import { mergeTodayVisitorCounts } from "@/lib/merge-gym-today-visitors";
 
 /** GET /api/gyms/:id — single gym details for the client app */
 export async function GET(
@@ -16,7 +17,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("gyms")
       .select(
-        "id, name, description, address, lat, lng, image_url, opening_hours, amenities, is_active, created_at"
+        "id, name, description, address, lat, lng, image_url, opening_hours, amenities, is_active, created_at, daily_visitor_limit"
       )
       .eq("id", id)
       .limit(1)
@@ -29,7 +30,9 @@ export async function GET(
       return NextResponse.json({ error: "Gym not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ gym: data });
+    const [withCounts] = await mergeTodayVisitorCounts(supabase, [data]);
+
+    return NextResponse.json({ gym: withCounts });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

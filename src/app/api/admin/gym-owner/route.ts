@@ -1,5 +1,23 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase";
+
+async function findUserByEmail(
+  supabase: SupabaseClient,
+  email: string,
+): Promise<{ id: string } | null> {
+  const target = email.toLowerCase();
+  let page = 1;
+  const perPage = 1000;
+  for (;;) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error) return null;
+    const u = data.users.find((x) => x.email?.toLowerCase() === target);
+    if (u) return { id: u.id };
+    if (data.users.length < perPage) return null;
+    page += 1;
+  }
+}
 
 /**
  * GET /api/admin/gym-owner?gym_id=xxx
@@ -77,7 +95,12 @@ export async function POST(request: Request) {
     }
 
     const supabase = createAdminClient();
-    const virtualEmail = `${phone.replace(/\D/g, "")}@gymhub.mn`;
+    const digits = phone.replace(/\D/g, "");
+    const virtualEmail = `${digits}@gymhub.mn`;
+    const meta = {
+      full_name: name?.trim() || null,
+      phone: digits,
+    };
 
     // Check if there's already an owner for this gym
     const { data: existingStaff } = await supabase
@@ -91,15 +114,13 @@ export async function POST(request: Request) {
     let userId: string;
 
     if (existingStaff) {
-      // Update existing owner
       userId = existingStaff.user_id;
 
-      // Update auth user
+      // Зөвхөн имэйл + metadata + нууц үг (утасны SMS auth идэвхгүй үед phone талбар алдаа өгдөг)
       const updatePayload: Record<string, unknown> = {
         email: virtualEmail,
         email_confirm: true,
-        phone: phone.replace(/\D/g, ""),
-        phone_confirm: true,
+        user_metadata: meta,
       };
       if (password?.trim()) {
         updatePayload.password = password.trim();
@@ -109,47 +130,63 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Auth update: ${authErr.message}` }, { status: 500 });
       }
 
-      // Update profile
-      await supabase
-        .from("profiles")
-        .update({ full_name: name || null, phone: phone.replace(/\D/g, ""), role: "gym_owner" })
-        .eq("id", userId);
-
+      const { error: profileErr } = await supabase.from("profiles").upsert(
+        {
+          id: userId,
+          full_name: name?.trim() || null,
+          phone: digits,
+          role: "gym_owner",
+        },
+        { onConflict: "id" },
+      );
+      if (profileErr) {
+        return NextResponse.json({ error: `Profile: ${profileErr.message}` }, { status: 500 });
+      }
     } else {
-      // Create new owner
       const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
         email: virtualEmail,
-        phone: phone.replace(/\D/g, ""),
-        password: password || "123456",
+        password: password?.trim() || "123456",
         email_confirm: true,
-        phone_confirm: true,
+        user_metadata: meta,
       });
 
       if (authErr) {
-        // Maybe user exists with that email
-        const { data: { users } } = await supabase.auth.admin.listUsers();
-        const existing = users?.find((u) => u.email === virtualEmail);
+        const existing = await findUserByEmail(supabase, virtualEmail);
         if (existing) {
           userId = existing.id;
-          if (password?.trim()) {
-            await supabase.auth.admin.updateUserById(userId, { password: password.trim() });
+          const up: Record<string, unknown> = {
+            email: virtualEmail,
+            email_confirm: true,
+            user_metadata: meta,
+          };
+          if (password?.trim()) up.password = password.trim();
+          const { error: updErr } = await supabase.auth.admin.updateUserById(userId, up);
+          if (updErr) {
+            return NextResponse.json({ error: `Auth link: ${updErr.message}` }, { status: 500 });
           }
         } else {
           return NextResponse.json({ error: `Auth create: ${authErr.message}` }, { status: 500 });
         }
+      } else if (!authData.user?.id) {
+        return NextResponse.json({ error: "Auth create: хэрэглэгчийн id олдсонгүй" }, { status: 500 });
       } else {
         userId = authData.user.id;
       }
 
-      // Set profile
-      await supabase
-        .from("profiles")
-        .upsert({ id: userId, full_name: name || null, phone: phone.replace(/\D/g, ""), role: "gym_owner" }, { onConflict: "id" });
+      const { error: profileErr } = await supabase.from("profiles").upsert(
+        { id: userId, full_name: name?.trim() || null, phone: digits, role: "gym_owner" },
+        { onConflict: "id" },
+      );
+      if (profileErr) {
+        return NextResponse.json({ error: `Profile: ${profileErr.message}` }, { status: 500 });
+      }
 
-      // Link to gym
-      await supabase
+      const { error: staffErr } = await supabase
         .from("gym_staff")
         .upsert({ user_id: userId, gym_id, role: "owner" }, { onConflict: "user_id,gym_id" });
+      if (staffErr) {
+        return NextResponse.json({ error: `gym_staff: ${staffErr.message}` }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ success: true, user_id: userId });

@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import {
+  countGymVisitorsToday,
+  getTodayStartUTC8,
+  gymHasDailyCapacityLeft,
+} from "@/lib/gym-daily-capacity";
 
 /**
  * GET /api/checkin?user_id=xxx — Check if user already checked in today
- * POST /api/checkin — Perform check-in with daily limit (1 per day)
+ * POST /api/checkin — Perform check-in (1 user visit per day + optional per-gym daily cap)
  */
 
 export async function GET(request: Request) {
@@ -83,6 +88,33 @@ export async function POST(request: Request) {
       );
     }
 
+    const { data: gymRow, error: gymErr } = await supabase
+      .from("gyms")
+      .select("daily_visitor_limit")
+      .eq("id", gym_id)
+      .maybeSingle();
+
+    if (gymErr) {
+      return NextResponse.json({ error: gymErr.message }, { status: 500 });
+    }
+
+    const cap = gymRow?.daily_visitor_limit;
+    if (cap != null && cap > 0) {
+      const used = await countGymVisitorsToday(supabase, gym_id, todayStart);
+      if (!gymHasDailyCapacityLeft(cap, used)) {
+        return NextResponse.json(
+          {
+            error:
+              "Энэ фитнес өнөөдрийн зочлогчийн тоо дүүрсэн байна. Маргааш эсвэл өөр өдөр дахин оролдоно уу.",
+            gym_at_capacity: true,
+            daily_visitor_limit: cap,
+            today_visitors: used,
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     // Perform check-in
     const { data: visit, error: insertErr } = await supabase
       .from("gym_visits")
@@ -110,26 +142,4 @@ export async function POST(request: Request) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
-}
-
-/** Get today's start time in UTC+8 (Mongolia), returned as ISO string */
-function getTodayStartUTC8(): string {
-  const now = new Date();
-  // Mongolia is UTC+8
-  const mongoliaOffset = 8 * 60; // minutes
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-  const mongoliaMs = utcMs + mongoliaOffset * 60000;
-  const mongoliaDate = new Date(mongoliaMs);
-
-  // Start of today in Mongolia
-  const startOfDay = new Date(
-    mongoliaDate.getFullYear(),
-    mongoliaDate.getMonth(),
-    mongoliaDate.getDate(),
-    0, 0, 0, 0
-  );
-
-  // Convert back to UTC
-  const startUtcMs = startOfDay.getTime() - mongoliaOffset * 60000;
-  return new Date(startUtcMs).toISOString();
 }

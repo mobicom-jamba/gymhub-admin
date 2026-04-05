@@ -9,5 +9,7 @@ export type Gym = {
   opening_hours?: unknown;
   amenities?: string[] | null;
   is_active?: boolean | null;
+  /** Max check-ins per local day (UTC+8); null = unlimited */
+  daily_visitor_limit?: number | null;
   created_at?: string;
 };

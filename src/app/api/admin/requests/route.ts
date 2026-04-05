@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import { verifyBearerUser, verifyGymStaffOrAdmin } from "@/lib/verify-gym-access";
 
 /**
  * GET /api/admin/requests?gym_id=xxx&status=pending&date=today
- * List gym visit requests (for gym owners or admin)
+ * List gym visit requests (for gym owners or admin). JWT шаардлагатай.
  */
 export async function GET(request: Request) {
   try {
@@ -11,6 +12,17 @@ export async function GET(request: Request) {
     const gymId = searchParams.get("gym_id");
     const status = searchParams.get("status"); // pending, approved, rejected
     const date = searchParams.get("date"); // today, week, all
+
+    if (gymId) {
+      const access = await verifyGymStaffOrAdmin(request, gymId);
+      if (!access.ok) return access.response;
+    } else {
+      const auth = await verifyBearerUser(request);
+      if (!auth.ok) return auth.response;
+      if (!auth.isAdmin) {
+        return NextResponse.json({ error: "gym_id шаардлагатай" }, { status: 400 });
+      }
+    }
 
     const supabase = createAdminClient();
 
@@ -46,7 +58,6 @@ export async function GET(request: Request) {
     let authUsers: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
 
     if (userIds.length > 0) {
-      // Get profiles
       const { data: profileData } = await supabase
         .from("profiles")
         .select("id, full_name, phone, email")
@@ -55,35 +66,33 @@ export async function GET(request: Request) {
         profiles = Object.fromEntries(profileData.map((p) => [p.id, p]));
       }
 
-      // Fallback: get auth.users for users with missing profile data
-      const missingIds = userIds.filter((id) => {
+      // Per-user auth lookup: listUsers(first page) misses most users; getUserById is reliable.
+      const needAuthIds = userIds.filter((id) => {
         const p = profiles[id];
-        return !p || (!p.full_name && !p.phone && !p.email);
+        return !p?.full_name?.trim() || !p?.phone?.trim();
       });
-      if (missingIds.length > 0) {
-        try {
-          const { data: { users } } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-          if (users) {
-            for (const u of users) {
-              if (missingIds.includes(u.id)) {
-                authUsers[u.id] = {
-                  email: u.email,
-                  phone: u.phone,
-                  user_metadata: u.user_metadata as Record<string, unknown>,
-                };
-              }
-            }
-          }
-        } catch { /* ignore auth fallback errors */ }
+      if (needAuthIds.length > 0) {
+        authUsers = await fetchAuthUsersByIds(supabase, needAuthIds);
       }
     }
 
     const enriched = (data ?? []).map((v) => {
       const p = profiles[v.user_id];
       const a = authUsers[v.user_id];
-      const name = p?.full_name || (a?.user_metadata?.full_name as string) || null;
-      const phone = p?.phone || a?.phone || (a?.email?.endsWith("@gymhub.mn") ? a.email.replace("@gymhub.mn", "") : null) || null;
-      const email = p?.email || (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) || null;
+      const name =
+        p?.full_name?.trim() ||
+        pickDisplayNameFromMeta(a?.user_metadata) ||
+        null;
+      const phone =
+        p?.phone?.trim() ||
+        (typeof a?.phone === "string" && a.phone.trim()) ||
+        pickPhoneFromMeta(a?.user_metadata) ||
+        phoneFromVirtualEmail(a?.email) ||
+        null;
+      const email =
+        p?.email?.trim() ||
+        (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) ||
+        null;
       return {
         ...v,
         user_name: name,
@@ -106,10 +115,9 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
-    const { visit_id, action, reviewed_by } = body as {
+    const { visit_id, action } = body as {
       visit_id: string;
       action: "approve" | "reject";
-      reviewed_by?: string;
     };
 
     if (!visit_id || !action) {
@@ -121,13 +129,26 @@ export async function PATCH(request: Request) {
 
     const supabase = createAdminClient();
 
+    const { data: visitRow, error: visitErr } = await supabase
+      .from("gym_visits")
+      .select("id, gym_id")
+      .eq("id", visit_id)
+      .maybeSingle();
+
+    if (visitErr || !visitRow?.gym_id) {
+      return NextResponse.json({ error: "Олдсонгүй" }, { status: 404 });
+    }
+
+    const access = await verifyGymStaffOrAdmin(request, visitRow.gym_id);
+    if (!access.ok) return access.response;
+
     const newStatus = action === "approve" ? "approved" : "rejected";
     const { data, error } = await supabase
       .from("gym_visits")
       .update({
         status: newStatus,
         reviewed_at: new Date().toISOString(),
-        reviewed_by: reviewed_by || null,
+        reviewed_by: access.userId,
       })
       .eq("id", visit_id)
       .select()
@@ -146,6 +167,61 @@ export async function PATCH(request: Request) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+
+function pickDisplayNameFromMeta(meta?: Record<string, unknown>): string | null {
+  if (!meta) return null;
+  for (const k of ["full_name", "name", "display_name", "given_name", "nickname", "username"]) {
+    const v = meta[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+function pickPhoneFromMeta(meta?: Record<string, unknown>): string | null {
+  if (!meta) return null;
+  const v = meta.phone;
+  if (typeof v === "string" && v.trim()) {
+    const digits = v.replace(/\D/g, "");
+    if (digits.length >= 8) return digits;
+    return v.trim();
+  }
+  return null;
+}
+
+function phoneFromVirtualEmail(email: string | undefined): string | null {
+  if (!email?.endsWith("@gymhub.mn")) return null;
+  const local = email.slice(0, -"@gymhub.mn".length);
+  const digits = local.replace(/\D/g, "");
+  return digits.length >= 8 ? digits : local || null;
+}
+
+async function fetchAuthUsersByIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  ids: string[]
+): Promise<Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }>> {
+  const out: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
+  const chunkSize = 12;
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (uid) => {
+        try {
+          const { data, error } = await supabase.auth.admin.getUserById(uid);
+          if (error || !data.user) return;
+          const u = data.user;
+          out[uid] = {
+            email: u.email,
+            phone: u.phone ?? undefined,
+            user_metadata: u.user_metadata as Record<string, unknown>,
+          };
+        } catch {
+          /* skip */
+        }
+      })
+    );
+  }
+  return out;
 }
 
 function getTodayStartUTC8(): string {

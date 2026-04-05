@@ -114,6 +114,7 @@ export async function POST(request: Request) {
       const updateError = await safeUpdateBookingById(supabase, booking_id, {
         qpay_invoice_id: invoice.invoice_id,
         payment_status: "pending",
+        amount,
       });
       if (updateError) {
         return NextResponse.json(

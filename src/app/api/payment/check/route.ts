@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../_lib/bookings";
+import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 
 const QPAY_BASE = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
 const QPAY_USERNAME = process.env.QPAY_CLIENT_ID ?? process.env.QPAY_USERNAME ?? "";
@@ -132,6 +133,16 @@ export async function POST(request: Request) {
                 membership_expires_at: expiresAt.toISOString(),
               })
               .eq("id", user_id);
+
+            const paidAmt =
+              typeof result.paid_amount === "number" && result.paid_amount > 0
+                ? result.paid_amount
+                : null;
+            await recordSalesCommissionForPaidMembership(supabase, {
+              buyerUserId: user_id,
+              bookingId: booking_id,
+              grossAmountFallback: paidAmt,
+            });
           } catch (e) {
             console.error("Server-side membership activation failed:", e);
           }

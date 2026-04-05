@@ -1,17 +1,14 @@
-import { ProxyAgent, fetch as undiciFetch } from "undici";
-
 /**
- * fetch() wrapper that routes through FIXIE_URL proxy when set.
- * This gives outbound requests a static IP for API whitelist requirements (e.g. Sono).
+ * Outbound HTTP for providers that IP-whitelist merchants (e.g. Sono / Rico).
+ *
+ * Use **Vercel Static IPs** on this project (Dashboard → Settings → Connectivity → Static IPs).
+ * When enabled, Serverless Function traffic to external APIs uses Vercel’s allowlisted static egress IPs.
+ *
+ * @see https://vercel.com/docs/connectivity/static-ips
  */
 export function proxyFetch(
   url: string,
-  init?: { method?: string; headers?: Record<string, string>; body?: string }
+  init?: RequestInit,
 ): Promise<Response> {
-  const proxyUrl = process.env.FIXIE_URL;
-  if (proxyUrl) {
-    const dispatcher = new ProxyAgent(proxyUrl);
-    return undiciFetch(url, { ...init, dispatcher }) as unknown as Promise<Response>;
-  }
   return fetch(url, init);
 }
