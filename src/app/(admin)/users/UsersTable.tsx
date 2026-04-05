@@ -89,6 +89,7 @@ export default function UsersTable({
   onRoleChange,
   onEdit,
   onDelete,
+  onResetDailyCheckin,
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
@@ -104,6 +105,8 @@ export default function UsersTable({
   onRoleChange?: (profileId: string, newRole: string) => void;
   onEdit?: (profile: Profile) => void;
   onDelete?: (profileId: string) => void;
+  /** Гишүүдийн өнөөдрийн ирц (өдөрт 1 орох) цэвэрлэх — зөвхөн админ хэрэглээ */
+  onResetDailyCheckin?: (profile: Profile) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: () => void;
@@ -195,8 +198,8 @@ export default function UsersTable({
                 <Th col="startDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Эхлэх огноо" />}
               {(visibleColumns?.expireDate ?? true) &&
                 <Th col="expireDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Дуусах огноо" />}
-              {(onEdit || onDelete) && (
-                <TableCell isHeader className={`${hdrPlain} text-end sticky top-0 bg-white dark:bg-gray-900 w-[110px]`}>Үйлдлүүд</TableCell>
+              {(onEdit || onDelete || onResetDailyCheckin) && (
+                <TableCell isHeader className={`${hdrPlain} text-end sticky top-0 bg-white dark:bg-gray-900 min-w-[9rem]`}>Үйлдлүүд</TableCell>
               )}
             </TableRow>
           </TableHeader>
@@ -258,9 +261,21 @@ export default function UsersTable({
                   </TableCell>}
 
 
-                  {(onEdit || onDelete) && (
+                  {(onEdit || onDelete || onResetDailyCheckin) && (
                     <TableCell className={`px-4 ${py} text-end`}>
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-1">
+                        {onResetDailyCheckin && (
+                          <button
+                            type="button"
+                            onClick={() => onResetDailyCheckin(p)}
+                            className="rounded-xl p-2 text-amber-500 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-900/25 dark:text-amber-400 dark:hover:text-amber-300"
+                            title="Өнөөдрийн ирц цэвэрлэх (дахин орох)"
+                          >
+                            <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                        )}
                         {onEdit && (
                           <button onClick={() => onEdit(p)}
                             className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/[0.08] dark:hover:text-gray-200" title="Засах">

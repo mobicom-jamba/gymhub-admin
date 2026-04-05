@@ -44,6 +44,14 @@ function profileOrgName(p: Profile): string | null {
   return rel?.name ?? p.organization;
 }
 
+function profileDisplayName(p: Profile): string {
+  const full = p.full_name?.trim();
+  if (full) return full;
+  const fromParts = [p.surname, p.given_name].filter(Boolean).join(" ").trim();
+  if (fromParts) return fromParts;
+  return p.phone ?? p.id;
+}
+
 function isMembershipExpired(expiresAt: string | null): boolean {
   if (!expiresAt) return false;
   return new Date(expiresAt) < new Date();
@@ -97,6 +105,8 @@ export default function UsersSection() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
   const [confirmBulk, setConfirmBulk] = useState(false);
+  const [confirmResetCheckin, setConfirmResetCheckin] = useState<{ id: string; name: string } | null>(null);
+  const [resettingCheckin, setResettingCheckin] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
     member: true, phone: true, organization: true, tier: true, startDate: true, expireDate: true,
@@ -347,6 +357,44 @@ export default function UsersSection() {
     if (!res.ok) { toast.show(toMnErrorMessage((data && (data.message || data.error)) ?? ""), "error"); silentRefresh(); }
   };
 
+  const handleResetCheckinConfirm = async () => {
+    if (!confirmResetCheckin) return;
+    const { id, name } = confirmResetCheckin;
+    setResettingCheckin(true);
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.show("Нэвтэрнэ үү.", "error");
+        return;
+      }
+      const res = await fetch("/api/admin/reset-user-daily-checkin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ user_id: id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; deleted?: number };
+      if (!res.ok) {
+        toast.show(toMnErrorMessage(data.error ?? ""), "error");
+        return;
+      }
+      const n = data.deleted ?? 0;
+      if (n > 0) {
+        toast.show(`${n} ирцийн бүртгэл устгагдлаа. «${name}» өнөөдөр дахин орох боломжтой.`);
+      } else {
+        toast.show("Өнөөдрийн ирцийн бүртгэл байсангүй.");
+      }
+    } finally {
+      setResettingCheckin(false);
+      setConfirmResetCheckin(null);
+    }
+  };
+
   const handleBulkDeleteConfirmed = async () => {
     if (selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
@@ -593,6 +641,9 @@ export default function UsersSection() {
           onRoleChange={handleRoleChange}
           onEdit={(p) => setFormProfile(p)}
           onDelete={handleDelete}
+          onResetDailyCheckin={
+            tab === "user" ? (p) => setConfirmResetCheckin({ id: p.id, name: profileDisplayName(p) }) : undefined
+          }
           selectedIds={selectedIds}
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
@@ -684,6 +735,20 @@ export default function UsersSection() {
         onConfirm={handleBulkDeleteConfirmed}
         onCancel={() => setConfirmBulk(false)}
         loading={bulkDeleting}
+      />
+
+      <ConfirmModal
+        isOpen={confirmResetCheckin !== null}
+        title="Өнөөдрийн ирц цэвэрлэх үү?"
+        message={
+          confirmResetCheckin
+            ? `«${confirmResetCheckin.name}» хэрэглэгчийн өнөөдрийн ирцийн бүртгэлүүдийг бүрэн устгана. Устгасны дараа тухайн өдөрт фитнесэд дахин нэвтрэх боломжтой болно.`
+            : undefined
+        }
+        confirmLabel={resettingCheckin ? "Түр хүлээнэ үү..." : "Цэвэрлэх"}
+        onConfirm={handleResetCheckinConfirm}
+        onCancel={() => !resettingCheckin && setConfirmResetCheckin(null)}
+        loading={resettingCheckin}
       />
     </>
   );
