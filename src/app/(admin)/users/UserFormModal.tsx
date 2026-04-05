@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useId } from "react";
+import React, { useState, useEffect, useRef, useId, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Modal } from "@/components/ui/modal";
 import type { OrganizationOption, Profile } from "./UsersSection";
@@ -8,6 +8,7 @@ import { parseApiError } from "@/lib/api-response";
 import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import OrgFormModal from "../organizations/OrgFormModal";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
+import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
 
 type Props = {
   isOpen: boolean;
@@ -416,6 +417,16 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const displayName = [ovog, ner].filter(Boolean).join(" ");
   const avatarColor = displayName ? getColor(displayName) : "#8b5cf6";
 
+  const planVisual = useMemo(
+    () =>
+      getMembershipPlanVisual({
+        membership_tier: tier,
+        membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+        membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+      }),
+    [tier, startedAt, expiresAt],
+  );
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="max-w-[480px] m-4" showCloseButton={false}>
       <div className="flex max-h-[92vh] flex-col overflow-hidden rounded-3xl">
@@ -438,17 +449,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             <p className="text-xs text-gray-400">
               {isCreate
                 ? "Шинэ хэрэглэгчийн бүртгэл болон профайл үүсгэнэ."
-                : `${organization || "Байгууллагагүй"} · ${tier === "premium" ? "Premium" : "Early"}`
-              }
+                : `${organization || "Байгууллагагүй"} · ${planVisual.shortLabel}`}
             </p>
           </div>
-          {/* Tier pill */}
-          <div className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-            tier === "premium"
-              ? "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
-              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
-          }`}>
-            {tier === "premium" ? "Premium" : "Early"}
+          {/* Tier / хугацааны төрөл */}
+          <div
+            title={planVisual.title}
+            className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${membershipPlanBadgeClass(planVisual.variant)}`}
+          >
+            {planVisual.shortLabel === "—" ? (tier === "premium" ? "Premium" : "Early") : planVisual.shortLabel}
           </div>
           {/* Close */}
           <button
@@ -708,6 +717,12 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                   </button>
                 ))}
               </div>
+              <p className="mb-3 text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
+                Жагсаалт дээр ялгах:{" "}
+                <span className="font-semibold text-teal-600 dark:text-teal-400">Early · 1 сар</span> — эхний сарын төлбөр;{" "}
+                <span className="font-semibold text-blue-600 dark:text-blue-400">Early · 1 жил</span> — бүтэн жилийн early;{" "}
+                <span className="font-semibold text-violet-600 dark:text-violet-400">Premium · 1 жил</span> — premium жилийн багц. Эхлэх/дуусах огноогоор автоматаар тооцогдоно.
+              </p>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

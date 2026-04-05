@@ -38,7 +38,15 @@ type LendingAggRow = {
 
 function isLendingPaidStatus(status: string): boolean {
   const s = status.trim().toLowerCase();
-  return s === "paid" || s === "completed" || s === "success" || s === "succeeded";
+  return (
+    s === "paid" ||
+    s === "completed" ||
+    s === "success" ||
+    s === "succeeded" ||
+    s === "settled" ||
+    s === "approved" ||
+    s === "done"
+  );
 }
 
 function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "gift" | "other" {
@@ -264,26 +272,37 @@ export async function GET() {
 
     let paymentsByMonth: MonthPoint[];
     let channelCounts: ReturnType<typeof emptyPaymentChannels>;
+    let paymentsMonthsSource: "bookings" | "lending" | "membership_starts";
 
     if (useBookingsPayments) {
       [paymentsByMonth, channelCounts] = await Promise.all([
         paginatePaidBookingsByMonth(supabase, PAGE),
         aggregatePaymentChannels(supabase),
       ]);
+      paymentsMonthsSource = "bookings";
     } else {
       const lending = await aggregateFromLendingRecords(supabase);
       if (lending) {
         paymentsByMonth = lending.byMonth;
         channelCounts = lending.channels;
+        paymentsMonthsSource = "lending";
       } else {
         paymentsByMonth = [];
         channelCounts = emptyPaymentChannels();
+        paymentsMonthsSource = "bookings";
       }
+    }
+
+    /** Захиалгын төлбөрийн багц (bookings/lending) сарын мөр байхгүй бол гишүүнчлэл эхэлсэн сараар илэрхийлнэ. */
+    if (paymentsByMonth.length === 0 && usersByMonth.length > 0) {
+      paymentsByMonth = usersByMonth.map((x) => ({ month: x.month, count: x.count }));
+      paymentsMonthsSource = "membership_starts";
     }
 
     return NextResponse.json({
       usersByMonth,
       paymentsByMonth,
+      paymentsMonthsSource,
       paymentChannels: {
         qpay: channelCounts.qpay,
         sono: channelCounts.sono,

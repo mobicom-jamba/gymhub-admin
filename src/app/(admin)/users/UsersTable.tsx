@@ -15,6 +15,7 @@ import type { UsersSortColumn } from "./users-sort";
 import TableSkeleton from "@/components/ui/TableSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
+import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
 
 const roleLabels: Record<string, string> = {
   user: "Гишүүн",
@@ -194,7 +195,7 @@ export default function UsersTable({
               {(visibleColumns?.organization ?? true) &&
                 <Th col="organization" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[180px]`} label="Байгууллага" />}
               {(visibleColumns?.tier ?? true) &&
-                <Th col="tier" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[120px]`} label="Тариф" />}
+                <Th col="tier" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} min-w-[132px] max-w-[180px]`} label="Тариф · төрөл" />}
               {(visibleColumns?.startDate ?? true) &&
                 <Th col="startDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Эхлэх огноо" />}
               {(visibleColumns?.expireDate ?? true) &&
@@ -239,11 +240,24 @@ export default function UsersTable({
                   </TableCell>}
 
                   {(visibleColumns?.tier ?? true) && <TableCell className={`px-4 ${py}`}>
-                    {p.membership_tier === "premium" ? (
-                      <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">Premium</span>
-                    ) : p.membership_tier === "early" ? (
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">Early</span>
-                    ) : <span className="text-gray-400 text-xs">—</span>}
+                    {(() => {
+                      const plan = getMembershipPlanVisual({
+                        membership_tier: p.membership_tier,
+                        membership_started_at: p.membership_started_at,
+                        membership_expires_at: p.membership_expires_at,
+                      });
+                      if (plan.shortLabel === "—") {
+                        return <span className="text-gray-400 text-xs">—</span>;
+                      }
+                      return (
+                        <span
+                          title={plan.title}
+                          className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold leading-tight ${membershipPlanBadgeClass(plan.variant)}`}
+                        >
+                          <span className="truncate">{plan.shortLabel}</span>
+                        </span>
+                      );
+                    })()}
                   </TableCell>}
 
                   {(visibleColumns?.startDate ?? true) && <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>

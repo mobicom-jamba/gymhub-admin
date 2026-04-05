@@ -594,7 +594,7 @@ export default function UsersSection() {
                 { key: "member", label: "Гишүүн" },
                 { key: "phone", label: "Утас" },
                 { key: "organization", label: "Байгууллага" },
-                { key: "tier", label: "Тариф" },
+                { key: "tier", label: "Тариф · төрөл" },
                 { key: "startDate", label: "Эхлэх огноо" },
                 { key: "expireDate", label: "Дуусах огноо" },
               ]}

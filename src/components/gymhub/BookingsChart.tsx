@@ -7,7 +7,14 @@ const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 type ChartData = { date: string; count: number }[];
 
-export default function BookingsChart({ data }: { data: ChartData }) {
+export default function BookingsChart({
+  data,
+  seriesName = "Төлбөр",
+}: {
+  data: ChartData;
+  /** Сарын баганы нэр (жиш. орлуулгын үед «Гишүүнчлэл эхэлсэн») */
+  seriesName?: string;
+}) {
   const options: ApexCharts.ApexOptions = {
     chart: { type: "bar", toolbar: { show: false } },
     plotOptions: {
@@ -21,7 +28,7 @@ export default function BookingsChart({ data }: { data: ChartData }) {
     yaxis: { labels: { formatter: (v) => String(Math.round(v)) } },
     colors: ["#6366f1"],
   };
-  const series = [{ name: "Төлбөр", data: data.map((d) => d.count) }];
+  const series = [{ name: seriesName, data: data.map((d) => d.count) }];
 
   if (data.length === 0) {
     return (

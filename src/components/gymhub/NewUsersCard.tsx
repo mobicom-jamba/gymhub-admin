@@ -2,6 +2,7 @@
 
 import React from "react";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
+import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
 
 type UserRow = {
   id: string;
@@ -10,6 +11,9 @@ type UserRow = {
   company?: string | null;
   created_at: string;
   membership_status?: string | null;
+  membership_tier?: string | null;
+  membership_started_at?: string | null;
+  membership_expires_at?: string | null;
 };
 
 function paymentBadge(status: string | null | undefined) {
@@ -36,6 +40,11 @@ export default function NewUsersCard({ users, onEdit }: { users: UserRow[]; onEd
     <div className="space-y-1">
       {users.map((u) => {
         const pay = paymentBadge(u.membership_status);
+        const plan = getMembershipPlanVisual({
+          membership_tier: u.membership_tier ?? null,
+          membership_started_at: u.membership_started_at ?? null,
+          membership_expires_at: u.membership_expires_at ?? null,
+        });
         return (
         <div
           key={u.id}
@@ -54,6 +63,14 @@ export default function NewUsersCard({ users, onEdit }: { users: UserRow[]; onEd
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${pay.className}`}>
                 {pay.label}
               </span>
+              {plan.shortLabel !== "—" && (
+                <span
+                  title={plan.title}
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${membershipPlanBadgeClass(plan.variant)}`}
+                >
+                  {plan.shortLabel}
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
               {u.company ?? "—"} · {new Date(u.created_at).toLocaleDateString("mn-MN")}

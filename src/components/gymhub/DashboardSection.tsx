@@ -22,9 +22,13 @@ type UserRow = {
   company?: string | null;
   created_at: string;
   membership_status?: string | null;
+  membership_tier?: string | null;
+  membership_started_at?: string | null;
+  membership_expires_at?: string | null;
 };
 type GymRow = { id: string; name: string | null; address: string | null; phone?: string | null; image_url?: string | null; created_at?: string };
 type PaymentChannels = { qpay: number; sono: number; pocket: number; gift: number; other?: number };
+type PaymentsMonthsSource = "bookings" | "lending" | "membership_starts";
 
 export default function DashboardSection() {
   const [userCount, setUserCount] = useState(0);
@@ -36,6 +40,7 @@ export default function DashboardSection() {
   const [paymentsByMonth, setPaymentsByMonth] = useState<MonthPoint[]>([]);
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannels>({ qpay: 0, sono: 0, pocket: 0, gift: 0 });
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [paymentsMonthsSource, setPaymentsMonthsSource] = useState<PaymentsMonthsSource>("bookings");
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
   const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
@@ -58,7 +63,7 @@ export default function DashboardSection() {
       supabase.from("organizations").select("id", { count: "exact", head: true }),
       supabase
         .from("profiles")
-        .select("id, full_name, phone, organization, membership_status, created_at")
+        .select("id, full_name, phone, organization, membership_status, membership_tier, membership_started_at, membership_expires_at, created_at")
         .order("created_at", { ascending: false })
         .limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
@@ -97,6 +102,9 @@ export default function DashboardSection() {
           phone: string | null;
           organization?: string | null;
           membership_status?: string | null;
+          membership_tier?: string | null;
+          membership_started_at?: string | null;
+          membership_expires_at?: string | null;
           created_at: string;
         }) => ({
           id: r.id,
@@ -104,6 +112,9 @@ export default function DashboardSection() {
           phone: r.phone,
           company: r.organization ?? null,
           membership_status: r.membership_status,
+          membership_tier: r.membership_tier ?? null,
+          membership_started_at: r.membership_started_at ?? null,
+          membership_expires_at: r.membership_expires_at ?? null,
           created_at: r.created_at,
         }),
       ),
@@ -124,6 +135,7 @@ export default function DashboardSection() {
       const body = (await res.json().catch(() => ({}))) as {
         usersByMonth?: MonthPoint[];
         paymentsByMonth?: MonthPoint[];
+        paymentsMonthsSource?: PaymentsMonthsSource;
         paymentChannels?: PaymentChannels;
         error?: string;
       };
@@ -144,6 +156,15 @@ export default function DashboardSection() {
       }
       if (Array.isArray(body.usersByMonth)) setUsersByMonth(body.usersByMonth);
       if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
+      if (
+        body.paymentsMonthsSource === "bookings" ||
+        body.paymentsMonthsSource === "lending" ||
+        body.paymentsMonthsSource === "membership_starts"
+      ) {
+        setPaymentsMonthsSource(body.paymentsMonthsSource);
+      } else {
+        setPaymentsMonthsSource("bookings");
+      }
       if (body.paymentChannels) setPaymentChannels(body.paymentChannels);
     } catch (e) {
       setAnalyticsError("Сүлжээний алдаа. Дахин оролдоно уу.");
@@ -234,8 +255,22 @@ export default function DashboardSection() {
       </div>
 
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Төлбөр төлсөн огноо" subtitle="Төлбөр баталгаажсан сараар (захиалга)">
-          <BookingsChart data={paymentsByMonth.map((d) => ({ date: d.month, count: d.count }))} />
+        <ComponentCard
+          title="Төлбөр төлсөн огноо"
+          subtitle={
+            paymentsMonthsSource === "membership_starts"
+              ? "Захиалгын төлбөрийн багц олдсонгүй — гишүүнчлэл эхэлсэн сараар (илэрхийлэл)"
+              : paymentsMonthsSource === "lending"
+                ? "Lending бүртгэл — төлөгдсөн сараар"
+                : "Төлбөр баталгаажсан сараар (захиалга)"
+          }
+        >
+          <BookingsChart
+            data={paymentsByMonth.map((d) => ({ date: d.month, count: d.count }))}
+            seriesName={
+              paymentsMonthsSource === "membership_starts" ? "Гишүүнчлэл эхэлсэн" : "Төлбөр"
+            }
+          />
           <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
             {paymentsByMonth.slice(-3).reverse().map((m) => (
               <div key={m.month} className="flex items-center justify-between text-sm">
