@@ -90,11 +90,19 @@ function tierRank(t: string | null): number {
 
 const PAGE_SIZES = [25, 50, 100, 500];
 
+type UsersRoleTab = "user" | "admin" | "sales";
+
+function usersTabLabel(tab: UsersRoleTab): string {
+  if (tab === "user") return "Гишүүд";
+  if (tab === "admin") return "Админ";
+  return "Борлуулалт";
+}
+
 export default function UsersSection() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"user" | "admin">("user");
+  const [tab, setTab] = useState<UsersRoleTab>("user");
   const [search, setSearch] = useState("");
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -229,7 +237,7 @@ export default function UsersSection() {
     if (q) setSearch(q);
     if (status) setStatusFilter(status);
     if (org) setOrgFilter(org);
-    if (role === "user" || role === "admin") setTab(role);
+    if (role === "user" || role === "admin" || role === "sales") setTab(role);
     initializedFromQuery.current = true;
   }, [searchParams]);
 
@@ -452,6 +460,7 @@ export default function UsersSection() {
 
   const adminCount = profiles.filter(p => (p.role ?? "user") === "admin").length;
   const userCount  = profiles.filter(p => (p.role ?? "user") === "user").length;
+  const salesCount = profiles.filter(p => (p.role ?? "user") === "sales").length;
   const filterChips = [
     search ? { key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") } : null,
     statusFilter
@@ -474,9 +483,9 @@ export default function UsersSection() {
     <>
       {/* ── Role Tabs ── */}
       <div className="mb-4 flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 dark:border-white/[0.08] dark:bg-gray-900" style={{ width: "fit-content" }}>
-        {(["user", "admin"] as const).map((r) => {
-          const label = r === "user" ? "Гишүүд" : "Админ";
-          const count = r === "user" ? userCount : adminCount;
+        {(["user", "admin", "sales"] as const).map((r) => {
+          const label = usersTabLabel(r);
+          const count = r === "user" ? userCount : r === "admin" ? adminCount : salesCount;
           const active = tab === r;
           return (
             <button
@@ -500,7 +509,7 @@ export default function UsersSection() {
       </div>
 
       <ComponentCard
-        title={`${tab === "user" ? "Гишүүд" : "Админ"} — ${sortedFilteredProfiles.length.toLocaleString()}`}
+        title={`${usersTabLabel(tab)} — ${sortedFilteredProfiles.length.toLocaleString()}`}
       >
         {/* ── Filters row ── */}
         <div className="mb-4 space-y-2">

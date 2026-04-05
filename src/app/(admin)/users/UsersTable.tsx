@@ -19,9 +19,10 @@ import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 const roleLabels: Record<string, string> = {
   user: "Гишүүн",
   admin: "Админ",
+  sales: "Борлуулалт",
 };
 
-const ROLES = ["user", "admin"] as const;
+const ROLES = ["user", "admin", "sales"] as const;
 
 function isExpired(expiresAt: string | null) {
   if (!expiresAt) return false;

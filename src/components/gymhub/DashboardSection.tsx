@@ -8,6 +8,7 @@ import BookingsChart from "./BookingsChart";
 import PaymentChannelsCard from "./PaymentChannelsCard";
 import NewUsersCard from "./NewUsersCard";
 import NewGymsCard from "./NewGymsCard";
+import SalesPromosAdminCard from "./SalesPromosAdminCard";
 import ComponentCard from "../common/ComponentCard";
 import { t } from "@/lib/i18n";
 import UserFormModal from "@/app/(admin)/users/UserFormModal";
@@ -253,6 +254,10 @@ export default function DashboardSection() {
         <ComponentCard title="Шинэ фитнес" subtitle="Хамгийн сүүлд бүртгүүлсэн 10 фитнес">
           <NewGymsCard gyms={newGyms} />
         </ComponentCard>
+      </div>
+
+      <div className="col-span-12">
+        <SalesPromosAdminCard />
       </div>
     </div>
 

@@ -10,11 +10,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState } from "react";
 import { t } from "@/lib/i18n";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { isStaffRoleForAdminApp, resolveSignInEmailOrPhone } from "@/lib/admin-app-access";
 
 export default function SignInForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isChecked, setIsChecked] = useState(false);
-  const [email, setEmail] = useState("");
+  const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,8 +29,9 @@ export default function SignInForm() {
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
+    const emailForAuth = resolveSignInEmailOrPhone(loginId);
     const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: emailForAuth,
       password,
     });
     setLoading(false);
@@ -43,9 +45,9 @@ export default function SignInForm() {
         .select("role")
         .eq("id", data.user.id)
         .single();
-      if (profile?.role !== "admin") {
+      if (!isStaffRoleForAdminApp(profile?.role)) {
         await supabase.auth.signOut();
-        setError("Зөвхөн админ эрхтэй хэрэглэгчид нэвтрэх боломжтой.");
+        setError("Зөвхөн админ эсвэл борлуулалтын эрхтэй хэрэглэгчид нэвтрэх боломжтой.");
         return;
       }
       router.push(redirect);
@@ -71,7 +73,7 @@ export default function SignInForm() {
               Нэвтрэх
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Имэйл болон нууц үгээ оруулаад нэвтэрнэ үү.
+              Имэйл эсвэл утасны дугаар, мөн нууц үг оруулна уу. Утасны хувьд бүртгэлтэй 8–15 оронтой дугаар.
             </p>
           </div>
           <div>
@@ -80,7 +82,7 @@ export default function SignInForm() {
                 {(error || errorParam === "unauthorized") && (
                   <div className="p-3 rounded-lg bg-error-50 text-error-600 text-sm dark:bg-error-950 dark:text-error-400">
                     {errorParam === "unauthorized"
-                      ? "Зөвхөн админ эрхтэй хэрэглэгчид нэвтрэх боломжтой."
+                      ? "Зөвхөн админ эсвэл борлуулалтын эрхтэй хэрэглэгчид нэвтрэх боломжтой."
                       : errorParam === "auth"
                       ? "Нэвтрэх боломжгүй боллоо."
                       : error}
@@ -88,14 +90,14 @@ export default function SignInForm() {
                 )}
                 <div>
                   <Label>
-                    Имэйл <span className="text-error-500">*</span>{" "}
+                    Имэйл эсвэл утас <span className="text-error-500">*</span>{" "}
                   </Label>
                   <Input
-                    placeholder="info@gmail.com"
-                    type="email"
+                    placeholder="admin@company.com эсвэл 99112233"
+                    type="text"
                     required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={loginId}
+                    onChange={(e) => setLoginId(e.target.value)}
                   />
                 </div>
                 <div>

@@ -2,10 +2,12 @@
 
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { isStaffRoleForAdminApp } from "@/lib/admin-app-access";
 import type { User } from "@supabase/supabase-js";
 
 type AuthContextType = {
   user: User | null;
+  /** Admin эсвэл борлуулалтын эрхтэй (энэ вэб апп ашиглах эрх) */
   isAdmin: boolean | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -28,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = supabaseRef.current;
     let cancelled = false;
 
-    const checkAdminRole = async (userId: string): Promise<boolean> => {
+    const checkStaffAccess = async (userId: string): Promise<boolean> => {
       try {
         const { data: profile, error } = await supabase
           .from("profiles")
@@ -40,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error("[AuthContext] Profile query error:", error.message);
           return false;
         }
-        return profile?.role === "admin";
+        return isStaffRoleForAdminApp(profile?.role);
       } catch (err) {
         console.error("[AuthContext] Profile check failed:", err);
         return false;
@@ -51,8 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
       setUser(u);
       if (u) {
-        const admin = await checkAdminRole(u.id);
-        if (!cancelled) setIsAdmin(admin);
+        const staff = await checkStaffAccess(u.id);
+        if (!cancelled) setIsAdmin(staff);
       } else {
         setIsAdmin(false);
       }
