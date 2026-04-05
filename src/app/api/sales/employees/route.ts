@@ -18,7 +18,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const phone = String(body?.phone ?? "").replace(/\D/g, "");
     const password = String(body?.password ?? "");
-    const full_name = String(body?.full_name ?? "").trim();
+    const ovog = String(body?.ovog ?? "").trim();
+    const ner = String(body?.ner ?? "").trim();
+    const full_name =
+      [ovog, ner].filter(Boolean).join(" ").trim() || String(body?.full_name ?? "").trim();
     const organization_id = String(body?.organization_id ?? "").trim();
 
     if (phone.length < 8) {
@@ -28,7 +31,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Нууц үг хамгийн багадаа 6 тэмдэгт" }, { status: 400 });
     }
     if (!full_name) {
-      return NextResponse.json({ error: "Нэр оруулна уу" }, { status: 400 });
+      return NextResponse.json({ error: "Овог, нэр эсвэл бүтэн нэр оруулна уу" }, { status: 400 });
     }
     if (!organization_id) {
       return NextResponse.json({ error: "Байгууллага (organization_id) сонгоно уу" }, { status: 400 });
