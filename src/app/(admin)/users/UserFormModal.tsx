@@ -309,9 +309,16 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   useEffect(() => {
     if (!isOpen) return;
     if (profile) {
-      const parts = (profile.full_name ?? "").trim().split(" ");
-      setOvog(parts[0] ?? "");
-      setNer(parts.slice(1).join(" "));
+      const sn = (profile.surname ?? "").trim();
+      const gn = (profile.given_name ?? "").trim();
+      if (sn || gn) {
+        setOvog(sn);
+        setNer(gn);
+      } else {
+        const parts = (profile.full_name ?? "").trim().split(/\s+/);
+        setOvog(parts[0] ?? "");
+        setNer(parts.slice(1).join(" "));
+      }
       setPhone(profile.phone ?? "");
       setRole(profile.role ?? "user");
       setOrganizationId(profile.organization_id ?? "");
@@ -360,11 +367,14 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         const digits = phone.replace(/\D/g, "");
         if (!digits || digits.length < 8) { setFormError("8 оронтой утасны дугаар оруулна уу."); return; }
         if (!password) { setFormError("Нууц үг оруулна уу."); return; }
+        if (!ovog.trim() || !ner.trim()) { setFormError("Овог, нэр хоёуланг нь оруулна уу."); return; }
         const res = await fetch("/api/admin/users", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             phone: digits, password, full_name: fullName,
+            surname: ovog.trim(),
+            given_name: ner.trim(),
             role,
             organization_id: safeOrganizationId,
             organization: organization || null,
@@ -380,6 +390,8 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             full_name: fullName,
+            surname: ovog.trim() || null,
+            given_name: ner.trim() || null,
             phone: phone || null,
             role,
             organization_id: safeOrganizationId,

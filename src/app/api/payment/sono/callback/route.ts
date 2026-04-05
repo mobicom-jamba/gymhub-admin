@@ -23,6 +23,7 @@ async function handle(request: Request) {
 
     const updateError = await safeUpdateBookingById(supabase, bookingId, {
       payment_status: "paid",
+      payment_channel: "sono",
       paid_at: new Date().toISOString(),
     });
     if (updateError) {

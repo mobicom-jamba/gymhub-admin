@@ -23,7 +23,7 @@ type UserRow = {
   membership_status?: string | null;
 };
 type GymRow = { id: string; name: string | null; address: string | null; phone?: string | null; image_url?: string | null; created_at?: string };
-type PaymentChannels = { qpay: number; sono: number; pocket: number; gift: number };
+type PaymentChannels = { qpay: number; sono: number; pocket: number; gift: number; other?: number };
 
 export default function DashboardSection() {
   const [userCount, setUserCount] = useState(0);
@@ -115,17 +115,25 @@ export default function DashboardSection() {
   const fetchAnalytics = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/dashboard-analytics", { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn("[dashboard] dashboard-analytics failed:", res.status, await res.text().catch(() => ""));
+        return;
+      }
       const body = (await res.json()) as {
         usersByMonth?: MonthPoint[];
         paymentsByMonth?: MonthPoint[];
         paymentChannels?: PaymentChannels;
+        error?: string;
       };
+      if (body.error) {
+        console.warn("[dashboard] dashboard-analytics:", body.error);
+        return;
+      }
       if (Array.isArray(body.usersByMonth)) setUsersByMonth(body.usersByMonth);
       if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
       if (body.paymentChannels) setPaymentChannels(body.paymentChannels);
-    } catch {
-      /* keep previous values */
+    } catch (e) {
+      console.warn("[dashboard] dashboard-analytics", e);
     }
   }, []);
 
@@ -161,7 +169,7 @@ export default function DashboardSection() {
     const supabase = createBrowserSupabaseClient();
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
+      .select("id, full_name, surname, given_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
       .eq("id", id)
       .single();
     if (data) setEditProfile(data as Profile);

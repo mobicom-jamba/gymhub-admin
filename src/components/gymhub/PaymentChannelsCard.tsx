@@ -9,6 +9,7 @@ type Props = {
     sono: number;
     pocket: number;
     gift: number;
+    other?: number;
   };
 };
 
@@ -37,12 +38,20 @@ const items = [
     description: "Урамшуулал болон бэлэг",
     logo: null, // no logo — use emoji
   },
+  {
+    key: "other" as const,
+    label: "Бусад",
+    description: "Суваг тодорхойгүй төлбөрүүд",
+    logo: null,
+  },
 ];
 
 export default function PaymentChannelsCard({ channels }: Props) {
+  const rows = items.filter((ch) => ch.key !== "other" || (channels.other ?? 0) > 0);
+
   return (
     <div className="space-y-3">
-      {items.map((ch) => (
+      {rows.map((ch) => (
         <div
           key={ch.key}
           className="flex items-center justify-between rounded-xl px-2 py-2.5 transition hover:bg-gray-50 dark:hover:bg-white/[0.03]"
@@ -56,6 +65,10 @@ export default function PaymentChannelsCard({ channels }: Props) {
                 height={40}
                 className="h-10 w-10 shrink-0 rounded-xl object-cover"
               />
+            ) : ch.key === "other" ? (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-400 dark:bg-slate-600">
+                <span className="text-sm font-bold text-white">?</span>
+              </div>
             ) : (
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F59E0B]">
                 <svg className="h-5 w-5 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -73,7 +86,7 @@ export default function PaymentChannelsCard({ channels }: Props) {
             </div>
           </div>
           <span className="font-bold text-gray-800 dark:text-white/90 text-lg tabular-nums">
-            {channels[ch.key].toLocaleString()}
+            {(ch.key === "other" ? (channels.other ?? 0) : channels[ch.key]).toLocaleString()}
           </span>
         </div>
       ))}

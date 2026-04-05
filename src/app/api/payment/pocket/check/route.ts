@@ -73,6 +73,7 @@ export async function POST(request: Request) {
         if (effectiveBookingId) {
           await safeUpdateBookingById(supabase, effectiveBookingId, {
             payment_status: "paid",
+            payment_channel: "pocket",
             paid_at: new Date().toISOString(),
           });
         }

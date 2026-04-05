@@ -22,6 +22,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 export type Profile = {
   id: string;
   full_name: string | null;
+  surname: string | null;
+  given_name: string | null;
   phone: string | null;
   role: string | null;
   organization_id: string | null;
@@ -254,6 +256,8 @@ export default function UsersSection() {
         const q = search.toLowerCase();
         const matches =
           p.full_name?.toLowerCase().includes(q) ||
+          p.surname?.toLowerCase().includes(q) ||
+          p.given_name?.toLowerCase().includes(q) ||
           p.phone?.toLowerCase().includes(q) ||
           orgName?.toLowerCase().includes(q);
         if (!matches) return false;

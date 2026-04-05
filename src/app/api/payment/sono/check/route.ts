@@ -83,6 +83,7 @@ export async function POST(request: Request) {
       );
       await safeUpdateBookingById(supabase, booking_id, {
         payment_status: "paid",
+        payment_channel: "sono",
         paid_at: new Date().toISOString(),
       });
     }

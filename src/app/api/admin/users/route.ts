@@ -39,6 +39,8 @@ export async function POST(request: Request) {
       email: rawEmail,
       password,
       full_name,
+      surname,
+      given_name,
       phone,
       role,
       organization_id,
@@ -63,11 +65,18 @@ export async function POST(request: Request) {
       membership_expires_at
     );
 
+    const sn = typeof surname === "string" ? surname.trim() : "";
+    const gn = typeof given_name === "string" ? given_name.trim() : "";
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: full_name || "", phone: phone || "" },
+      user_metadata: {
+        full_name: full_name || [sn, gn].filter(Boolean).join(" ") || "",
+        ...(sn ? { surname: sn } : {}),
+        ...(gn ? { given_name: gn } : {}),
+        phone: phone || "",
+      },
     });
     if (authError) {
       if (authError.message?.includes("already been registered")) {
@@ -80,6 +89,8 @@ export async function POST(request: Request) {
         .from("profiles")
         .update({
           full_name: full_name || null,
+          surname: sn || null,
+          given_name: gn || null,
           phone: phone || null,
           role: role || "user",
           organization_id: organization_id || null,

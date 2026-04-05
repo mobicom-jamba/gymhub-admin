@@ -31,6 +31,8 @@ export async function PATCH(
     const {
       password,
       full_name,
+      surname,
+      given_name,
       phone,
       role,
       organization_id,
@@ -49,6 +51,8 @@ export async function PATCH(
 
     const hasProfileFields =
       full_name !== undefined ||
+      surname !== undefined ||
+      given_name !== undefined ||
       phone !== undefined ||
       role !== undefined ||
       organization_id !== undefined ||
@@ -63,9 +67,7 @@ export async function PATCH(
         membership_expires_at
       );
 
-      const { error: profileError } = await admin
-        .from("profiles")
-        .update({
+      const patch: Record<string, unknown> = {
           full_name: full_name ?? null,
           phone: phone ?? null,
           role: role ?? "user",
@@ -76,8 +78,15 @@ export async function PATCH(
           membership_started_at: membership_started_at ?? null,
           membership_expires_at: membership_expires_at ?? null,
           updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
+      };
+      if (surname !== undefined) {
+        patch.surname = typeof surname === "string" && surname.trim() ? surname.trim() : null;
+      }
+      if (given_name !== undefined) {
+        patch.given_name = typeof given_name === "string" && given_name.trim() ? given_name.trim() : null;
+      }
+
+      const { error: profileError } = await admin.from("profiles").update(patch).eq("id", id);
 
       if (profileError) {
         return errorResponse("VALIDATION_ERROR", "Профайл шинэчлэхэд алдаа гарлаа.", 400, profileError.message);
