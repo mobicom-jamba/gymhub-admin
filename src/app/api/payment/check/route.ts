@@ -94,6 +94,7 @@ export async function POST(request: Request) {
         if (booking_id) {
           await safeUpdateBookingById(supabase, booking_id, {
             payment_status: "paid",
+            payment_channel: "qpay",
             paid_at: new Date().toISOString(),
           });
         }

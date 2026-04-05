@@ -14,7 +14,14 @@ import UserFormModal from "@/app/(admin)/users/UserFormModal";
 import type { OrganizationOption, Profile } from "@/app/(admin)/users/UsersSection";
 
 type MonthPoint = { month: string; count: number };
-type UserRow = { id: string; full_name: string | null; phone: string | null; company?: string | null; created_at: string };
+type UserRow = {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  company?: string | null;
+  created_at: string;
+  membership_status?: string | null;
+};
 type GymRow = { id: string; name: string | null; address: string | null; phone?: string | null; image_url?: string | null; created_at?: string };
 type PaymentChannels = { qpay: number; sono: number; pocket: number; gift: number };
 
@@ -41,18 +48,17 @@ export default function DashboardSection() {
 
     const [
       usersRes, activeRes, gymsRes, orgsCountRes,
-      qpayRes, sonoRes, pocketRes, giftRes,
       recentUsersRes, recentGymsRes, orgsListRes,
     ] = await Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("membership_status", "active"),
       supabase.from("gyms").select("id, name, amenities", { count: "exact" }),
       supabase.from("organizations").select("id", { count: "exact", head: true }),
-      supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "qpay"),
-      supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "sono"),
-      supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "pocket"),
-      supabase.from("bookings").select("id", { count: "exact", head: true }).eq("payment_status", "paid").eq("payment_channel", "gift"),
-      supabase.from("profiles").select("id, full_name, phone, created_at").order("created_at", { ascending: false }).limit(10),
+      supabase
+        .from("profiles")
+        .select("id, full_name, phone, organization, membership_status, created_at")
+        .order("created_at", { ascending: false })
+        .limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
       supabase.from("organizations").select("id,name").order("name", { ascending: true }),
     ]);
@@ -81,59 +87,61 @@ export default function DashboardSection() {
     setFitnessCount(totalGyms - yogaGyms);
     setYogaCount(yogaGyms);
 
-    setPaymentChannels({
-      qpay: qpayRes.count ?? 0,
-      sono: sonoRes.count ?? 0,
-      pocket: pocketRes.count ?? 0,
-      gift: giftRes.count ?? 0,
-    });
-
-    setNewUsers((recentUsersRes.data ?? []) as UserRow[]);
+    setNewUsers(
+      (recentUsersRes.data ?? []).map(
+        (r: {
+          id: string;
+          full_name: string | null;
+          phone: string | null;
+          organization?: string | null;
+          membership_status?: string | null;
+          created_at: string;
+        }) => ({
+          id: r.id,
+          full_name: r.full_name,
+          phone: r.phone,
+          company: r.organization ?? null,
+          membership_status: r.membership_status,
+          created_at: r.created_at,
+        }),
+      ),
+    );
     setNewGyms((recentGymsRes.data ?? []) as GymRow[]);
     setOrgs((orgsListRes.data ?? []) as OrganizationOption[]);
     setLoading(false);
   }, []);
 
-  // ── Slow fetch: paginated chart data — only runs on mount ─────────────────
-  const fetchChartData = useCallback(async () => {
-    const supabase = createBrowserSupabaseClient();
-    const allStartDates: string[] = [];
-    const today = new Date().toISOString().slice(0, 7); // YYYY-MM cap
-    const PAGE = 1000;
-    let from = 0;
-    while (true) {
-      const { data } = await supabase
-        .from("profiles")
-        .select("membership_started_at")
-        .not("membership_started_at", "is", null)
-        .lte("membership_started_at", today + "-31") // exclude future dates at DB level
-        .order("membership_started_at", { ascending: true })
-        .range(from, from + PAGE - 1);
-      (data ?? []).forEach((p: { membership_started_at: string }) => {
-        const month = p.membership_started_at?.slice(0, 7);
-        if (month && month <= today) allStartDates.push(month);
-      });
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
+  /** Charts + payment channels: service-role API so booking aggregates work under RLS. */
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/dashboard-analytics", { cache: "no-store" });
+      if (!res.ok) return;
+      const body = (await res.json()) as {
+        usersByMonth?: MonthPoint[];
+        paymentsByMonth?: MonthPoint[];
+        paymentChannels?: PaymentChannels;
+      };
+      if (Array.isArray(body.usersByMonth)) setUsersByMonth(body.usersByMonth);
+      if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
+      if (body.paymentChannels) setPaymentChannels(body.paymentChannels);
+    } catch {
+      /* keep previous values */
     }
-    const monthMap: Record<string, number> = {};
-    allStartDates.forEach(m => { monthMap[m] = (monthMap[m] ?? 0) + 1; });
-    const sortedMonths = Object.entries(monthMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count: count as number }));
-    setUsersByMonth(sortedMonths);
-    setPaymentsByMonth(sortedMonths);
   }, []);
 
   useEffect(() => {
-    fetchFast().then(() => fetchChartData());
+    void fetchFast();
+    void fetchAnalytics();
 
     const supabase = createBrowserSupabaseClient();
 
     // Debounced handler — only refreshes fast counts, not the heavy chart loop
     const debouncedFast = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => fetchFast(), 2000);
+      debounceRef.current = setTimeout(() => {
+        void fetchFast();
+        void fetchAnalytics();
+      }, 2000);
     };
 
     const channel = supabase
@@ -147,7 +155,7 @@ export default function DashboardSection() {
       supabase.removeChannel(channel);
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [fetchFast, fetchChartData]);
+  }, [fetchFast, fetchAnalytics]);
 
   const handleEditUser = useCallback(async (id: string) => {
     const supabase = createBrowserSupabaseClient();
@@ -187,7 +195,7 @@ export default function DashboardSection() {
 
       {/* ── Charts Row ───────────────────────────────────────── */}
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Гишүүнчлэл эхэлсэн огноо" subtitle="Төлбөр төлсөн огноо сараар">
+        <ComponentCard title="Гишүүнчлэл эхэлсэн огноо" subtitle="Гишүүнчлэл эхэлсэн сараар">
           <MemberGrowthChart data={usersByMonth.map((d) => ({ date: d.month, count: d.count }))} />
           <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
             {usersByMonth.slice(-3).reverse().map((m) => (
@@ -204,8 +212,19 @@ export default function DashboardSection() {
       </div>
 
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Төлбөр төлсөн огноо" subtitle="Гишүүнчлэл эхэлсэн огноо сараар">
+        <ComponentCard title="Төлбөр төлсөн огноо" subtitle="Төлбөр баталгаажсан сараар (захиалга)">
           <BookingsChart data={paymentsByMonth.map((d) => ({ date: d.month, count: d.count }))} />
+          <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
+            {paymentsByMonth.slice(-3).reverse().map((m) => (
+              <div key={m.month} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-2 w-2 rounded-sm bg-indigo-500" />
+                  <span className="text-gray-600 dark:text-gray-400">{m.month.slice(0, 4)}он {Number(m.month.slice(5, 7))}-р сар</span>
+                </div>
+                <span className="font-bold text-indigo-600 dark:text-indigo-400">{m.count}</span>
+              </div>
+            ))}
+          </div>
         </ComponentCard>
       </div>
 

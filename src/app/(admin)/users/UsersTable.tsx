@@ -9,8 +9,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { t } from "@/lib/i18n";
-import { PencilIcon, TrashBinIcon } from "@/icons";
+import { ChevronDownIcon, ChevronUpIcon, PencilIcon, TrashBinIcon } from "@/icons";
 import type { Profile } from "./UsersSection";
+import type { UsersSortColumn } from "./users-sort";
 import TableSkeleton from "@/components/ui/TableSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
@@ -40,6 +41,46 @@ function orgNameOfProfile(p: Profile): string | null {
 
 export type Density = "comfortable" | "compact";
 
+function SortableTh({
+  column,
+  sortColumn,
+  sortDir,
+  onSort,
+  className,
+  children,
+}: {
+  column: UsersSortColumn;
+  sortColumn: UsersSortColumn | null;
+  sortDir: "asc" | "desc";
+  onSort: (c: UsersSortColumn) => void;
+  className: string;
+  children: React.ReactNode;
+}) {
+  const active = sortColumn === column;
+  return (
+    <TableCell isHeader className={className}>
+      <button
+        type="button"
+        onClick={() => onSort(column)}
+        title={active ? (sortDir === "asc" ? "Өсөхөөр эрэмбэлэгдсэн — дарахад буурах" : "Буурахаар эрэмбэлэгдсэн — дарахад өсөх") : "Эрэмбэлэх"}
+        className="group inline-flex w-full min-w-0 items-center justify-start gap-1 text-left font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
+      >
+        <span className="truncate">{children}</span>
+        <span className="inline-flex shrink-0 flex-col leading-[0.35]">
+          <ChevronUpIcon
+            className={`size-3 ${active && sortDir === "asc" ? "text-brand-500" : "text-gray-300 group-hover:text-gray-400 dark:text-gray-600 dark:group-hover:text-gray-500"}`}
+            aria-hidden
+          />
+          <ChevronDownIcon
+            className={`size-3 -mt-0.5 ${active && sortDir === "desc" ? "text-brand-500" : "text-gray-300 group-hover:text-gray-400 dark:text-gray-600 dark:group-hover:text-gray-500"}`}
+            aria-hidden
+          />
+        </span>
+      </button>
+    </TableCell>
+  );
+}
+
 export default function UsersTable({
   profiles,
   error,
@@ -52,6 +93,9 @@ export default function UsersTable({
   onToggleSelect,
   onToggleSelectAll,
   visibleColumns,
+  sortColumn = null,
+  sortDir = "asc",
+  onSort,
 }: {
   profiles: Profile[];
   error?: string;
@@ -64,6 +108,9 @@ export default function UsersTable({
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: () => void;
   visibleColumns?: Record<string, boolean>;
+  sortColumn?: UsersSortColumn | null;
+  sortDir?: "asc" | "desc";
+  onSort?: (column: UsersSortColumn) => void;
 }) {
   const py = density === "compact" ? "py-1.5" : "py-3";
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -95,7 +142,32 @@ export default function UsersTable({
     );
   }
 
-  const hdr = `px-4 ${py} text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400`;
+  const hdr = `px-4 ${py} text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400`;
+  const hdrPlain = `${hdr} font-semibold`;
+  const hdrSortable = `${hdr} font-semibold`;
+
+  const Th = ({
+    col,
+    className,
+    label,
+  }: {
+    col: UsersSortColumn;
+    className: string;
+    label: string;
+  }) =>
+    onSort ? (
+      <SortableTh
+        column={col}
+        sortColumn={sortColumn}
+        sortDir={sortDir}
+        onSort={onSort}
+        className={className}
+      >
+        {label}
+      </SortableTh>
+    ) : (
+      <TableCell isHeader className={`${hdrPlain} ${className}`}>{label}</TableCell>
+    );
 
   return (
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-white/[0.05] dark:bg-white/[0.03]">
@@ -111,14 +183,20 @@ export default function UsersTable({
                     className="size-4 cursor-pointer" />
                 </TableCell>
               )}
-              {(visibleColumns?.member ?? true) && <TableCell isHeader className={`sticky top-0 left-0 z-20 bg-white dark:bg-gray-900 ${hdr} w-[240px]`}>Гишүүн</TableCell>}
-              {(visibleColumns?.phone ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[130px]`}>Утас</TableCell>}
-              {(visibleColumns?.organization ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[180px]`}>Байгууллага</TableCell>}
-              {(visibleColumns?.tier ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[120px]`}>Тариф</TableCell>}
-              {(visibleColumns?.startDate ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[130px]`}>Эхлэх огноо</TableCell>}
-              {(visibleColumns?.expireDate ?? true) && <TableCell isHeader className={`${hdr} sticky top-0 bg-white dark:bg-gray-900 w-[130px]`}>Дуусах огноо</TableCell>}
+              {(visibleColumns?.member ?? true) &&
+                <Th col="member" className={`sticky top-0 left-0 z-20 bg-white dark:bg-gray-900 ${hdrSortable} w-[240px]`} label="Гишүүн" />}
+              {(visibleColumns?.phone ?? true) &&
+                <Th col="phone" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Утас" />}
+              {(visibleColumns?.organization ?? true) &&
+                <Th col="organization" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[180px]`} label="Байгууллага" />}
+              {(visibleColumns?.tier ?? true) &&
+                <Th col="tier" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[120px]`} label="Тариф" />}
+              {(visibleColumns?.startDate ?? true) &&
+                <Th col="startDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Эхлэх огноо" />}
+              {(visibleColumns?.expireDate ?? true) &&
+                <Th col="expireDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Дуусах огноо" />}
               {(onEdit || onDelete) && (
-                <TableCell isHeader className={`${hdr} text-end sticky top-0 bg-white dark:bg-gray-900 w-[110px]`}>Үйлдлүүд</TableCell>
+                <TableCell isHeader className={`${hdrPlain} text-end sticky top-0 bg-white dark:bg-gray-900 w-[110px]`}>Үйлдлүүд</TableCell>
               )}
             </TableRow>
           </TableHeader>

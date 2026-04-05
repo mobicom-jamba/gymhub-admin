@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
+import type { UsersSortColumn } from "./users-sort";
 import Button from "@/components/ui/button/Button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
@@ -53,6 +54,30 @@ function profileStatus(p: Profile): "active" | "expired" | "inactive" {
   return "active";
 }
 
+const DATE_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate"]);
+
+function compareNullableDates(a: string | null, b: string | null, ascending: boolean): number {
+  const parse = (s: string | null) => {
+    if (!s) return null;
+    const t = new Date(s).getTime();
+    return Number.isNaN(t) ? null : t;
+  };
+  const ta = parse(a);
+  const tb = parse(b);
+  if (ta === null && tb === null) return 0;
+  if (ta === null) return 1;
+  if (tb === null) return -1;
+  const raw = ta === tb ? 0 : ta < tb ? -1 : 1;
+  return ascending ? raw : -raw;
+}
+
+function tierRank(t: string | null): number {
+  const x = (t ?? "").toLowerCase();
+  if (x === "early") return 0;
+  if (x === "premium") return 1;
+  return 2;
+}
+
 const PAGE_SIZES = [25, 50, 100, 500];
 
 export default function UsersSection() {
@@ -74,6 +99,8 @@ export default function UsersSection() {
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
     member: true, phone: true, organization: true, tier: true, startDate: true, expireDate: true,
   });
+  const [sortColumn, setSortColumn] = useState<UsersSortColumn | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
   const toast = useToast();
   const router = useRouter();
@@ -235,8 +262,59 @@ export default function UsersSection() {
     });
   }, [profiles, search, tab, orgFilter, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredProfiles.length / pageSize));
-  const pagedProfiles = filteredProfiles.slice((page - 1) * pageSize, page * pageSize);
+  const sortedFilteredProfiles = useMemo(() => {
+    if (!sortColumn) return filteredProfiles;
+    const list = [...filteredProfiles];
+    const asc = sortDir === "asc";
+
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortColumn) {
+        case "member":
+          cmp = (a.full_name ?? "").localeCompare(b.full_name ?? "", "mn", { sensitivity: "base" });
+          break;
+        case "phone":
+          cmp = (a.phone ?? "").localeCompare(b.phone ?? "", undefined, { numeric: true });
+          break;
+        case "organization":
+          cmp = (profileOrgName(a) ?? "").localeCompare(profileOrgName(b) ?? "", "mn", { sensitivity: "base" });
+          break;
+        case "tier": {
+          const tr = tierRank(a.membership_tier) - tierRank(b.membership_tier);
+          cmp = tr !== 0 ? tr : (a.membership_tier ?? "").localeCompare(b.membership_tier ?? "", "en", { sensitivity: "base" });
+          break;
+        }
+        case "startDate":
+          cmp = compareNullableDates(a.membership_started_at, b.membership_started_at, asc);
+          break;
+        case "expireDate":
+          cmp = compareNullableDates(a.membership_expires_at, b.membership_expires_at, asc);
+          break;
+        default:
+          break;
+      }
+      if (sortColumn === "startDate" || sortColumn === "expireDate") {
+        if (cmp !== 0) return cmp;
+        return a.id.localeCompare(b.id);
+      }
+      if (cmp !== 0) return asc ? cmp : -cmp;
+      return a.id.localeCompare(b.id);
+    });
+    return list;
+  }, [filteredProfiles, sortColumn, sortDir]);
+
+  const handleColumnSort = (column: UsersSortColumn) => {
+    if (sortColumn === column) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDir(DATE_SORT_COLS.has(column) ? "desc" : "asc");
+    }
+    setPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(sortedFilteredProfiles.length / pageSize));
+  const pagedProfiles = sortedFilteredProfiles.slice((page - 1) * pageSize, page * pageSize);
 
   const resetPage = () => setPage(1);
 
@@ -370,7 +448,7 @@ export default function UsersSection() {
       </div>
 
       <ComponentCard
-        title={`${tab === "user" ? "Гишүүд" : "Админ"} — ${filteredProfiles.length.toLocaleString()}`}
+        title={`${tab === "user" ? "Гишүүд" : "Админ"} — ${sortedFilteredProfiles.length.toLocaleString()}`}
       >
         {/* ── Filters row ── */}
         <div className="mb-4 space-y-2">
@@ -515,17 +593,20 @@ export default function UsersSection() {
           onToggleSelect={toggleSelect}
           onToggleSelectAll={toggleSelectAll}
           visibleColumns={visibleColumns}
+          sortColumn={sortColumn}
+          sortDir={sortDir}
+          onSort={handleColumnSort}
         />
 
         {/* ── Pagination ── */}
-        {(totalPages > 1 || filteredProfiles.length > 25) && (
+        {(totalPages > 1 || sortedFilteredProfiles.length > 25) && (
           <div className="mt-5 flex items-center justify-between">
             {/* Left: count + page size */}
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
               <span className="tabular-nums">
-                {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filteredProfiles.length)}
+                {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, sortedFilteredProfiles.length)}
                 <span className="mx-1 text-gray-300">/</span>
-                {filteredProfiles.length.toLocaleString()}
+                {sortedFilteredProfiles.length.toLocaleString()}
               </span>
               <select
                 value={pageSize}

@@ -42,6 +42,7 @@ async function handleCallback(request: Request) {
     if (resolvedBookingId && (!paymentStatus || paymentStatus === "PAID")) {
       const updateError = await safeUpdateBookingById(supabase, resolvedBookingId, {
         payment_status: "paid",
+        payment_channel: "qpay",
         paid_at: new Date().toISOString(),
       });
       if (updateError) {

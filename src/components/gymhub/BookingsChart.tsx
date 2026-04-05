@@ -21,7 +21,7 @@ export default function BookingsChart({ data }: { data: ChartData }) {
     yaxis: { labels: { formatter: (v) => String(Math.round(v)) } },
     colors: ["#6366f1"],
   };
-  const series = [{ name: "Захиалга", data: data.map((d) => d.count) }];
+  const series = [{ name: "Төлбөр", data: data.map((d) => d.count) }];
 
   if (data.length === 0) {
     return (

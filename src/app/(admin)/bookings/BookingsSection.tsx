@@ -107,6 +107,13 @@ export default function BookingsSection() {
     router.replace(next ? `${pathname}?${next}` : pathname);
   }, [search, statusFilter, pathname, router, searchParams]);
 
+  const filterChips = useMemo(() => {
+    const chips: Array<{ key: "q" | "status"; label: string; clear: () => void }> = [];
+    if (search) chips.push({ key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") });
+    if (statusFilter) chips.push({ key: "status", label: `Төлөв: ${statusFilter}`, clear: () => setStatusFilter("") });
+    return chips;
+  }, [search, statusFilter]);
+
   const handleCancel = async (bookingId: string) => {
     const supabase = createBrowserSupabaseClient();
     const { error: err } = await supabase
@@ -162,12 +169,6 @@ export default function BookingsSection() {
     page * PAGE_SIZE,
     (page + 1) * PAGE_SIZE
   );
-  const filterChips = useMemo(() => {
-    const chips: Array<{ key: "q" | "status"; label: string; clear: () => void }> = [];
-    if (search) chips.push({ key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") });
-    if (statusFilter) chips.push({ key: "status", label: `Төлөв: ${statusFilter}`, clear: () => setStatusFilter("") });
-    return chips;
-  }, [search, statusFilter]);
 
   return (
     <>
