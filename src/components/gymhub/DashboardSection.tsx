@@ -129,7 +129,6 @@ export default function DashboardSection() {
     try {
       setAnalyticsError(null);
       const res = await fetch("/api/admin/dashboard-analytics", {
-        cache: "no-store",
         credentials: "include",
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -178,13 +177,13 @@ export default function DashboardSection() {
 
     const supabase = createBrowserSupabaseClient();
 
-    // Debounced handler — only refreshes fast counts, not the heavy chart loop
+    // Урт debounce — realtime үйл явдал их үед Supabase руу давтагдах Disk I/O-г багасгана
     const debouncedFast = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         void fetchFast();
         void fetchAnalytics();
-      }, 2000);
+      }, 8000);
     };
 
     const channel = supabase

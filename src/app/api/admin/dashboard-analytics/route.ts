@@ -15,6 +15,17 @@ type PaidRow = {
 
 const PAID_STATUS = ["paid", "PAID", "Paid"] as const;
 
+/** Сүүлийн N сарын лог луу хязгаарлана — бүх түүхийг уншихаас Disk I/O хэмнэнэ. */
+const ANALYTICS_LOOKBACK_MONTHS = 24;
+
+function analyticsWindowStartIso(lookbackMonths: number): string {
+  const d = new Date();
+  d.setUTCMonth(d.getUTCMonth() - lookbackMonths);
+  d.setUTCDate(1);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
 /** True when `bookings` has all columns used for payment dashboard aggregates. */
 async function bookingsHasPaymentAnalyticsColumns(supabase: SupabaseClient): Promise<boolean> {
   const { error } = await supabase
@@ -62,7 +73,10 @@ function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "
  * Fallback when `bookings` has no payment columns (e.g. class-schedule bookings only).
  * Uses `lending_records` if present (Sono flow inserts there).
  */
-async function aggregateFromLendingRecords(supabase: SupabaseClient): Promise<{
+async function aggregateFromLendingRecords(
+  supabase: SupabaseClient,
+  createdAtGte: string,
+): Promise<{
   channels: { qpay: number; sono: number; pocket: number; gift: number; other: number };
   byMonth: MonthPoint[];
 } | null> {
@@ -82,6 +96,7 @@ async function aggregateFromLendingRecords(supabase: SupabaseClient): Promise<{
     const { data, error } = await supabase
       .from("lending_records")
       .select(selectCols)
+      .gte("created_at", createdAtGte)
       .order("created_at", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) return null;
@@ -162,10 +177,12 @@ async function fetchPaidBookingsPage(
   from: number,
   pageSize: number,
   select: string,
+  createdAtGte: string,
 ): Promise<{ data: PaidRow[] | null; error: { message: string } | null }> {
   let res = await supabase
     .from("bookings")
     .select(select)
+    .gte("created_at", createdAtGte)
     .in("payment_status", [...PAID_STATUS])
     .order("created_at", { ascending: true })
     .range(from, from + pageSize - 1);
@@ -174,6 +191,7 @@ async function fetchPaidBookingsPage(
     res = await supabase
       .from("bookings")
       .select(select)
+      .gte("created_at", createdAtGte)
       .eq("payment_status", "paid")
       .order("created_at", { ascending: true })
       .range(from, from + pageSize - 1);
@@ -181,7 +199,7 @@ async function fetchPaidBookingsPage(
   return { data: res.data as PaidRow[] | null, error: res.error };
 }
 
-function aggregatePaymentChannels(supabase: SupabaseClient) {
+function aggregatePaymentChannels(supabase: SupabaseClient, createdAtGte: string) {
   const counts = { qpay: 0, sono: 0, pocket: 0, gift: 0, other: 0 };
   const PAGE = 1000;
   let from = 0;
@@ -193,6 +211,7 @@ function aggregatePaymentChannels(supabase: SupabaseClient) {
         from,
         PAGE,
         "payment_status, payment_channel, qpay_invoice_id",
+        createdAtGte,
       );
       if (error) throw new Error(error.message);
       const rows = data ?? [];
@@ -211,6 +230,7 @@ function aggregatePaymentChannels(supabase: SupabaseClient) {
 async function paginatePaidBookingsByMonth(
   supabase: SupabaseClient,
   pageSize: number,
+  createdAtGte: string,
 ): Promise<MonthPoint[]> {
   const monthMap: Record<string, number> = {};
   let from = 0;
@@ -220,6 +240,7 @@ async function paginatePaidBookingsByMonth(
       from,
       pageSize,
       "payment_status, paid_at, created_at",
+      createdAtGte,
     );
     if (error) throw new Error(error.message);
     const rows = data ?? [];
@@ -263,10 +284,11 @@ export async function GET() {
       );
     }
     const nowIso = new Date().toISOString();
+    const windowStartIso = analyticsWindowStartIso(ANALYTICS_LOOKBACK_MONTHS);
     const PAGE = 1000;
 
     const [usersByMonth, useBookingsPayments] = await Promise.all([
-      paginateMembershipStarts(supabase, nowIso, PAGE),
+      paginateMembershipStarts(supabase, windowStartIso, nowIso, PAGE),
       bookingsHasPaymentAnalyticsColumns(supabase),
     ]);
 
@@ -276,12 +298,12 @@ export async function GET() {
 
     if (useBookingsPayments) {
       [paymentsByMonth, channelCounts] = await Promise.all([
-        paginatePaidBookingsByMonth(supabase, PAGE),
-        aggregatePaymentChannels(supabase),
+        paginatePaidBookingsByMonth(supabase, PAGE, windowStartIso),
+        aggregatePaymentChannels(supabase, windowStartIso),
       ]);
       paymentsMonthsSource = "bookings";
     } else {
-      const lending = await aggregateFromLendingRecords(supabase);
+      const lending = await aggregateFromLendingRecords(supabase, windowStartIso);
       if (lending) {
         paymentsByMonth = lending.byMonth;
         channelCounts = lending.channels;
@@ -299,18 +321,26 @@ export async function GET() {
       paymentsMonthsSource = "membership_starts";
     }
 
-    return NextResponse.json({
-      usersByMonth,
-      paymentsByMonth,
-      paymentsMonthsSource,
-      paymentChannels: {
-        qpay: channelCounts.qpay,
-        sono: channelCounts.sono,
-        pocket: channelCounts.pocket,
-        gift: channelCounts.gift,
-        other: channelCounts.other,
+    return NextResponse.json(
+      {
+        usersByMonth,
+        paymentsByMonth,
+        paymentsMonthsSource,
+        analyticsLookbackMonths: ANALYTICS_LOOKBACK_MONTHS,
+        paymentChannels: {
+          qpay: channelCounts.qpay,
+          sono: channelCounts.sono,
+          pocket: channelCounts.pocket,
+          gift: channelCounts.gift,
+          other: channelCounts.other,
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+        },
+      },
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -319,6 +349,7 @@ export async function GET() {
 
 async function paginateMembershipStarts(
   supabase: SupabaseClient,
+  startIso: string,
   capIso: string,
   pageSize: number,
 ): Promise<MonthPoint[]> {
@@ -329,6 +360,7 @@ async function paginateMembershipStarts(
       .from("profiles")
       .select("membership_started_at")
       .not("membership_started_at", "is", null)
+      .gte("membership_started_at", startIso)
       .lte("membership_started_at", capIso)
       .order("membership_started_at", { ascending: true })
       .range(from, from + pageSize - 1);
