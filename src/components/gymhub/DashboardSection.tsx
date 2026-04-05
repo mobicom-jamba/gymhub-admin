@@ -35,6 +35,7 @@ export default function DashboardSection() {
   const [usersByMonth, setUsersByMonth] = useState<MonthPoint[]>([]);
   const [paymentsByMonth, setPaymentsByMonth] = useState<MonthPoint[]>([]);
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannels>({ qpay: 0, sono: 0, pocket: 0, gift: 0 });
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
   const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
@@ -115,18 +116,29 @@ export default function DashboardSection() {
   /** Charts + payment channels: service-role API so booking aggregates work under RLS. */
   const fetchAnalytics = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/dashboard-analytics", { cache: "no-store" });
-      if (!res.ok) {
-        console.warn("[dashboard] dashboard-analytics failed:", res.status, await res.text().catch(() => ""));
-        return;
-      }
-      const body = (await res.json()) as {
+      setAnalyticsError(null);
+      const res = await fetch("/api/admin/dashboard-analytics", {
+        cache: "no-store",
+        credentials: "include",
+      });
+      const body = (await res.json().catch(() => ({}))) as {
         usersByMonth?: MonthPoint[];
         paymentsByMonth?: MonthPoint[];
         paymentChannels?: PaymentChannels;
         error?: string;
       };
+      if (!res.ok) {
+        const msg =
+          body.error ||
+          (res.status === 401 || res.status === 403
+            ? "Статистик ачаалах эрхгүй эсвэл нэвтрээгүй байна. Дахин нэвтэрнэ үү."
+            : `Статистик ачаалахад алдаа (${res.status}).`);
+        setAnalyticsError(msg);
+        console.warn("[dashboard] dashboard-analytics failed:", res.status, body.error ?? "");
+        return;
+      }
       if (body.error) {
+        setAnalyticsError(body.error);
         console.warn("[dashboard] dashboard-analytics:", body.error);
         return;
       }
@@ -134,6 +146,7 @@ export default function DashboardSection() {
       if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
       if (body.paymentChannels) setPaymentChannels(body.paymentChannels);
     } catch (e) {
+      setAnalyticsError("Сүлжээний алдаа. Дахин оролдоно уу.");
       console.warn("[dashboard] dashboard-analytics", e);
     }
   }, []);
@@ -239,6 +252,11 @@ export default function DashboardSection() {
 
       <div className="col-span-12 xl:col-span-4">
         <ComponentCard title="Төлбөр төлсөн суваг" subtitle="Төлбөр төлсөн суваг">
+          {analyticsError && (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              {analyticsError}
+            </div>
+          )}
           <PaymentChannelsCard channels={paymentChannels} />
         </ComponentCard>
       </div>
