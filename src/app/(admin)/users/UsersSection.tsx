@@ -347,7 +347,8 @@ export default function UsersSection() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    const auth: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    return auth;
   };
 
   const handleRoleChange = async (profileId: string, newRole: string) => {
@@ -360,7 +361,7 @@ export default function UsersSection() {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } as Record<string, string> : {}),
       },
       body: JSON.stringify({ role: newRole }),
     });
@@ -459,7 +460,7 @@ export default function UsersSection() {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } as Record<string, string> : {}),
           },
           body: JSON.stringify({ role: newRole }),
         });

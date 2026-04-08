@@ -87,7 +87,7 @@ export default function GymFormModal({
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    const auth = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    const auth: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
     return { ...extra, ...auth };
   };
 
