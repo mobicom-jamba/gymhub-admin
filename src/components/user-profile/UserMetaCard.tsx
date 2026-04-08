@@ -25,6 +25,9 @@ const roleLabels: Record<string, string> = {
   user: "Гишүүн",
   trainer: "Дасгалжуулагч",
   admin: "Админ",
+  moderator: "Модератор",
+  sales: "Борлуулалт",
+  gym_owner: "Фитнес эзэмшигч",
 };
 
 export default function UserMetaCard({ profile, email, onUpdate }: Props) {

@@ -38,6 +38,27 @@ export type Profile = {
 
 export type OrganizationOption = { id: string; name: string };
 
+function buildOrganizationOptions(
+  tableOrganizations: OrganizationOption[],
+  profileRows: Profile[],
+): OrganizationOption[] {
+  const map = new Map<string, OrganizationOption>();
+  for (const org of tableOrganizations) {
+    const key = org.name.trim().toLowerCase();
+    if (!key) continue;
+    map.set(key, org);
+  }
+  for (const p of profileRows) {
+    const name = profileOrgName(p)?.trim() ?? "";
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, { id: `legacy:${name}`, name });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "mn"));
+}
+
 function profileOrgName(p: Profile): string | null {
   const rel = p.organizations;
   if (Array.isArray(rel)) return rel[0]?.name ?? p.organization;
@@ -89,6 +110,8 @@ function tierRank(t: string | null): number {
 }
 
 const PAGE_SIZES = [25, 50, 100, 500];
+const USERS_CACHE_TTL_MS = 30_000;
+let usersSectionCache: { at: number; profiles: Profile[]; organizations: OrganizationOption[] } | null = null;
 
 type UsersRoleTab = "user" | "admin" | "moderator" | "sales";
 
@@ -156,7 +179,6 @@ export default function UsersSection() {
     const all: OrganizationOption[] = [];
     const PAGE = 1000;
 
-    // 1) Canonical organizations table
     let from = 0;
     while (true) {
       const { data } = await supabase
@@ -168,51 +190,28 @@ export default function UsersSection() {
       if (!data || data.length < PAGE) break;
       from += PAGE;
     }
-
-    // 2) Legacy profile organization strings (for rows not yet mapped to organization_id)
-    const legacyNames: string[] = [];
-    from = 0;
-    while (true) {
-      const { data } = await supabase
-        .from("profiles")
-        .select("organization")
-        .not("organization", "is", null)
-        .neq("organization", "")
-        .range(from, from + PAGE - 1);
-      const pageNames = (data ?? [])
-        .map((r) => (r as { organization: string | null }).organization?.trim() ?? "")
-        .filter(Boolean);
-      legacyNames.push(...pageNames);
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
-    }
-
-    // Merge unique names (prefer real organization id when exists)
-    const map = new Map<string, OrganizationOption>();
-    for (const org of all) {
-      const key = org.name.trim().toLowerCase();
-      if (!key) continue;
-      map.set(key, org);
-    }
-    for (const name of legacyNames) {
-      const key = name.toLowerCase();
-      if (!map.has(key)) {
-        map.set(key, { id: `legacy:${name}`, name });
-      }
-    }
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return all;
   };
 
   const fetchProfiles = async () => {
+    if (usersSectionCache && Date.now() - usersSectionCache.at < USERS_CACHE_TTL_MS) {
+      setProfiles(usersSectionCache.profiles);
+      setOrganizationOptions(usersSectionCache.organizations);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const [profilesRes, orgsRes] = await Promise.all([
       fetchAllProfilePages(),
       fetchAllOrganizationPages(),
     ]);
     const { data, error: err } = profilesRes;
+    const organizations = buildOrganizationOptions(orgsRes, data);
     setProfiles(data);
     setError(err);
-    setOrganizationOptions(orgsRes);
+    setOrganizationOptions(organizations);
+    usersSectionCache = { at: Date.now(), profiles: data, organizations };
     setLoading(false);
   };
 
@@ -222,8 +221,10 @@ export default function UsersSection() {
       fetchAllOrganizationPages(),
     ]);
     const { data, error: err } = profilesRes;
+    const organizations = buildOrganizationOptions(orgsRes, data);
     setProfiles(data);
-    setOrganizationOptions(orgsRes);
+    setOrganizationOptions(organizations);
+    usersSectionCache = { at: Date.now(), profiles: data, organizations };
     if (err) setError(err);
   };
 
@@ -341,6 +342,14 @@ export default function UsersSection() {
 
   const resetPage = () => setPage(1);
 
+  const getAuthHeaders = async (): Promise<Record<string, string>> => {
+    const supabase = createBrowserSupabaseClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  };
+
   const handleRoleChange = async (profileId: string, newRole: string) => {
     setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, role: newRole } : p));
     const supabase = createBrowserSupabaseClient();
@@ -372,7 +381,8 @@ export default function UsersSection() {
     setConfirmDelete(null);
     setProfiles(prev => prev.filter(p => p.id !== id));
     toast.show("Хэрэглэгчийн бүртгэл амжилттай устгагдлаа.");
-    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    const headers = await getAuthHeaders();
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", headers });
     const data = await res.json();
     if (!res.ok) { toast.show(toMnErrorMessage((data && (data.message || data.error)) ?? ""), "error"); silentRefresh(); }
   };
@@ -425,8 +435,9 @@ export default function UsersSection() {
     setSelectedIds(new Set());
     toast.show(`${count} хэрэглэгчийн бүртгэл амжилттай устгагдлаа.`);
     try {
+      const headers = await getAuthHeaders();
       await Promise.all(ids.map((id) =>
-        fetch(`/api/admin/users/${id}`, { method: "DELETE" })
+        fetch(`/api/admin/users/${id}`, { method: "DELETE", headers })
       ));
     } catch { toast.show("Хэрэглэгч устгах үед алдаа гарлаа. Дахин оролдоно уу.", "error"); silentRefresh(); }
     finally { setBulkDeleting(false); }

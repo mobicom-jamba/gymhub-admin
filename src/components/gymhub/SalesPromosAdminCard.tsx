@@ -158,7 +158,7 @@ export default function SalesPromosAdminCard() {
                     {r.sales_phone ?? "—"}
                   </td>
                   <td className="py-2.5 text-xs text-gray-500 dark:text-gray-400">
-                    {r.created_at ? new Date(r.created_at).toLocaleString("mn-MN") : "—"}
+                    {r.created_at ? new Date(r.created_at).toLocaleString("mn-MN", { hour12: false }) : "—"}
                   </td>
                 </tr>
               ))}
@@ -182,7 +182,7 @@ export default function SalesPromosAdminCard() {
                     {r.sales_name ?? "—"} · {r.requested_percent.toFixed(2)}%
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {r.sales_phone ?? "—"} · {new Date(r.created_at).toLocaleString("mn-MN")}
+                    {r.sales_phone ?? "—"} · {new Date(r.created_at).toLocaleString("mn-MN", { hour12: false })}
                   </p>
                   {r.note ? (
                     <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">{r.note}</p>

@@ -310,6 +310,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [expiresAt, setExpiresAt]       = useState("");
   const [formError, setFormError]       = useState("");
   const [loading, setLoading]           = useState(false);
+  const shouldHideMembershipFields = role === "admin" || role === "moderator" || role === "sales";
 
   useEffect(() => {
     if (!isOpen) return;
@@ -363,6 +364,23 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     setLoading(true);
     const fullName = [ovog, ner].filter(Boolean).join(" ") || null;
     const computedMembershipStatus = resolveMembershipStatus(startedAt, expiresAt);
+    const membershipPayload = shouldHideMembershipFields
+      ? {
+          membership_tier: null,
+          membership_status: "inactive",
+          membership_started_at: null,
+          membership_expires_at: null,
+        }
+      : {
+          membership_tier: tier,
+          membership_status: computedMembershipStatus,
+          ...(canEditSubscriptionDates
+            ? {
+                membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+                membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+              }
+            : {}),
+        };
     try {
       const supabase = createBrowserSupabaseClient();
       const {
@@ -394,13 +412,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             role,
             organization_id: safeOrganizationId,
             organization: organization || null,
-            membership_tier: tier, membership_status: computedMembershipStatus,
-            ...(canEditSubscriptionDates
-              ? {
-                  membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
-                  membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-                }
-              : {}),
+            ...membershipPayload,
           }),
         });
         if (!res.ok) { setFormError(await parseApiError(res)); return; }
@@ -416,14 +428,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             role,
             organization_id: safeOrganizationId,
             organization: organization || null,
-            membership_tier: tier,
-            membership_status: computedMembershipStatus,
-            ...(canEditSubscriptionDates
-              ? {
-                  membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
-                  membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-                }
-              : {}),
+            ...membershipPayload,
             ...(password ? { password } : {}),
           }),
         });
@@ -698,6 +703,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             </div>
 
             {/* Membership */}
+            {!shouldHideMembershipFields && (
             <div className="px-5 pt-4 pb-5">
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-200 dark:bg-gray-700">
@@ -796,6 +802,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 <p className="mt-1.5 text-[11px] text-gray-400">Эхлэх огноог дуусах огнооноос нэг жилийн өмнө автоматаар тооцоолно.</p>
               )}
             </div>
+            )}
           </form>
         </div>
 

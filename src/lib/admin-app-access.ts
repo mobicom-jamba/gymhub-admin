@@ -2,7 +2,7 @@
 export const ADMIN_APP_STAFF_ROLES = ["admin", "moderator", "sales"] as const;
 
 export function isStaffRoleForAdminApp(role: string | null | undefined): boolean {
-  const r = (role ?? "").trim();
+  const r = (role ?? "").trim().toLowerCase();
   return r === "admin" || r === "moderator" || r === "sales";
 }
 

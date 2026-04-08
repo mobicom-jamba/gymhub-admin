@@ -128,7 +128,7 @@ export default function BookingsTable({
                 ? cls?.gyms[0]
                 : cls?.gyms;
               const start = schedule?.start_time
-                ? new Date(schedule.start_time).toLocaleString("mn-MN")
+                ? new Date(schedule.start_time).toLocaleString("mn-MN", { hour12: false })
                 : "—";
               const canAct = b.status === "booked" && actioningId !== b.id;
               return (

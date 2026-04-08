@@ -15,6 +15,7 @@ import ColumnToggle from "@/components/ui/ColumnToggle";
 import { toMnErrorMessage } from "@/lib/error-message";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import TablePagination from "@/components/ui/TablePagination";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Booking = any;
@@ -29,11 +30,11 @@ export default function BookingsSection() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("bookings.table.visibleColumns", {
     user: true, class: true, time: true, status: true,
   });
-  const PAGE_SIZE = 20;
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -164,10 +165,10 @@ export default function BookingsSection() {
     if (statusFilter && b.status !== statusFilter) return false;
     return true;
   });
-  const totalPages = Math.ceil(filteredBookings.length / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(filteredBookings.length / pageSize) || 1;
   const paginatedBookings = filteredBookings.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE
+    (page - 1) * pageSize,
+    page * pageSize
   );
 
   return (
@@ -176,7 +177,10 @@ export default function BookingsSection() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
             placeholder={`${t("search")} ${t("bookings")}...`}
             className="max-w-xs"
           />
@@ -184,7 +188,7 @@ export default function BookingsSection() {
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
-              setPage(0);
+              setPage(1);
             }}
             className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           >
@@ -269,32 +273,17 @@ export default function BookingsSection() {
           visibleColumns={visibleColumns}
         />
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-gray-500">
-              {filteredBookings.length} нийт
-            </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Өмнөх
-              </Button>
-              <span className="flex items-center px-2 text-sm">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-              >
-                Дараах
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={filteredBookings.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            pageSizeOptions={[20, 50, 100]}
+          />
         )}
       </ComponentCard>
       <CreateBookingModal

@@ -207,6 +207,7 @@ async function paginateMembershipStarts(
     const { data, error } = await supabase
       .from("profiles")
       .select("membership_started_at")
+      .eq("role", "user")
       .not("membership_started_at", "is", null)
       .gte("membership_started_at", startIso)
       .lte("membership_started_at", capIso)

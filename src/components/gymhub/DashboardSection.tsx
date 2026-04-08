@@ -60,13 +60,18 @@ export default function DashboardSection() {
       usersRes, activeRes, gymsRes, orgsCountRes,
       recentUsersRes, recentGymsRes, orgsListRes,
     ] = await Promise.all([
-      supabase.from("profiles").select("id", { count: "exact", head: true }),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("membership_status", "active"),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "user"),
+      supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "user")
+        .eq("membership_status", "active"),
       supabase.from("gyms").select("id, name, amenities", { count: "exact" }),
       supabase.from("organizations").select("id", { count: "exact", head: true }),
       supabase
         .from("profiles")
         .select("id, full_name, phone, organization, membership_status, membership_tier, membership_started_at, membership_expires_at, created_at")
+        .eq("role", "user")
         .order("created_at", { ascending: false })
         .limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),

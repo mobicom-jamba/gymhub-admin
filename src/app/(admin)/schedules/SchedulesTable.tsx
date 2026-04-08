@@ -109,9 +109,10 @@ export default function SchedulesTable({
           <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
             {schedules.map((s) => {
               const { title, gym } = getClassInfo(s);
-              const start = new Date(s.start_time).toLocaleString("mn-MN");
+              const start = new Date(s.start_time).toLocaleString("mn-MN", { hour12: false });
               const end = new Date(s.end_time).toLocaleString("mn-MN", {
                 timeStyle: "short",
+                hour12: false,
               });
               return (
                 <TableRow key={s.id}>

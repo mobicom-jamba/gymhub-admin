@@ -223,7 +223,7 @@ export default function PaymentAppSettingsSection() {
 
           {updatedAt && (
             <p className="text-xs text-gray-400">
-              Сүүлд шинэчилсэн: {new Date(updatedAt).toLocaleString("mn-MN")}
+              Сүүлд шинэчилсэн: {new Date(updatedAt).toLocaleString("mn-MN", { hour12: false })}
             </p>
           )}
 

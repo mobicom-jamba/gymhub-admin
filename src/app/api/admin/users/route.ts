@@ -24,6 +24,13 @@ function resolveMembershipStatus(
   return isStarted && isNotExpired ? "active" : "inactive";
 }
 
+function mapProfileUpdateError(message: string): string {
+  if (message.includes('invalid input value for enum user_role')) {
+    return "Профайл шинэчлэхэд алдаа гарлаа. DB-ийн user_role enum-д энэ эрх бүртгэгдээгүй байна. sql/user_role_add_moderator.sql ажиллуулна уу.";
+  }
+  return "Профайл шинэчлэхэд алдаа гарлаа.";
+}
+
 export async function POST(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
@@ -123,7 +130,12 @@ export async function POST(request: Request) {
         })
         .eq("id", authData.user.id);
       if (profileUpdateError) {
-        return errorResponse("VALIDATION_ERROR", "Профайл шинэчлэхэд алдаа гарлаа.", 400, profileUpdateError.message);
+        return errorResponse(
+          "VALIDATION_ERROR",
+          mapProfileUpdateError(profileUpdateError.message),
+          400,
+          profileUpdateError.message,
+        );
       }
     }
     return successResponse({ id: authData.user?.id });

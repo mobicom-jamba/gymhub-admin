@@ -10,6 +10,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import { PlusIcon } from "@/icons";
 import SearchInput from "@/components/common/SearchInput";
+import TablePagination from "@/components/ui/TablePagination";
 
 type Schedule = {
   id: string;
@@ -33,8 +34,8 @@ export default function SchedulesSection() {
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const fetchData = async () => {
     setLoading(true);
@@ -88,10 +89,10 @@ export default function SchedulesSection() {
     }
     return true;
   });
-  const totalPages = Math.ceil(filteredSchedules.length / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(filteredSchedules.length / pageSize) || 1;
   const paginatedSchedules = filteredSchedules.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE
+    (page - 1) * pageSize,
+    page * pageSize
   );
 
   return (
@@ -100,13 +101,13 @@ export default function SchedulesSection() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <SearchInput
             value={search}
-            onChange={(v) => { setSearch(v); setPage(0); }}
+            onChange={(v) => { setSearch(v); setPage(1); }}
             placeholder={`${t("search")} ${t("schedules")}...`}
             className="max-w-xs"
           />
           <select
             value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
             className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           >
             <option value="">{t("status")}: Бүгд</option>
@@ -116,13 +117,13 @@ export default function SchedulesSection() {
           <input
             type="date"
             value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+            onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
             className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           />
           <input
             type="date"
             value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+            onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
             className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
           />
           <div className="flex-1" />
@@ -137,32 +138,17 @@ export default function SchedulesSection() {
           onEdit={(s) => setEditSchedule(s)}
         />
         {totalPages > 1 && (
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-sm text-gray-500">
-              {filteredSchedules.length} нийт
-            </span>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Өмнөх
-              </Button>
-              <span className="flex items-center px-2 text-sm">
-                {page + 1} / {totalPages}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-              >
-                Дараах
-              </Button>
-            </div>
-          </div>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={filteredSchedules.length}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            pageSizeOptions={[20, 50, 100]}
+          />
         )}
       </ComponentCard>
       <ScheduleEditModal

@@ -48,7 +48,7 @@ export default function RecentActivityList({
             </span>
           </div>
           <span className="text-gray-400 text-theme-xs dark:text-gray-500">
-            {new Date(log.created_at).toLocaleString("mn-MN")}
+            {new Date(log.created_at).toLocaleString("mn-MN", { hour12: false })}
           </span>
         </div>
       ))}

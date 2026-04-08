@@ -7,6 +7,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import SearchInput from "@/components/common/SearchInput";
 import { exportToCsv } from "@/lib/csv-export";
+import TablePagination from "@/components/ui/TablePagination";
 
 type Visit = {
   id: string;
@@ -25,8 +26,8 @@ export default function VisitsSection() {
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [page, setPage] = useState(0);
-  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const fetchData = async () => {
     setLoading(true);
@@ -85,10 +86,10 @@ export default function VisitsSection() {
     }
     return true;
   });
-  const totalPages = Math.ceil(filteredVisits.length / PAGE_SIZE) || 1;
+  const totalPages = Math.ceil(filteredVisits.length / pageSize) || 1;
   const paginatedVisits = filteredVisits.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE
+    (page - 1) * pageSize,
+    page * pageSize
   );
 
   if (loading) {
@@ -104,7 +105,10 @@ export default function VisitsSection() {
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput
           value={search}
-          onChange={setSearch}
+          onChange={(v) => {
+            setSearch(v);
+            setPage(1);
+          }}
           placeholder="Хэрэглэгч эсвэл фитнес төв..."
           className="max-w-xs"
         />
@@ -113,7 +117,7 @@ export default function VisitsSection() {
           value={dateFrom}
           onChange={(e) => {
             setDateFrom(e.target.value);
-            setPage(0);
+            setPage(1);
           }}
           className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
         />
@@ -122,7 +126,7 @@ export default function VisitsSection() {
           value={dateTo}
           onChange={(e) => {
             setDateTo(e.target.value);
-            setPage(0);
+            setPage(1);
           }}
           className="h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
         />
@@ -156,32 +160,17 @@ export default function VisitsSection() {
         error={error ?? undefined}
       />
       {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-sm text-gray-500">
-            {filteredVisits.length} нийт
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-white/[0.03]"
-            >
-              Өмнөх
-            </button>
-            <span className="flex items-center px-2 text-sm">
-              {page + 1} / {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:hover:bg-white/[0.03]"
-            >
-              Дараах
-            </button>
-          </div>
-        </div>
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalItems={filteredVisits.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+          pageSizeOptions={[25, 50, 100]}
+        />
       )}
     </ComponentCard>
   );

@@ -89,7 +89,7 @@ export default function VisitsTable({
                   {v.method === "qr" ? "QR" : "Товч"}
                 </TableCell>
                 <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
-                  {new Date(v.checked_in_at).toLocaleString("mn-MN")}
+                  {new Date(v.checked_in_at).toLocaleString("mn-MN", { hour12: false })}
                 </TableCell>
               </TableRow>
             ))}

@@ -47,7 +47,7 @@ export default function SignInForm() {
         .single();
       if (!isStaffRoleForAdminApp(profile?.role)) {
         await supabase.auth.signOut();
-        setError("Зөвхөн админ эсвэл борлуулалтын эрхтэй хэрэглэгчид нэвтрэх боломжтой.");
+        setError("Зөвхөн админ, модератор эсвэл борлуулалтын эрхтэй хэрэглэгчид нэвтрэх боломжтой.");
         return;
       }
       router.push(redirect);
@@ -82,7 +82,7 @@ export default function SignInForm() {
                 {(error || errorParam === "unauthorized") && (
                   <div className="p-3 rounded-lg bg-error-50 text-error-600 text-sm dark:bg-error-950 dark:text-error-400">
                     {errorParam === "unauthorized"
-                      ? "Зөвхөн админ эсвэл борлуулалтын эрхтэй хэрэглэгчид нэвтрэх боломжтой."
+                      ? "Зөвхөн админ, модератор эсвэл борлуулалтын эрхтэй хэрэглэгчид нэвтрэх боломжтой."
                       : errorParam === "auth"
                       ? "Нэвтрэх боломжгүй боллоо."
                       : error}

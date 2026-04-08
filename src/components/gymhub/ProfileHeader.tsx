@@ -11,6 +11,14 @@ type ProfileData = {
   role: string | null;
 };
 
+const roleLabels: Record<string, string> = {
+  user: "Гишүүн",
+  admin: "Админ",
+  moderator: "Модератор",
+  sales: "Борлуулалт",
+  gym_owner: "Фитнес эзэмшигч",
+};
+
 export default function ProfileHeader() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -58,7 +66,7 @@ export default function ProfileHeader() {
           <div>
             <h3 className="text-lg font-bold">{displayName}</h3>
             <p className="text-sm text-white/70">
-              {profile?.role === "admin" ? "Админ" : "Хэрэглэгч"}
+              {roleLabels[profile?.role ?? "user"] ?? "Гишүүн"}
             </p>
           </div>
         </div>

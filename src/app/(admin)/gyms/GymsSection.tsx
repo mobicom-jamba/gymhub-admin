@@ -12,6 +12,7 @@ import SearchInput from "@/components/common/SearchInput";
 import type { Gym } from "./types";
 import { useToast } from "@/components/ui/Toast";
 import { toMnErrorMessage } from "@/lib/error-message";
+import TablePagination from "@/components/ui/TablePagination";
 
 export default function GymsSection() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -20,6 +21,8 @@ export default function GymsSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGym, setEditingGym] = useState<Gym | null>(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const toast = useToast();
 
   const fetchGyms = async () => {
@@ -67,13 +70,24 @@ export default function GymsSection() {
     );
   }
 
+  const filteredGyms = gyms.filter(
+    (g) =>
+      !search ||
+      (g.name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
+      (g.address?.toLowerCase().includes(search.toLowerCase()) ?? false),
+  );
+  const paginatedGyms = filteredGyms.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <>
       <ComponentCard title={t("gyms")}>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
             placeholder={`${t("search")} ${t("gyms")}...`}
             className="sm:max-w-xs"
           />
@@ -82,15 +96,21 @@ export default function GymsSection() {
           </Button>
         </div>
         <GymsTable
-          gyms={gyms.filter(
-            (g) =>
-              !search ||
-              (g.name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-              (g.address?.toLowerCase().includes(search.toLowerCase()) ?? false)
-          )}
+          gyms={paginatedGyms}
           error={error ?? undefined}
           onEdit={handleEdit}
           onDelete={handleDelete}
+        />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          totalItems={filteredGyms.length}
+          onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+          pageSizeOptions={[25, 50, 100]}
         />
       </ComponentCard>
       <GymFormModal

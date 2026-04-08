@@ -61,7 +61,7 @@ export default function CreateBookingModal({
   const getScheduleLabel = (s: Schedule) => {
     const c = Array.isArray(s.classes) ? s.classes[0] : s.classes;
     const g = Array.isArray(c?.gyms) ? c?.gyms[0] : c?.gyms;
-    const start = new Date(s.start_time).toLocaleString("mn-MN");
+    const start = new Date(s.start_time).toLocaleString("mn-MN", { hour12: false });
     return `${c?.title ?? ""} (${g?.name ?? ""}) - ${start}`;
   };
 
