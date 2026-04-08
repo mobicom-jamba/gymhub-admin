@@ -139,7 +139,7 @@ export default function OrganizationsSection() {
   const toast = useToast();
   const orgSearchInputRef = useRef<HTMLInputElement>(null);
 
-  const MEMBER_SELECT = "id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization_id, organization, organizations(id,name), created_at";
+  const MEMBER_SELECT = "id, full_name, phone, role, membership_tier, membership_status, membership_started_at, membership_expires_at, organization_id, organization, organizations!profiles_organization_id_fkey(id,name), created_at";
 
   const fetchAllMemberPages = useCallback(async (): Promise<Member[]> => {
     const supabase = createBrowserSupabaseClient();

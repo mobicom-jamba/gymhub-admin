@@ -129,7 +129,7 @@ export default function UsersSection() {
   const searchParams = useSearchParams();
   const initializedFromQuery = useRef(false);
 
-  const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
   const ORG_SELECT = "id,name";
 
   const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
