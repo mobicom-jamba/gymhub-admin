@@ -12,7 +12,8 @@ export async function GET() {
         "id, name, description, address, lat, lng, image_url, opening_hours, amenities, is_active, created_at, daily_visitor_limit"
       )
       .eq("is_active", true)
-      .order("name");
+      .order("name")
+      .limit(100);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -21,7 +22,14 @@ export async function GET() {
     const gyms = data ?? [];
     const withCounts = await mergeTodayVisitorCounts(supabase, gyms);
 
-    return NextResponse.json({ gyms: withCounts });
+    return NextResponse.json(
+      { gyms: withCounts },
+      {
+        headers: {
+          "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+        },
+      },
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { getPaymentAppSettings, type PaymentAppSettingsRow } from "@/lib/payment-app-settings";
+import { hasPermission } from "@/lib/permissions";
+import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   if (!body || typeof body !== "object") return null;
@@ -34,8 +36,13 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   return Object.keys(out).length ? out : null;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const auth = await verifyBearerUser(request);
+    if (!auth.ok) return auth.response;
+    if (!hasPermission(auth.permissions, "analytics.view")) {
+      return NextResponse.json({ ok: false, error: "Төлбөрийн тохиргоо харах эрхгүй." }, { status: 403 });
+    }
     const row = await getPaymentAppSettings();
     return NextResponse.json({ ok: true, settings: row });
   } catch (e) {
@@ -48,6 +55,12 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
+    const auth = await verifyBearerUser(request);
+    if (!auth.ok) return auth.response;
+    if (!hasPermission(auth.permissions, "users.manage")) {
+      return NextResponse.json({ ok: false, error: "Төлбөрийн тохиргоо засах эрхгүй." }, { status: 403 });
+    }
+
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) {
       return NextResponse.json({ ok: false, error: "Service role key missing" }, { status: 500 });

@@ -22,9 +22,23 @@ export async function POST(request: Request) {
       facebook_url: body?.facebook_url ? String(body.facebook_url).trim() || null : null,
       website_url: body?.website_url ? String(body.website_url).trim() || null : null,
       partner_url: body?.partner_url ? String(body.partner_url).trim() || null : null,
+      created_by: auth.userId,
     };
 
     let { data: inserted, error: insertErr } = await supabase.from("organizations").insert(row).select("id, name").single();
+    if (insertErr && insertErr.message?.includes("created_by")) {
+      const fallback = {
+        name: row.name,
+        description: row.description,
+        phone: row.phone,
+        facebook_url: row.facebook_url,
+        website_url: row.website_url,
+        partner_url: row.partner_url,
+      };
+      const retry = await supabase.from("organizations").insert(fallback).select("id, name").single();
+      inserted = retry.data ?? null;
+      insertErr = retry.error;
+    }
 
     if (insertErr) {
       const msg = insertErr.message?.toLowerCase() ?? "";

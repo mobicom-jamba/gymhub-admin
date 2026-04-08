@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import { hasPermission } from "@/lib/permissions";
+import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 /**
  * GET /api/admin/gym-staff?user_id=xxx
@@ -7,10 +9,19 @@ import { createAdminClient } from "@/lib/supabase";
  */
 export async function GET(request: Request) {
   try {
+    const auth = await verifyBearerUser(request);
+    if (!auth.ok) return auth.response;
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("user_id");
     if (!userId) {
       return NextResponse.json({ error: "user_id required" }, { status: 400 });
+    }
+    if (
+      userId !== auth.userId &&
+      !hasPermission(auth.permissions, "fitness.activity.view")
+    ) {
+      return NextResponse.json({ error: "Бусад хэрэглэгчийн мэдээлэлд хандах эрхгүй." }, { status: 403 });
     }
 
     const supabase = createAdminClient();

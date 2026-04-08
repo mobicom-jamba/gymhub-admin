@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
+import { hasPermission } from "@/lib/permissions";
+import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 const PHONE_DOMAIN = "gymhub.mn";
 
@@ -24,6 +26,12 @@ function resolveMembershipStatus(
 
 export async function POST(request: Request) {
   try {
+    const auth = await verifyBearerUser(request);
+    if (!auth.ok) return auth.response;
+    if (!hasPermission(auth.permissions, "users.manage")) {
+      return errorResponse("FORBIDDEN", "Хэрэглэгч үүсгэх эрх хүрэлцэхгүй байна.", 403);
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
     if (!serviceRoleKey) {
@@ -49,6 +57,19 @@ export async function POST(request: Request) {
       membership_started_at,
       membership_expires_at,
     } = body;
+    if (role !== undefined && !hasPermission(auth.permissions, "users.role.assign")) {
+      return errorResponse("FORBIDDEN", "Хэрэглэгчийн эрх өөрчлөх боломжгүй.", 403);
+    }
+
+    const isTryingToSetSubscriptionDates =
+      membership_started_at !== undefined || membership_expires_at !== undefined;
+    if (isTryingToSetSubscriptionDates && !hasPermission(auth.permissions, "users.subscription.edit")) {
+      return errorResponse(
+        "FORBIDDEN",
+        "Гишүүнчлэлийн эхлэх/дуусах огноог зөвхөн админ засах эрхтэй.",
+        403,
+      );
+    }
 
     if (!phone || !password) {
       return errorResponse(

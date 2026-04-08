@@ -16,10 +16,17 @@ export async function GET(request: Request) {
 
     const admin = createAdminClient();
 
-    const { data: promos, error: pErr } = await admin
-      .from("sales_promo_codes")
-      .select("id, code, commission_rate, is_active, created_at, sales_user_id")
-      .order("created_at", { ascending: false });
+    const [{ data: promos, error: pErr }, { data: requests, error: rErr }] = await Promise.all([
+      admin
+        .from("sales_promo_codes")
+        .select("id, code, commission_rate, is_active, created_at, sales_user_id")
+        .order("created_at", { ascending: false }),
+      admin
+        .from("sales_commission_requests")
+        .select("id, sales_user_id, requested_rate, approved_rate, status, note, review_note, reviewed_at, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
 
     if (pErr) {
       if (pErr.code === "42P01" || pErr.message?.includes("does not exist")) {
@@ -72,7 +79,27 @@ export async function GET(request: Request) {
       };
     });
 
-    return NextResponse.json({ ok: true, rows });
+    const pendingRequests = (requests ?? [])
+      .filter((r) => r.status === "pending")
+      .map((r) => {
+        const profile = profileMap[r.sales_user_id as string];
+        const requestedRate = Number(r.requested_rate);
+        return {
+          id: r.id,
+          sales_user_id: r.sales_user_id,
+          sales_name: profile?.full_name ?? null,
+          sales_phone: profile?.phone ?? null,
+          requested_rate: requestedRate,
+          requested_percent: Math.round(requestedRate * 10000) / 100,
+          note: r.note ?? null,
+          created_at: r.created_at,
+        };
+      });
+    if (rErr && rErr.code !== "42P01") {
+      return NextResponse.json({ ok: false, error: rErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, rows, pending_requests: pendingRequests });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

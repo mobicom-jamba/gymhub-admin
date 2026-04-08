@@ -1,9 +1,9 @@
 /** Admin вэб апп руу нэвтрэхийг зөвшөөрөгдсөн profiles.role утгууд */
-export const ADMIN_APP_STAFF_ROLES = ["admin", "sales"] as const;
+export const ADMIN_APP_STAFF_ROLES = ["admin", "moderator", "sales"] as const;
 
 export function isStaffRoleForAdminApp(role: string | null | undefined): boolean {
   const r = (role ?? "").trim();
-  return r === "admin" || r === "sales";
+  return r === "admin" || r === "moderator" || r === "sales";
 }
 
 export const PHONE_LOGIN_EMAIL_DOMAIN = "gymhub.mn";

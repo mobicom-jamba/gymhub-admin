@@ -3,12 +3,16 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { isStaffRoleForAdminApp } from "@/lib/admin-app-access";
+import { getPermissionsForRole, hasPermission, normalizeAppRole, type AppPermission, type AppRole } from "@/lib/permissions";
 import type { User } from "@supabase/supabase-js";
 
 type AuthContextType = {
   user: User | null;
   /** Admin эсвэл борлуулалтын эрхтэй (энэ вэб апп ашиглах эрх) */
   isAdmin: boolean | null;
+  role: AppRole | null;
+  permissions: AppPermission[];
+  can: (permission: AppPermission) => boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 };
@@ -16,6 +20,9 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isAdmin: null,
+  role: null,
+  permissions: [],
+  can: () => false,
   loading: true,
   signOut: async () => {},
 });
@@ -23,6 +30,8 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [role, setRole] = useState<AppRole | null>(null);
+  const [permissions, setPermissions] = useState<AppPermission[]>([]);
   const [loading, setLoading] = useState(true);
   const supabaseRef = useRef(createBrowserSupabaseClient());
 
@@ -30,33 +39,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = supabaseRef.current;
     let cancelled = false;
 
-    const checkStaffAccess = async (userId: string): Promise<boolean> => {
-      try {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", userId)
-          .single();
-
-        if (error) {
-          console.error("[AuthContext] Profile query error:", error.message);
-          return false;
-        }
-        return isStaffRoleForAdminApp(profile?.role);
-      } catch (err) {
-        console.error("[AuthContext] Profile check failed:", err);
-        return false;
-      }
-    };
-
     const resolveUser = async (u: User | null) => {
       if (cancelled) return;
       setUser(u);
       if (u) {
-        const staff = await checkStaffAccess(u.id);
-        if (!cancelled) setIsAdmin(staff);
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", u.id)
+          .single();
+        const resolvedRole = normalizeAppRole((profile as { role?: string | null } | null)?.role);
+        const resolvedPermissions = getPermissionsForRole(resolvedRole);
+        const staff = isStaffRoleForAdminApp((profile as { role?: string | null } | null)?.role);
+        if (!cancelled) {
+          setRole(resolvedRole);
+          setPermissions(resolvedPermissions);
+          setIsAdmin(staff);
+        }
       } else {
         setIsAdmin(false);
+        setRole(null);
+        setPermissions([]);
       }
       if (!cancelled) setLoading(false);
     };
@@ -69,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!cancelled) {
         setUser(null);
         setIsAdmin(false);
+        setRole(null);
+        setPermissions([]);
         setLoading(false);
       }
     });
@@ -90,8 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = "/signin";
   };
 
+  const can = (permission: AppPermission) => hasPermission(permissions, permission);
+
   return (
-    <AuthContext.Provider value={{ user, isAdmin, loading, signOut }}>
+    <AuthContext.Provider value={{ user, isAdmin, role, permissions, can, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

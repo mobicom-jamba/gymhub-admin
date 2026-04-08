@@ -54,13 +54,13 @@ export async function GET(request: Request) {
 
     // Enrich with user profile info
     const userIds = [...new Set((data ?? []).map((v) => v.user_id))];
-    let profiles: Record<string, { full_name?: string; phone?: string; email?: string }> = {};
+    let profiles: Record<string, { full_name?: string; phone?: string; email?: string; avatar_path?: string | null }> = {};
     let authUsers: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
 
     if (userIds.length > 0) {
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, phone, email")
+        .select("id, full_name, phone, email, avatar_path")
         .in("id", userIds);
       if (profileData) {
         profiles = Object.fromEntries(profileData.map((p) => [p.id, p]));
@@ -93,11 +93,16 @@ export async function GET(request: Request) {
         p?.email?.trim() ||
         (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) ||
         null;
+      const avatarPath = p?.avatar_path?.trim() || null;
+      const avatarUrl = avatarPath
+        ? supabase.storage.from("media-public").getPublicUrl(avatarPath).data.publicUrl
+        : null;
       return {
         ...v,
         user_name: name,
         user_phone: phone,
         user_email: email,
+        user_avatar_url: avatarUrl,
       };
     });
 

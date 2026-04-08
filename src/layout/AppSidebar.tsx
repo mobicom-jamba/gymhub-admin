@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { useAuth } from "@/context/AuthContext";
 import {
   BoxCubeIcon,
   CalenderIcon,
@@ -69,7 +70,15 @@ const othersItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { can } = useAuth();
   const pathname = usePathname();
+  const allowedNavItems = navItems.filter((item) => {
+    if (!item.path) return true;
+    if (item.path === "/users") return can("users.view");
+    if (item.path === "/organizations") return can("organizations.view");
+    if (item.path === "/gyms") return can("gyms.view");
+    return true;
+  });
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -326,7 +335,7 @@ const AppSidebar: React.FC = () => {
                   <HorizontaLDots />
                 )}
               </h2>
-              {renderMenuItems(navItems, "main")}
+              {renderMenuItems(allowedNavItems, "main")}
             </div>
 
             {othersItems.length > 0 && (

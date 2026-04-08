@@ -13,6 +13,7 @@ import ComponentCard from "../common/ComponentCard";
 import { t } from "@/lib/i18n";
 import UserFormModal from "@/app/(admin)/users/UserFormModal";
 import type { OrganizationOption, Profile } from "@/app/(admin)/users/UsersSection";
+import { featureFlags } from "@/lib/feature-flags";
 
 type MonthPoint = { month: string; count: number };
 type UserRow = {
@@ -38,6 +39,8 @@ export default function DashboardSection() {
   const [yogaCount, setYogaCount] = useState(0);
   const [usersByMonth, setUsersByMonth] = useState<MonthPoint[]>([]);
   const [paymentsByMonth, setPaymentsByMonth] = useState<MonthPoint[]>([]);
+  const [commissionsByMonth, setCommissionsByMonth] = useState<MonthPoint[]>([]);
+  const [visitsByMonth, setVisitsByMonth] = useState<MonthPoint[]>([]);
   const [paymentChannels, setPaymentChannels] = useState<PaymentChannels>({ qpay: 0, sono: 0, pocket: 0, gift: 0 });
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [paymentsMonthsSource, setPaymentsMonthsSource] = useState<PaymentsMonthsSource>("bookings");
@@ -134,6 +137,8 @@ export default function DashboardSection() {
       const body = (await res.json().catch(() => ({}))) as {
         usersByMonth?: MonthPoint[];
         paymentsByMonth?: MonthPoint[];
+        commissionsByMonth?: MonthPoint[];
+        visitsByMonth?: MonthPoint[];
         paymentsMonthsSource?: PaymentsMonthsSource;
         paymentChannels?: PaymentChannels;
         error?: string;
@@ -155,6 +160,8 @@ export default function DashboardSection() {
       }
       if (Array.isArray(body.usersByMonth)) setUsersByMonth(body.usersByMonth);
       if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
+      if (Array.isArray(body.commissionsByMonth)) setCommissionsByMonth(body.commissionsByMonth);
+      if (Array.isArray(body.visitsByMonth)) setVisitsByMonth(body.visitsByMonth);
       if (
         body.paymentsMonthsSource === "bookings" ||
         body.paymentsMonthsSource === "lending" ||
@@ -307,6 +314,22 @@ export default function DashboardSection() {
           <NewGymsCard gyms={newGyms} />
         </ComponentCard>
       </div>
+
+      {featureFlags.enhancedAnalyticsCharts && (
+        <>
+          <div className="col-span-12 xl:col-span-6">
+            <ComponentCard title="Сараар ирц" subtitle="Татгалзсан хүсэлт ороогүй">
+              <BookingsChart data={visitsByMonth.map((d) => ({ date: d.month, count: d.count }))} seriesName="Ирц" />
+            </ComponentCard>
+          </div>
+
+          <div className="col-span-12 xl:col-span-6">
+            <ComponentCard title="Сараар комисс" subtitle="Борлуулалтын комиссын дүн (₮)">
+              <BookingsChart data={commissionsByMonth.map((d) => ({ date: d.month, count: d.count }))} seriesName="Комисс" />
+            </ComponentCard>
+          </div>
+        </>
+      )}
 
       <div className="col-span-12">
         <SalesPromosAdminCard />

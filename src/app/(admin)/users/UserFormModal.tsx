@@ -9,6 +9,8 @@ import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import OrgFormModal from "../organizations/OrgFormModal";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
+import { useAuth } from "@/context/AuthContext";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type Props = {
   isOpen: boolean;
@@ -287,7 +289,9 @@ function DateField({ value, onChange }: { value: string; onChange: (v: string) =
 }
 
 export default function UserFormModal({ isOpen, onClose, profile, organizations, onOrganizationsRefresh, onSuccess }: Props) {
+  const { can } = useAuth();
   const isCreate = !profile;
+  const canEditSubscriptionDates = can("users.subscription.edit");
   const orgDropRef = useRef<HTMLDivElement>(null);
 
   const [password, setPassword]         = useState("123456");
@@ -360,6 +364,17 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     const fullName = [ovog, ner].filter(Boolean).join(" ") || null;
     const computedMembershipStatus = resolveMembershipStatus(startedAt, expiresAt);
     try {
+      const supabase = createBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const authHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (session?.access_token) {
+        authHeaders.Authorization = `Bearer ${session.access_token}`;
+      }
+
       if (expiresAt && startedAt && new Date(startedAt) > new Date(expiresAt)) {
         setFormError("Эхлэх огноо нь дуусах огнооноос өмнө байх ёстой.");
         return;
@@ -371,7 +386,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         if (!ovog.trim() || !ner.trim()) { setFormError("Овог, нэр хоёуланг нь оруулна уу."); return; }
         const res = await fetch("/api/admin/users", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders,
           body: JSON.stringify({
             phone: digits, password, full_name: fullName,
             surname: ovog.trim(),
@@ -380,15 +395,19 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             organization_id: safeOrganizationId,
             organization: organization || null,
             membership_tier: tier, membership_status: computedMembershipStatus,
-            membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
-            membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+            ...(canEditSubscriptionDates
+              ? {
+                  membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+                  membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+                }
+              : {}),
           }),
         });
         if (!res.ok) { setFormError(await parseApiError(res)); return; }
       } else {
         const res = await fetch(`/api/admin/users/${profile!.id}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders,
           body: JSON.stringify({
             full_name: fullName,
             surname: ovog.trim() || null,
@@ -399,8 +418,12 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             organization: organization || null,
             membership_tier: tier,
             membership_status: computedMembershipStatus,
-            membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
-            membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+            ...(canEditSubscriptionDates
+              ? {
+                  membership_started_at: startedAt ? new Date(startedAt).toISOString() : null,
+                  membership_expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+                }
+              : {}),
             ...(password ? { password } : {}),
           }),
         });
@@ -587,6 +610,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <option value="user">Хэрэглэгч</option>
                     <option value="gym_owner">Фитнес эзэмшигч</option>
                     <option value="sales">Борлуулалт</option>
+                    <option value="moderator">Модератор</option>
                     <option value="admin">Админ</option>
                   </select>
                 </div>
@@ -727,13 +751,22 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Эхлэх огноо</Label>
-                  <DateField value={startedAt} onChange={setStartedAt} />
+                  <div className={canEditSubscriptionDates ? "" : "pointer-events-none opacity-70"}>
+                    <DateField value={startedAt} onChange={setStartedAt} />
+                  </div>
                 </div>
                 <div>
                   <Label>Дуусах огноо</Label>
-                  <DateField value={expiresAt} onChange={handleExpiresChange} />
+                  <div className={canEditSubscriptionDates ? "" : "pointer-events-none opacity-70"}>
+                    <DateField value={expiresAt} onChange={handleExpiresChange} />
+                  </div>
                 </div>
               </div>
+              {!canEditSubscriptionDates && (
+                <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                  Гишүүнчлэлийн эхлэх/дуусах огноог зөвхөн админ засах боломжтой.
+                </p>
+              )}
               <div className="mt-3">
                 <Label>Төлөв</Label>
                 <div className="grid grid-cols-2 gap-2">

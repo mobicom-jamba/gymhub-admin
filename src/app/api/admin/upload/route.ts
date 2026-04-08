@@ -1,7 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { hasPermission } from "@/lib/permissions";
+import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 export async function POST(request: Request) {
+  const auth = await verifyBearerUser(request);
+  if (!auth.ok) return auth.response;
+  if (!hasPermission(auth.permissions, "users.manage")) {
+    return NextResponse.json({ error: "Файл оруулах эрхгүй." }, { status: 403 });
+  }
+
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
     return NextResponse.json(

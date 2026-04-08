@@ -20,10 +20,11 @@ import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/members
 const roleLabels: Record<string, string> = {
   user: "Гишүүн",
   admin: "Админ",
+  moderator: "Модератор",
   sales: "Борлуулалт",
 };
 
-const ROLES = ["user", "admin", "sales"] as const;
+const ROLES = ["user", "admin", "moderator", "sales"] as const;
 
 function isExpired(expiresAt: string | null) {
   if (!expiresAt) return false;

@@ -90,11 +90,12 @@ function tierRank(t: string | null): number {
 
 const PAGE_SIZES = [25, 50, 100, 500];
 
-type UsersRoleTab = "user" | "admin" | "sales";
+type UsersRoleTab = "user" | "admin" | "moderator" | "sales";
 
 function usersTabLabel(tab: UsersRoleTab): string {
   if (tab === "user") return "Гишүүд";
   if (tab === "admin") return "Админ";
+  if (tab === "moderator") return "Модератор";
   return "Борлуулалт";
 }
 
@@ -237,7 +238,7 @@ export default function UsersSection() {
     if (q) setSearch(q);
     if (status) setStatusFilter(status);
     if (org) setOrgFilter(org);
-    if (role === "user" || role === "admin" || role === "sales") setTab(role);
+    if (role === "user" || role === "admin" || role === "moderator" || role === "sales") setTab(role);
     initializedFromQuery.current = true;
   }, [searchParams]);
 
@@ -343,11 +344,22 @@ export default function UsersSection() {
   const handleRoleChange = async (profileId: string, newRole: string) => {
     setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, role: newRole } : p));
     const supabase = createBrowserSupabaseClient();
-    const { error: err } = await supabase
-      .from("profiles")
-      .update({ role: newRole })
-      .eq("id", profileId);
-    if (err) { toast.show(toMnErrorMessage(err.message), "error"); silentRefresh(); }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const res = await fetch(`/api/admin/users/${profileId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ role: newRole }),
+    });
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      toast.show(toMnErrorMessage(data.message || data.error || ""), "error");
+      silentRefresh();
+    }
   };
 
   const handleDelete = async (profileId: string) => {
@@ -427,11 +439,26 @@ export default function UsersSection() {
     setProfiles(prev => prev.map(p => ids.includes(p.id) ? { ...p, role: newRole } : p));
     setSelectedIds(new Set());
     const supabase = createBrowserSupabaseClient();
-    const { error: err } = await supabase
-      .from("profiles")
-      .update({ role: newRole })
-      .in("id", ids);
-    if (err) { toast.show(toMnErrorMessage(err.message), "error"); silentRefresh(); }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        const res = await fetch(`/api/admin/users/${id}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ role: newRole }),
+        });
+        return res.ok;
+      }),
+    );
+    if (results.some((ok) => !ok)) {
+      toast.show("Зарим хэрэглэгчийн эрх солиход алдаа гарлаа.", "error");
+      silentRefresh();
+    }
   };
 
   const toggleSelectAll = () => {
@@ -459,6 +486,7 @@ export default function UsersSection() {
   }
 
   const adminCount = profiles.filter(p => (p.role ?? "user") === "admin").length;
+  const moderatorCount = profiles.filter(p => (p.role ?? "user") === "moderator").length;
   const userCount  = profiles.filter(p => (p.role ?? "user") === "user").length;
   const salesCount = profiles.filter(p => (p.role ?? "user") === "sales").length;
   const filterChips = [
@@ -483,9 +511,9 @@ export default function UsersSection() {
     <>
       {/* ── Role Tabs ── */}
       <div className="mb-4 flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 dark:border-white/[0.08] dark:bg-gray-900" style={{ width: "fit-content" }}>
-        {(["user", "admin", "sales"] as const).map((r) => {
+        {(["user", "admin", "moderator", "sales"] as const).map((r) => {
           const label = usersTabLabel(r);
-          const count = r === "user" ? userCount : r === "admin" ? adminCount : salesCount;
+          const count = r === "user" ? userCount : r === "admin" ? adminCount : r === "moderator" ? moderatorCount : salesCount;
           const active = tab === r;
           return (
             <button
