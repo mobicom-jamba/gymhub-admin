@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase";
-import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 async function findUserByEmail(
@@ -29,7 +28,7 @@ export async function GET(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!hasPermission(auth.permissions, "fitness.activity.view")) {
+    if (!auth.isAdmin && !auth.isModerator) {
       return NextResponse.json({ error: "Энэ мэдээлэлд хандах эрхгүй." }, { status: 403 });
     }
 
@@ -92,8 +91,8 @@ export async function POST(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!hasPermission(auth.permissions, "moderator.grant")) {
-      return NextResponse.json({ error: "Энэ үйлдлийг зөвхөн админ гүйцэтгэнэ." }, { status: 403 });
+    if (!auth.isAdmin && !auth.isModerator) {
+      return NextResponse.json({ error: "Энэ үйлдлийг зөвхөн админ/модератор гүйцэтгэнэ." }, { status: 403 });
     }
 
     const body = await request.json();

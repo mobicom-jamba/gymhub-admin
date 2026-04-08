@@ -136,8 +136,14 @@ export default function DashboardSection() {
   const fetchAnalytics = useCallback(async () => {
     try {
       setAnalyticsError(null);
+      const supabase = createBrowserSupabaseClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const headers = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : undefined;
       const res = await fetch("/api/admin/dashboard-analytics", {
         credentials: "include",
+        headers,
       });
       const body = (await res.json().catch(() => ({}))) as {
         usersByMonth?: MonthPoint[];

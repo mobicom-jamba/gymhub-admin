@@ -80,6 +80,17 @@ export default function GymFormModal({
   const [ownerLoading, setOwnerLoading] = useState(false);
   const [hasExistingOwner, setHasExistingOwner] = useState(false);
 
+  const getAuthHeaders = async (
+    extra: Record<string, string> = {},
+  ): Promise<Record<string, string>> => {
+    const supabase = createBrowserSupabaseClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const auth = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    return { ...extra, ...auth };
+  };
+
   React.useEffect(() => {
     if (isOpen) {
       setName(gym?.name ?? "");
@@ -100,7 +111,8 @@ export default function GymFormModal({
       // Fetch existing owner for this gym
       if (gym?.id) {
         setOwnerLoading(true);
-        fetch(`/api/admin/gym-owner?gym_id=${gym.id}`)
+        getAuthHeaders()
+          .then((headers) => fetch(`/api/admin/gym-owner?gym_id=${gym.id}`, { headers }))
           .then(r => r.json())
           .then(d => {
             if (d.owner) {
@@ -134,7 +146,8 @@ export default function GymFormModal({
       formData.append("file", file);
       formData.append("bucket", "media-public");
       formData.append("path", `gyms/${Date.now()}.${ext}`);
-      const res = await fetch("/api/admin/upload", { method: "POST", body: formData });
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/admin/upload", { method: "POST", headers, body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Зураг оруулахад алдаа гарлаа");
       setImageUrl(data.url);
@@ -210,9 +223,10 @@ export default function GymFormModal({
 
     if (ownerPhone.trim() && savedGymId) {
       try {
+        const headers = await getAuthHeaders({ "Content-Type": "application/json" });
         const ownerRes = await fetch("/api/admin/gym-owner", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             gym_id: savedGymId,
             name: ownerName.trim(),

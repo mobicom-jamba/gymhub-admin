@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 
 type ToastType = "success" | "error" | "info";
@@ -24,8 +24,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
 
+  const value = useMemo(() => ({ show }), [show]);
+
   return (
-    <ToastContext.Provider value={{ show }}>
+    <ToastContext.Provider value={value}>
       {children}
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
     </ToastContext.Provider>

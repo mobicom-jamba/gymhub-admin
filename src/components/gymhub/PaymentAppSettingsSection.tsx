@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import Button from "@/components/ui/button/Button";
 import { useToast } from "@/components/ui/Toast";
+import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type Settings = {
   early_membership_price_mnt: number;
@@ -22,6 +23,8 @@ function formatMnt(n: number): string {
 
 export default function PaymentAppSettingsSection() {
   const toast = useToast();
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [earlyLegacy, setEarlyLegacy] = useState(480_000);
@@ -33,10 +36,20 @@ export default function PaymentAppSettingsSection() {
   const [pocket, setPocket] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
+  const getAuthHeaders = useCallback(async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
+    const supabase = createBrowserSupabaseClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const auth: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+    return { ...extra, ...auth };
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/payment-settings");
+      const headers = await getAuthHeaders();
+      const res = await fetch("/api/admin/payment-settings", { headers });
       const data = await res.json();
       if (!data.ok || !data.settings) {
         throw new Error(data.error || "Ачаалахад алдаа");
@@ -52,14 +65,14 @@ export default function PaymentAppSettingsSection() {
       setUpdatedAt(s.updated_at);
     } catch (e) {
       console.error(e);
-      toast.show(
+      toastRef.current.show(
         e instanceof Error ? e.message : "Тохиргоо ачаалахад алдаа гарлаа",
         "error"
       );
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     load();
@@ -68,9 +81,10 @@ export default function PaymentAppSettingsSection() {
   const save = async () => {
     setSaving(true);
     try {
+      const headers = await getAuthHeaders({ "Content-Type": "application/json" });
       const res = await fetch("/api/admin/payment-settings", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           early_membership_price_mnt: earlyLegacy,
           early_first_month_price_mnt: earlyFirst,
