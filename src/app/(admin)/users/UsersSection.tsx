@@ -5,7 +5,6 @@ import ComponentCard from "@/components/common/ComponentCard";
 import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
 import type { UsersSortColumn } from "./users-sort";
-import Button from "@/components/ui/button/Button";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import SearchInput from "@/components/common/SearchInput";
@@ -18,6 +17,8 @@ import { toMnErrorMessage } from "@/lib/error-message";
 import ColumnToggle from "@/components/ui/ColumnToggle";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import flatpickr from "flatpickr";
+import { Mongolian } from "flatpickr/dist/l10n/mn.js";
 
 export type Profile = {
   id: string;
@@ -37,6 +38,13 @@ export type Profile = {
 };
 
 export type OrganizationOption = { id: string; name: string };
+
+type PaidBookingRow = {
+  id: string;
+  user_id: string | null;
+  paid_at: string | null;
+  created_at?: string | null;
+};
 
 function buildOrganizationOptions(
   tableOrganizations: OrganizationOption[],
@@ -83,6 +91,40 @@ function profileStatus(p: Profile): "active" | "expired" | "inactive" {
   if (isMembershipExpired(p.membership_expires_at)) return "expired";
   if (p.membership_status === "expired") return "expired";
   return "active";
+}
+
+function formatFilterDateLabel(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("mn-MN");
+}
+
+function buildLocalDayRange(value: string): { startIso: string; endIso: string } | null {
+  if (!value) return null;
+  const start = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return {
+    startIso: start.toISOString(),
+    endIso: end.toISOString(),
+  };
+}
+
+function isMissingColumnError(message: string | null | undefined, column: string): boolean {
+  const text = (message ?? "").toLowerCase();
+  return text.includes(`column bookings.${column} does not exist`) || text.includes(`could not find the '${column}' column`);
+}
+
+function isMissingTableError(message: string | null | undefined, table: string): boolean {
+  const text = (message ?? "").toLowerCase();
+  return text.includes(`could not find the table 'public.${table.toLowerCase()}'`) || text.includes(`relation "public.${table.toLowerCase()}" does not exist`);
+}
+
+function isLegacyPaidStatus(status: string | null | undefined): boolean {
+  const s = (status ?? "").trim().toLowerCase();
+  return s === "paid" || s === "completed" || s === "success" || s === "succeeded" || s === "settled" || s === "approved" || s === "done";
 }
 
 const DATE_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate"]);
@@ -146,11 +188,17 @@ export default function UsersSection() {
   const [sortColumn, setSortColumn] = useState<UsersSortColumn | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
+  const [paidOnDate, setPaidOnDate] = useState("");
+  const [paidBookings, setPaidBookings] = useState<PaidBookingRow[]>([]);
+  const [paidBookingsLoading, setPaidBookingsLoading] = useState(false);
+  const [paidBookingsError, setPaidBookingsError] = useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const initializedFromQuery = useRef(false);
+  const paidDateInputRef = useRef<HTMLInputElement | null>(null);
+  const paidDatePickerRef = useRef<flatpickr.Instance | null>(null);
 
   const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
   const ORG_SELECT = "id,name";
@@ -231,14 +279,56 @@ export default function UsersSection() {
   useEffect(() => { fetchProfiles(); }, []);
 
   useEffect(() => {
+    if (loading || tab !== "user" || !paidDateInputRef.current) return;
+
+    paidDatePickerRef.current?.destroy();
+    paidDatePickerRef.current = null;
+
+    const instance = flatpickr(paidDateInputRef.current, {
+      dateFormat: "Y-m-d",
+      locale: Mongolian,
+      disableMobile: true,
+      allowInput: false,
+      clickOpens: true,
+      monthSelectorType: "static",
+      position: "auto left",
+      onChange: (_selectedDates, dateStr) => {
+        setPaidOnDate((prev) => (prev === dateStr ? prev : dateStr));
+        setPage(1);
+        setSelectedIds(new Set());
+      },
+    });
+
+    paidDatePickerRef.current = instance;
+
+    return () => {
+      instance.destroy();
+      paidDatePickerRef.current = null;
+    };
+  }, [loading, tab]);
+
+  useEffect(() => {
+    const picker = paidDatePickerRef.current;
+    if (!picker) return;
+
+    if (paidOnDate) {
+      picker.setDate(paidOnDate, false, "Y-m-d");
+    } else {
+      picker.clear(false);
+    }
+  }, [paidOnDate]);
+
+  useEffect(() => {
     if (initializedFromQuery.current) return;
     const q = searchParams.get("q");
     const status = searchParams.get("status");
     const org = searchParams.get("org");
     const role = searchParams.get("role");
+    const paidOn = searchParams.get("paidOn");
     if (q) setSearch(q);
     if (status) setStatusFilter(status);
     if (org) setOrgFilter(org);
+    if (paidOn) setPaidOnDate(paidOn);
     if (role === "user" || role === "admin" || role === "moderator" || role === "sales") setTab(role);
     initializedFromQuery.current = true;
   }, [searchParams]);
@@ -249,13 +339,14 @@ export default function UsersSection() {
     if (search) params.set("q", search); else params.delete("q");
     if (statusFilter) params.set("status", statusFilter); else params.delete("status");
     if (orgFilter) params.set("org", orgFilter); else params.delete("org");
+    if (paidOnDate) params.set("paidOn", paidOnDate); else params.delete("paidOn");
     if (tab && tab !== "user") params.set("role", tab); else params.delete("role");
     params.delete("page");
     const next = params.toString();
     const current = searchParams.toString();
     if (next === current) return;
     router.replace(next ? `${pathname}?${next}` : pathname);
-  }, [search, statusFilter, orgFilter, tab, pathname, router, searchParams]);
+  }, [search, statusFilter, orgFilter, paidOnDate, tab, pathname, router, searchParams]);
 
   const organizations = useMemo(() => {
     const orgs = [...new Set(
@@ -266,9 +357,148 @@ export default function UsersSection() {
     return orgs.sort((a, b) => a.localeCompare(b));
   }, [profiles]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!paidOnDate) {
+      setPaidBookings([]);
+      setPaidBookingsError(null);
+      setPaidBookingsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const range = buildLocalDayRange(paidOnDate);
+    if (!range) {
+      setPaidBookings([]);
+      setPaidBookingsError("Төлбөрийн огноо буруу байна.");
+      setPaidBookingsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const loadPaidBookings = async () => {
+      setPaidBookingsLoading(true);
+      setPaidBookingsError(null);
+
+      const supabase = createBrowserSupabaseClient();
+      let { data, error: bookingsError } = await supabase
+        .from("bookings")
+        .select("id, user_id, paid_at, created_at")
+        .eq("payment_status", "paid")
+        .gte("paid_at", range.startIso)
+        .lt("paid_at", range.endIso)
+        .order("paid_at", { ascending: false });
+
+      if (bookingsError && isMissingColumnError(bookingsError.message, "paid_at")) {
+        const fallback = await supabase
+          .from("bookings")
+          .select("id, user_id, created_at")
+          .eq("payment_status", "paid")
+          .gte("created_at", range.startIso)
+          .lt("created_at", range.endIso)
+          .order("created_at", { ascending: false });
+
+        data = (fallback.data ?? []).map((row) => ({
+          ...row,
+          paid_at: row.created_at ?? null,
+        }));
+        bookingsError = fallback.error;
+      }
+
+      if (bookingsError && isMissingColumnError(bookingsError.message, "payment_status")) {
+        let legacySelect = "id, user_id, status, paid_at, created_at";
+        let legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
+
+        if (legacyProbe.error?.message?.toLowerCase().includes("paid_at")) {
+          legacySelect = "id, user_id, status, created_at";
+          legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
+        }
+
+        if (!legacyProbe.error) {
+          const legacyRows = await supabase
+            .from("lending_records")
+            .select(legacySelect)
+            .gte("created_at", range.startIso)
+            .lt("created_at", range.endIso)
+            .order("created_at", { ascending: false });
+
+          if (!legacyRows.error) {
+            data = (legacyRows.data ?? [])
+              .filter((row) => isLegacyPaidStatus((row as { status?: string | null }).status))
+              .map((row) => {
+                const record = row as { id: string; user_id?: string | null; paid_at?: string | null; created_at?: string | null };
+                return {
+                  id: record.id,
+                  user_id: record.user_id ?? null,
+                  paid_at: record.paid_at ?? record.created_at ?? null,
+                  created_at: record.created_at ?? null,
+                };
+              });
+            bookingsError = null;
+          } else {
+            bookingsError = legacyRows.error;
+          }
+        }
+      }
+
+      if (
+        bookingsError &&
+        (
+          isMissingColumnError(bookingsError.message, "payment_status") ||
+          isMissingTableError(bookingsError.message, "lending_records")
+        )
+      ) {
+        data = profiles
+          .filter((profile) => {
+            if ((profile.role ?? "user") !== "user") return false;
+            if (!profile.membership_started_at) return false;
+            const startedAt = new Date(profile.membership_started_at).toISOString();
+            return startedAt >= range.startIso && startedAt < range.endIso;
+          })
+          .map((profile) => ({
+            id: `profile-${profile.id}`,
+            user_id: profile.id,
+            paid_at: profile.membership_started_at,
+            created_at: profile.membership_started_at,
+          }));
+        bookingsError = null;
+      }
+
+      if (cancelled) return;
+
+      if (bookingsError) {
+        setPaidBookings([]);
+        setPaidBookingsError(bookingsError.message);
+      } else {
+        setPaidBookings((data ?? []) as PaidBookingRow[]);
+        setPaidBookingsError(null);
+      }
+
+      setPaidBookingsLoading(false);
+    };
+
+    loadPaidBookings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paidOnDate, profiles]);
+
+  const paidUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const booking of paidBookings) {
+      if (booking.user_id) ids.add(booking.user_id);
+    }
+    return ids;
+  }, [paidBookings]);
+
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
       if ((p.role ?? "user") !== tab) return false;
+      if (tab === "user" && paidOnDate && !paidUserIds.has(p.id)) return false;
       const orgName = profileOrgName(p);
       if (orgFilter && orgName !== orgFilter) return false;
       if (statusFilter && profileStatus(p) !== statusFilter) return false;
@@ -284,7 +514,7 @@ export default function UsersSection() {
       }
       return true;
     });
-  }, [profiles, search, tab, orgFilter, statusFilter]);
+  }, [profiles, search, tab, orgFilter, statusFilter, paidOnDate, paidUserIds]);
 
   const sortedFilteredProfiles = useMemo(() => {
     if (!sortColumn) return filteredProfiles;
@@ -444,35 +674,6 @@ export default function UsersSection() {
     finally { setBulkDeleting(false); }
   };
 
-  const handleBulkRoleChange = async (newRole: string) => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`${selectedIds.size} хэрэглэгчийн эрхийг ${newRole} болгох уу?`)) return;
-    const ids = Array.from(selectedIds);
-    setProfiles(prev => prev.map(p => ids.includes(p.id) ? { ...p, role: newRole } : p));
-    setSelectedIds(new Set());
-    const supabase = createBrowserSupabaseClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const results = await Promise.all(
-      ids.map(async (id) => {
-        const res = await fetch(`/api/admin/users/${id}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } as Record<string, string> : {}),
-          },
-          body: JSON.stringify({ role: newRole }),
-        });
-        return res.ok;
-      }),
-    );
-    if (results.some((ok) => !ok)) {
-      toast.show("Зарим хэрэглэгчийн эрх солиход алдаа гарлаа.", "error");
-      silentRefresh();
-    }
-  };
-
   const toggleSelectAll = () => {
     if (selectedIds.size === pagedProfiles.length) {
       setSelectedIds(new Set());
@@ -483,7 +684,11 @@ export default function UsersSection() {
 
   const toggleSelect = (id: string) => {
     const newSet = new Set(selectedIds);
-    newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
     setSelectedIds(newSet);
   };
 
@@ -501,6 +706,9 @@ export default function UsersSection() {
   const moderatorCount = profiles.filter(p => (p.role ?? "user") === "moderator").length;
   const userCount  = profiles.filter(p => (p.role ?? "user") === "user").length;
   const salesCount = profiles.filter(p => (p.role ?? "user") === "sales").length;
+  const paidDayLabel = formatFilterDateLabel(paidOnDate);
+  const paidUsersCount = paidUserIds.size;
+  const paidCount = paidBookings.length;
   const filterChips = [
     search ? { key: "q", label: `Хайлт: ${search}`, clear: () => setSearch("") } : null,
     statusFilter
@@ -530,7 +738,13 @@ export default function UsersSection() {
           return (
             <button
               key={r}
-              onClick={() => { setTab(r); setPage(1); setPageSize(25); setSelectedIds(new Set()); }}
+              onClick={() => {
+                setTab(r);
+                if (r !== "user") setPaidOnDate("");
+                setPage(1);
+                setPageSize(25);
+                setSelectedIds(new Set());
+              }}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
                 active
                   ? "bg-brand-500 text-white shadow-sm"
@@ -594,9 +808,70 @@ export default function UsersSection() {
               ))}
             </div>
 
-            {(search || orgFilter || statusFilter) && (
+            {tab === "user" && (
+              <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-all ${
+                paidBookingsLoading
+                  ? "border-brand-300 bg-brand-50/70 shadow-sm dark:border-brand-700 dark:bg-brand-900/20"
+                  : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/60"
+              }`}>
+                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Төлбөрийн өдөр</span>
+                <div className="relative">
+                  <input
+                    ref={paidDateInputRef}
+                    placeholder="YYYY-MM-DD"
+                    onFocus={() => paidDatePickerRef.current?.open()}
+                    onClick={() => paidDatePickerRef.current?.open()}
+                    readOnly
+                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 pr-9 text-sm text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">
+                    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-13 9h16a1 1 0 001-1V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a1 1 0 001 1z" />
+                    </svg>
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaidOnDate(new Date().toISOString().slice(0, 10));
+                    setPage(1);
+                    setSelectedIds(new Set());
+                  }}
+                  disabled={paidBookingsLoading}
+                  className="inline-flex h-8 items-center gap-2 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-70 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+                >
+                  {paidBookingsLoading && (
+                    <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  )}
+                  Өнөөдөр
+                </button>
+                {paidOnDate && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaidOnDate("");
+                      setPage(1);
+                      setSelectedIds(new Set());
+                    }}
+                    disabled={paidBookingsLoading}
+                    className="h-8 rounded-lg border border-red-200 px-3 text-xs font-medium text-red-500 hover:bg-red-50 disabled:cursor-wait disabled:opacity-70 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                  >
+                    Арилгах
+                  </button>
+                )}
+                {paidOnDate && (
+                  <span className={`text-xs ${paidBookingsLoading ? "font-semibold text-brand-600 dark:text-brand-300" : "text-gray-500 dark:text-gray-400"}`}>
+                    {paidBookingsLoading
+                      ? "Төлбөрийн мэдээлэл ачаалж байна..."
+                      : `${paidUsersCount} хэрэглэгч · ${paidCount} төлбөр`}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {(search || orgFilter || statusFilter || paidOnDate) && (
               <button
-                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); resetPage(); }}
+                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); setPaidOnDate(""); setSelectedIds(new Set()); resetPage(); }}
                 className="h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-400 hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-gray-700 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
                 ✕ Цэвэрлэх
@@ -673,11 +948,26 @@ export default function UsersSection() {
                 </button>
               ))}
               <button
-                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); resetPage(); }}
+                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); setPaidOnDate(""); setSelectedIds(new Set()); resetPage(); }}
                 className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
               >
                 Бүгдийг цэвэрлэх
               </button>
+            </div>
+          )}
+          {tab === "user" && paidOnDate && paidBookingsLoading && (
+            <div className="flex justify-center py-4">
+              <div className="size-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent dark:border-brand-400" />
+            </div>
+          )}
+          {tab === "user" && paidOnDate && !paidBookingsLoading && !paidBookingsError && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
+              Нийт төлбөрийн тоо: {paidCount}.
+            </div>
+          )}
+          {tab === "user" && paidBookingsError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+              Төлбөрийн огнооны шүүлтүүр ачаалахад алдаа гарлаа: {paidBookingsError}
             </div>
           )}
         </div>

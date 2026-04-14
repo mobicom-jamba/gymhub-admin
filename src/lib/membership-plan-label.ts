@@ -54,9 +54,18 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
 
     const days = earlyFirstSegmentDaySpan(snap);
     if (days != null && days >= 280) {
+      const approxYears = Math.round(days / 365);
+      if (approxYears <= 1) {
+        return {
+          title: "Early — 1 жилийн гишүүнчлэл (бүтэн жил эсвэл хуучин нэг дорх багц)",
+          shortLabel: "Early · 1 жил",
+          variant: "early_year",
+        };
+      }
+
       return {
-        title: "Early — 1 жилийн гишүүнчлэл (бүтэн жил эсвэл хуучин нэг дорх багц)",
-        shortLabel: "Early · 1 жил",
+        title: `Early — урт хугацааны гишүүнчлэл (~${approxYears} жил)`,
+        shortLabel: `Early · ~${approxYears} жил`,
         variant: "early_year",
       };
     }

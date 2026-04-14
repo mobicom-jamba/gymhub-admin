@@ -39,16 +39,7 @@ const ALL_PERMISSIONS: AppPermission[] = [
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
   admin: ALL_PERMISSIONS,
-  moderator: [
-    "admin.app.access",
-    "users.view",
-    "organizations.view",
-    "gyms.view",
-    "gyms.map.view",
-    "fitness.activity.view",
-    "analytics.view",
-    "commissions.view.all",
-  ],
+  moderator: ALL_PERMISSIONS.filter((permission) => permission !== "users.subscription.edit"),
   sales: [
     "admin.app.access",
     "users.view",

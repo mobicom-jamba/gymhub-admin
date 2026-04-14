@@ -90,28 +90,60 @@ export async function PATCH(
       membership_expires_at !== undefined;
 
     if (hasProfileFields) {
-      const computedMembershipStatus = resolveMembershipStatus(
-        membership_started_at,
-        membership_expires_at
-      );
-
       const patch: Record<string, unknown> = {
-          full_name: full_name ?? null,
-          phone: phone ?? null,
-          role: role ?? "user",
-          organization_id: organization_id ?? null,
-          organization: organization ?? null,
-          membership_tier: membership_tier ?? null,
-          membership_status: computedMembershipStatus,
-          membership_started_at: membership_started_at ?? null,
-          membership_expires_at: membership_expires_at ?? null,
-          updated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
+
+      if (full_name !== undefined) patch.full_name = full_name ?? null;
+      if (phone !== undefined) patch.phone = phone ?? null;
+      if (role !== undefined) patch.role = role ?? "user";
+      if (organization_id !== undefined) patch.organization_id = organization_id ?? null;
+      if (organization !== undefined) patch.organization = organization ?? null;
+      if (membership_tier !== undefined) patch.membership_tier = membership_tier ?? null;
+      if (membership_started_at !== undefined) patch.membership_started_at = membership_started_at ?? null;
+      if (membership_expires_at !== undefined) patch.membership_expires_at = membership_expires_at ?? null;
+
       if (surname !== undefined) {
         patch.surname = typeof surname === "string" && surname.trim() ? surname.trim() : null;
       }
       if (given_name !== undefined) {
         patch.given_name = typeof given_name === "string" && given_name.trim() ? given_name.trim() : null;
+      }
+
+      const membershipTouched =
+        membership_tier !== undefined ||
+        membership_started_at !== undefined ||
+        membership_expires_at !== undefined;
+
+      if (membershipTouched) {
+        const { data: currentProfile, error: currentProfileError } = await admin
+          .from("profiles")
+          .select("membership_started_at, membership_expires_at")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (currentProfileError) {
+          return errorResponse(
+            "VALIDATION_ERROR",
+            mapProfileUpdateError(currentProfileError.message),
+            400,
+            currentProfileError.message,
+          );
+        }
+
+        const nextMembershipStartedAt =
+          membership_started_at !== undefined
+            ? membership_started_at
+            : currentProfile?.membership_started_at ?? null;
+        const nextMembershipExpiresAt =
+          membership_expires_at !== undefined
+            ? membership_expires_at
+            : currentProfile?.membership_expires_at ?? null;
+
+        patch.membership_status = resolveMembershipStatus(
+          nextMembershipStartedAt,
+          nextMembershipExpiresAt,
+        );
       }
 
       const { error: profileError } = await admin.from("profiles").update(patch).eq("id", id);
