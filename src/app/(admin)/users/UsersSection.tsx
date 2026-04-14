@@ -43,7 +43,7 @@ type PaidBookingRow = {
   id: string;
   user_id: string | null;
   paid_at: string | null;
-  created_at?: string | null;
+  created_at: string | null;
 };
 
 function buildOrganizationOptions(
@@ -426,17 +426,28 @@ export default function UsersSection() {
             .order("created_at", { ascending: false });
 
           if (!legacyRows.error) {
-            data = (legacyRows.data ?? [])
-              .filter((row) => isLegacyPaidStatus((row as { status?: string | null }).status))
-              .map((row) => {
-                const record = row as { id: string; user_id?: string | null; paid_at?: string | null; created_at?: string | null };
-                return {
-                  id: record.id,
-                  user_id: record.user_id ?? null,
-                  paid_at: record.paid_at ?? record.created_at ?? null,
-                  created_at: record.created_at ?? null,
-                };
+            const legacyData = (legacyRows.data ?? []) as unknown as Record<string, unknown>[];
+            data = legacyData.reduce<PaidBookingRow[]>((acc, row) => {
+              if (!row || typeof row !== "object") return acc;
+
+              const status = typeof row.status === "string" ? row.status : null;
+              if (!isLegacyPaidStatus(typeof status === "string" ? status : null)) return acc;
+
+              const id = typeof row.id === "string" ? row.id : null;
+              if (!id) return acc;
+
+              const userId = typeof row.user_id === "string" ? row.user_id : null;
+              const paidAt = typeof row.paid_at === "string" ? row.paid_at : null;
+              const createdAt = typeof row.created_at === "string" ? row.created_at : null;
+
+              acc.push({
+                id,
+                user_id: userId,
+                paid_at: paidAt ?? createdAt,
+                created_at: createdAt,
               });
+              return acc;
+            }, []);
             bookingsError = null;
           } else {
             bookingsError = legacyRows.error;
