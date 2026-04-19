@@ -6,7 +6,10 @@ import { verifyBearerUser } from "@/lib/verify-gym-access";
 export async function POST(request: Request) {
   const auth = await verifyBearerUser(request);
   if (!auth.ok) return auth.response;
-  if (!hasPermission(auth.permissions, "users.manage")) {
+  const allowed = ["users.manage", "coupons.manage"].some((p) =>
+    hasPermission(auth.permissions, p as Parameters<typeof hasPermission>[1])
+  );
+  if (!allowed) {
     return NextResponse.json({ error: "Файл оруулах эрхгүй." }, { status: 403 });
   }
 

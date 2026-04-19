@@ -60,6 +60,11 @@ const navItems: NavItem[] = [
     path: "/visits",
   },
   {
+    icon: <PlugInIcon />,
+    name: "Купон",
+    path: "/coupons",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Профайл",
     path: "/profile",
@@ -77,6 +82,7 @@ const AppSidebar: React.FC = () => {
     if (item.path === "/users") return can("users.view");
     if (item.path === "/organizations") return can("organizations.view");
     if (item.path === "/gyms") return can("gyms.view");
+    if (item.path === "/coupons") return can("coupons.manage");
     return true;
   });
 

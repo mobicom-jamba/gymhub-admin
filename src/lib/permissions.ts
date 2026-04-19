@@ -16,7 +16,8 @@ export type AppPermission =
   | "commissions.view.own"
   | "commissions.view.all"
   | "commissions.rate.request"
-  | "commissions.rate.approve";
+  | "commissions.rate.approve"
+  | "coupons.manage";
 
 const ALL_PERMISSIONS: AppPermission[] = [
   "admin.app.access",
@@ -35,6 +36,7 @@ const ALL_PERMISSIONS: AppPermission[] = [
   "commissions.view.all",
   "commissions.rate.request",
   "commissions.rate.approve",
+  "coupons.manage",
 ];
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
