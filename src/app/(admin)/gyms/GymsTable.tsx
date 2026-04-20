@@ -70,6 +70,12 @@ export default function GymsTable({
                 isHeader
                 className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
               >
+                Хот
+              </TableCell>
+              <TableCell
+                isHeader
+                className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+              >
                 {t("status")}
               </TableCell>
               {(onEdit || onDelete) && (
@@ -107,6 +113,13 @@ export default function GymsTable({
                 </TableCell>
                 <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
                   {gym.address ?? "—"}
+                </TableCell>
+                <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
+                  {gym.city === "darkhan"
+                    ? "Дархан"
+                    : gym.city === "ulaanbaatar" || !gym.city
+                      ? "Улаанбаатар"
+                      : gym.city}
                 </TableCell>
                 <TableCell className="px-5 py-4">
                   <Badge

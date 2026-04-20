@@ -60,6 +60,7 @@ export default function GymFormModal({
   const [name, setName] = useState(gym?.name ?? "");
   const [description, setDescription] = useState(gym?.description ?? "");
   const [address, setAddress] = useState(gym?.address ?? "");
+  const [city, setCity] = useState<string>(gym?.city ?? "ulaanbaatar");
   const [imageUrl, setImageUrl] = useState(gym?.image_url ?? "");
   const [isActive, setIsActive] = useState(gym?.is_active ?? true);
   const [dailyVisitorLimit, setDailyVisitorLimit] = useState(
@@ -96,6 +97,7 @@ export default function GymFormModal({
       setName(gym?.name ?? "");
       setDescription(gym?.description ?? "");
       setAddress(gym?.address ?? "");
+      setCity(gym?.city ?? "ulaanbaatar");
       setImageUrl(gym?.image_url ?? "");
       setIsActive(gym?.is_active ?? true);
       setDailyVisitorLimit(gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : "");
@@ -190,6 +192,7 @@ export default function GymFormModal({
       name: name || null,
       description: description || null,
       address: address || null,
+      city: city || "ulaanbaatar",
       image_url: imageUrl || null,
       is_active: isActive,
       daily_visitor_limit,
@@ -275,6 +278,17 @@ export default function GymFormModal({
               onChange={(e) => setAddress(e.target.value)}
               placeholder="Хаяг"
             />
+          </div>
+          <div>
+            <Label>Хот *</Label>
+            <select
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            >
+              <option value="ulaanbaatar">Улаанбаатар</option>
+              <option value="darkhan">Дархан</option>
+            </select>
           </div>
           <div>
             <Label>{t("description")}</Label>

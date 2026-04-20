@@ -3,6 +3,7 @@ export type Gym = {
   name?: string | null;
   description?: string | null;
   address?: string | null;
+  city?: string | null;
   lat?: number | null;
   lng?: number | null;
   image_url?: string | null;

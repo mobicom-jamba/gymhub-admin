@@ -21,6 +21,9 @@ export default function GymsSection() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGym, setEditingGym] = useState<Gym | null>(null);
   const [search, setSearch] = useState("");
+  const [cityFilter, setCityFilter] = useState<"ulaanbaatar" | "darkhan" | "all">(
+    "ulaanbaatar",
+  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const toast = useToast();
@@ -72,9 +75,13 @@ export default function GymsSection() {
 
   const filteredGyms = gyms.filter(
     (g) =>
-      !search ||
-      (g.name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-      (g.address?.toLowerCase().includes(search.toLowerCase()) ?? false),
+      (cityFilter === "all" ||
+        (cityFilter === "ulaanbaatar"
+          ? !g.city || g.city === "ulaanbaatar"
+          : g.city === cityFilter)) &&
+      (!search ||
+        (g.name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
+        (g.address?.toLowerCase().includes(search.toLowerCase()) ?? false)),
   );
   const paginatedGyms = filteredGyms.slice((page - 1) * pageSize, page * pageSize);
 
@@ -82,15 +89,61 @@ export default function GymsSection() {
     <>
       <ComponentCard title={t("gyms")}>
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SearchInput
-            value={search}
-            onChange={(v) => {
-              setSearch(v);
-              setPage(1);
-            }}
-            placeholder={`${t("search")} ${t("gyms")}...`}
-            className="sm:max-w-xs"
-          />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+              placeholder={`${t("search")} ${t("gyms")}...`}
+              className="sm:max-w-xs"
+            />
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setCityFilter("ulaanbaatar");
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                  cityFilter === "ulaanbaatar"
+                    ? "bg-brand-500 text-white"
+                    : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+                }`}
+              >
+                Улаанбаатар
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCityFilter("darkhan");
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                  cityFilter === "darkhan"
+                    ? "bg-brand-500 text-white"
+                    : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+                }`}
+              >
+                Дархан
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCityFilter("all");
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                  cityFilter === "all"
+                    ? "bg-brand-500 text-white"
+                    : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+                }`}
+              >
+                Бүгд
+              </button>
+            </div>
+          </div>
           <Button size="sm" onClick={handleAdd} startIcon={<PlusIcon />}>
             {t("add")}
           </Button>
