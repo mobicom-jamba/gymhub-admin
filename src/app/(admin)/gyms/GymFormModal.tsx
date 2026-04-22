@@ -18,6 +18,7 @@ type Props = {
   onClose: () => void;
   gym?: Gym | null;
   onSuccess: () => void;
+  defaultType?: string; 
 };
 
 type DayKey = "mon"|"tue"|"wed"|"thu"|"fri"|"sat"|"sun";
@@ -56,11 +57,13 @@ export default function GymFormModal({
   onClose,
   gym,
   onSuccess,
+  defaultType,
 }: Props) {
   const [name, setName] = useState(gym?.name ?? "");
   const [description, setDescription] = useState(gym?.description ?? "");
   const [address, setAddress] = useState(gym?.address ?? "");
   const [city, setCity] = useState<string>(gym?.city ?? "ulaanbaatar");
+  const [type, setType] = useState<string>(gym?.type ?? defaultType ?? "gym");
   const [imageUrl, setImageUrl] = useState(gym?.image_url ?? "");
   const [isActive, setIsActive] = useState(gym?.is_active ?? true);
   const [dailyVisitorLimit, setDailyVisitorLimit] = useState(
@@ -98,6 +101,7 @@ export default function GymFormModal({
       setDescription(gym?.description ?? "");
       setAddress(gym?.address ?? "");
       setCity(gym?.city ?? "ulaanbaatar");
+      setType(gym?.type ?? defaultType ?? "gym");
       setImageUrl(gym?.image_url ?? "");
       setIsActive(gym?.is_active ?? true);
       setDailyVisitorLimit(gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : "");
@@ -163,6 +167,7 @@ export default function GymFormModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("submit clicked", { name, type, city });
     if (!name?.trim()) {
       setError(t("pleaseEnterName"));
       return;
@@ -197,6 +202,7 @@ export default function GymFormModal({
       is_active: isActive,
       daily_visitor_limit,
       opening_hours: buildSchedule(openTime, closeTime, openDays),
+      type: type, 
     };
     let savedGymId = gym?.id ?? null;
 
@@ -256,10 +262,10 @@ export default function GymFormModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} className="max-w-[500px] m-4">
+   <Modal isOpen={isOpen} onClose={onClose} className="max-w-[500px] m-4 max-h-[90vh] overflow-y-auto">
       <div className="p-6">
         <h3 className="mb-4 text-lg font-semibold text-gray-800 dark:text-white/90">
-          {gym ? t("edit") : t("add")} {t("gyms")}
+         {gym ? t("edit") : t("add")} {defaultType === "yoga" ? "Йога төвүүд" : t("gyms")}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <FormError message={error} />
@@ -268,7 +274,7 @@ export default function GymFormModal({
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Фитнес төвийн нэр"
+               placeholder={defaultType === "yoga" ? "Йога төвийн нэр" : "Фитнес төвийн нэр"}
             />
           </div>
           <div>
