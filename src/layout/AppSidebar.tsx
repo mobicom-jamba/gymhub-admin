@@ -65,6 +65,11 @@ const navItems: NavItem[] = [
     path: "/coupons",
   },
   {
+    icon: <PageIcon />,
+    name: "Мэдээ",
+    path: "/news",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Профайл",
     path: "/profile",
