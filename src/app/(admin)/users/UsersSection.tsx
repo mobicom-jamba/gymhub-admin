@@ -30,6 +30,9 @@ export type Profile = {
   organization_id: string | null;
   organization: string | null;
   organizations?: { name: string | null } | Array<{ name: string | null }> | null;
+  avatar_path?: string | null;
+  /** Precomputed public URL for avatar_path (best-effort) */
+  avatar_url?: string | null;
   membership_tier: string | null;
   membership_status: string | null;
   membership_started_at: string | null;
@@ -207,9 +210,27 @@ export default function UsersSection() {
   const paidDateInputRef = useRef<HTMLInputElement | null>(null);
   const paidDatePickerRef = useRef<flatpickr.Instance | null>(null);
 
-  const PROFILE_SELECT_BASE = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT_BASE = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), avatar_path, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
   const PROFILE_SELECT = `${PROFILE_SELECT_BASE}, agreement_accepted_at, agreement_version`;
   const ORG_SELECT = "id,name";
+
+  const toAvatarUrl = (supabase: ReturnType<typeof createBrowserSupabaseClient>, raw: string | null | undefined): string | null => {
+    const v = String(raw ?? "").trim();
+    if (!v) return null;
+    if (/^https?:\/\//i.test(v)) return v;
+    let safePath = v.startsWith("/") ? v.slice(1) : v;
+    if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
+    if (!safePath) return null;
+    // Use Supabase image rendering endpoint for fast thumbnails (much smaller payload than original image).
+    const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+    if (base) {
+      const url =
+        `${base}/storage/v1/render/image/public/media-public/${encodeURI(safePath)}` +
+        `?width=96&height=96&resize=cover&quality=60`;
+      return url;
+    }
+    return supabase.storage.from("media-public").getPublicUrl(safePath).data.publicUrl || null;
+  };
 
   const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
     const supabase = createBrowserSupabaseClient();
@@ -236,7 +257,13 @@ export default function UsersSection() {
         err = fallback.error;
       }
       if (err) return { data: all, error: err.message };
-      all.push(...((data ?? []) as Profile[]));
+      const rows = (data ?? []) as Profile[];
+      all.push(
+        ...rows.map((p) => ({
+          ...p,
+          avatar_url: toAvatarUrl(supabase, (p as { avatar_path?: string | null }).avatar_path),
+        })),
+      );
       if (!data || data.length < PAGE) break;
       from += PAGE;
     }

@@ -466,9 +466,15 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         >
           {/* Avatar */}
           <img
-            src={getUserPlaceholderAvatar(profile?.id || displayName)}
+            src={profile?.avatar_url || getUserPlaceholderAvatar(profile?.id || displayName)}
             alt="avatar"
             className="h-14 w-14 shrink-0 rounded-2xl object-cover shadow-sm"
+            decoding="async"
+            onError={(e) => {
+              const img = e.currentTarget;
+              const next = getUserPlaceholderAvatar(profile?.id || displayName);
+              if (img.src !== next) img.src = next;
+            }}
           />
           <div className="min-w-0 flex-1">
             <h3 className="text-base font-bold text-gray-800 dark:text-white">

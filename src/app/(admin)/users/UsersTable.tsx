@@ -227,9 +227,16 @@ export default function UsersTable({
                   {(visibleColumns?.member ?? true) && <TableCell className={`sticky left-0 z-10 bg-white px-4 dark:bg-gray-900 ${py}`}>
                     <div className="flex items-center gap-3">
                       <img
-                        src={getUserPlaceholderAvatar(p.id || p.full_name)}
+                        src={p.avatar_url || getUserPlaceholderAvatar(p.id || p.full_name)}
                         alt="avatar"
                         className="h-9 w-9 shrink-0 rounded-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          const next = getUserPlaceholderAvatar(p.id || p.full_name);
+                          if (img.src !== next) img.src = next;
+                        }}
                       />
                       <span className="font-medium text-gray-800 text-sm dark:text-white/90 whitespace-nowrap">{p.full_name ?? "—"}</span>
                     </div>

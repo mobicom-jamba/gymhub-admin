@@ -18,9 +18,11 @@ function analyticsWindowStartIso(lookbackMonths: number): string {
 }
 
 async function bookingsHasPaymentAnalyticsColumns(supabase: SupabaseClient): Promise<boolean> {
+  // Be conservative here: only require the columns we actually need to classify channels.
+  // `paid_at` is optional and may not exist in some deployments.
   const { error } = await supabase
     .from("bookings")
-    .select("payment_status, payment_channel, qpay_invoice_id, paid_at, created_at")
+    .select("payment_status, created_at")
     .limit(1);
   if (!error) return true;
   const msg = (error.message ?? "").toLowerCase();
@@ -28,6 +30,17 @@ async function bookingsHasPaymentAnalyticsColumns(supabase: SupabaseClient): Pro
   if (msg.includes("unknown column")) return false;
   if (/relation .* does not exist/i.test(msg)) return false;
   return true;
+}
+
+async function bookingsColumnExists(
+  supabase: SupabaseClient,
+  column: string,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("bookings")
+    .select(column)
+    .limit(1);
+  return !error;
 }
 
 function classifyPaymentChannel(row: {
@@ -101,19 +114,37 @@ async function aggregateBookingsSinglePass(
   const PAGE = 1000;
   let from = 0;
 
+  const [hasPaymentChannel, hasQpayInvoiceId, hasPaidAt] = await Promise.all([
+    bookingsColumnExists(supabase, "payment_channel"),
+    bookingsColumnExists(supabase, "qpay_invoice_id"),
+    bookingsColumnExists(supabase, "paid_at"),
+  ]);
+
+  const selectCols = [
+    "payment_status",
+    hasPaymentChannel ? "payment_channel" : null,
+    hasQpayInvoiceId ? "qpay_invoice_id" : null,
+    hasPaidAt ? "paid_at" : null,
+    "created_at",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   for (;;) {
     let res = await supabase
       .from("bookings")
-      .select("payment_status, payment_channel, qpay_invoice_id, paid_at, created_at")
+      .select(selectCols)
       .gte("created_at", createdAtGte)
       .in("payment_status", [...PAID_STATUS])
       .order("created_at", { ascending: true })
       .range(from, from + PAGE - 1);
 
+    // Some DBs have `payment_status` but don't support `.in()` well with mixed casing;
+    // fallback to strict "paid".
     if (res.error) {
       res = await supabase
         .from("bookings")
-        .select("payment_status, payment_channel, qpay_invoice_id, paid_at, created_at")
+        .select(selectCols)
         .gte("created_at", createdAtGte)
         .eq("payment_status", "paid")
         .order("created_at", { ascending: true })
@@ -123,13 +154,15 @@ async function aggregateBookingsSinglePass(
 
     const rows = res.data ?? [];
     for (const row of rows) {
-      const s = String((row as Record<string, unknown>).payment_status ?? "").trim().toLowerCase();
+      const s = String((row as unknown as Record<string, unknown>).payment_status ?? "").trim().toLowerCase();
       if (s !== "paid") continue;
 
       const bucket = classifyPaymentChannel(row as { payment_channel?: string | null; qpay_invoice_id?: string | null });
       channels[bucket]++;
 
-      const raw = (row as Record<string, unknown>).paid_at || (row as Record<string, unknown>).created_at;
+      const raw =
+        (row as unknown as Record<string, unknown>).paid_at ||
+        (row as unknown as Record<string, unknown>).created_at;
       if (typeof raw === "string") {
         const month = raw.slice(0, 7);
         monthMap[month] = (monthMap[month] ?? 0) + 1;
