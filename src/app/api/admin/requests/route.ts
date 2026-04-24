@@ -54,13 +54,16 @@ export async function GET(request: Request) {
 
     // Enrich with user profile info
     const userIds = [...new Set((data ?? []).map((v) => v.user_id))];
-    let profiles: Record<string, { full_name?: string; phone?: string; email?: string; avatar_path?: string | null }> = {};
+    let profiles: Record<
+      string,
+      { full_name?: string; phone?: string; email?: string; avatar_path?: string | null; avatar_url?: string | null }
+    > = {};
     let authUsers: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
 
     if (userIds.length > 0) {
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, phone, email, avatar_path")
+        .select("id, full_name, phone, email, avatar_path, avatar_url")
         .in("id", userIds);
       if (profileData) {
         profiles = Object.fromEntries(profileData.map((p) => [p.id, p]));
@@ -79,8 +82,12 @@ export async function GET(request: Request) {
     const uniqueAvatarPaths = [
       ...new Set(
         Object.values(profiles)
-          .map((p) => (p?.avatar_path ?? "").trim())
-          .filter(Boolean)
+          .flatMap((p) => {
+            const a = String(p?.avatar_path ?? "").trim();
+            const b = String(p?.avatar_url ?? "").trim();
+            return [a, b];
+          })
+          .filter((v) => Boolean(v) && !/^https?:\/\//i.test(v))
       ),
     ];
 
@@ -138,11 +145,18 @@ export async function GET(request: Request) {
         p?.email?.trim() ||
         (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) ||
         null;
-      const avatarPathRaw = p?.avatar_path?.trim() || null;
+      const authAvatar =
+        pickAvatarUrlFromMeta(a?.user_metadata) ||
+        null;
+      const avatarPathRaw =
+        p?.avatar_path?.trim() ||
+        (p?.avatar_url && String(p.avatar_url).trim()) ||
+        authAvatar;
       const avatarUrl =
         (avatarPathRaw && signedAvatarUrls[avatarPathRaw]) ||
         (avatarPathRaw && signedAvatarUrls[avatarPathRaw.startsWith("/") ? avatarPathRaw.slice(1) : avatarPathRaw]) ||
-        null;
+        (avatarPathRaw && /^https?:\/\//i.test(avatarPathRaw) ? avatarPathRaw : null) ||
+        svgAvatarDataUrl(name || phone || email || "User");
       return {
         ...v,
         user_name: name,
@@ -240,6 +254,15 @@ function pickPhoneFromMeta(meta?: Record<string, unknown>): string | null {
   return null;
 }
 
+function pickAvatarUrlFromMeta(meta?: Record<string, unknown>): string | null {
+  if (!meta) return null;
+  for (const k of ["avatar_url", "avatar", "picture", "photo_url", "profile_image_url"]) {
+    const v = meta[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}
+
 function phoneFromVirtualEmail(email: string | undefined): string | null {
   if (!email?.endsWith("@gymhub.mn")) return null;
   const local = email.slice(0, -"@gymhub.mn".length);
@@ -289,4 +312,27 @@ function getTodayStartUTC8(): string {
   );
   const startUtcMs = startOfDay.getTime() - mongoliaOffset * 60000;
   return new Date(startUtcMs).toISOString();
+}
+
+function svgAvatarDataUrl(label: string): string {
+  const text = (label || "U").trim();
+  const initial = (text[0] || "U").toUpperCase();
+  const bg = "#E2E8F0"; // slate-200
+  const fg = "#475569"; // slate-600
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">` +
+    `<rect width="96" height="96" rx="48" fill="${bg}"/>` +
+    `<text x="48" y="56" text-anchor="middle" font-family="system-ui,-apple-system,Segoe UI,Roboto,Arial" font-size="40" font-weight="700" fill="${fg}">${escapeXml(initial)}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/[<>&"']/g, (ch) => {
+    if (ch === "<") return "&lt;";
+    if (ch === ">") return "&gt;";
+    if (ch === "&") return "&amp;";
+    if (ch === '"') return "&quot;";
+    return "&#39;";
+  });
 }
