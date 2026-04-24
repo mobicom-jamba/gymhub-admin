@@ -197,6 +197,11 @@ export default function UsersTable({
                 <Th col="organization" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[180px]`} label="Байгууллага" />}
               {(visibleColumns?.tier ?? true) &&
                 <Th col="tier" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} min-w-[132px] max-w-[180px]`} label="Тариф · төрөл" />}
+              {(visibleColumns?.agreement ?? false) && (
+                <TableCell isHeader className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrPlain} w-[130px]`}>
+                  Гэрээ
+                </TableCell>
+              )}
               {(visibleColumns?.startDate ?? true) &&
                 <Th col="startDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Эхлэх огноо" />}
               {(visibleColumns?.expireDate ?? true) &&
@@ -260,6 +265,26 @@ export default function UsersTable({
                       );
                     })()}
                   </TableCell>}
+
+                  {(visibleColumns?.agreement ?? false) && (
+                    <TableCell className={`px-4 ${py} text-sm whitespace-nowrap`}>
+                      {p.agreement_accepted_at ? (
+                        <span
+                          title={[
+                            `Баталгаажсан: ${new Date(p.agreement_accepted_at).toLocaleString("mn-MN", { hour12: false })}`,
+                            p.agreement_version ? `Хувилбар: ${p.agreement_version}` : null,
+                          ].filter(Boolean).join(" • ")}
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300"
+                        >
+                          ✓ Тийм
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-white/[0.06] dark:text-gray-300">
+                          — Үгүй
+                        </span>
+                      )}
+                    </TableCell>
+                  )}
 
                   {(visibleColumns?.startDate ?? true) && <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>
                     {p.membership_started_at ? new Date(p.membership_started_at).toLocaleDateString("mn-MN") : "—"}

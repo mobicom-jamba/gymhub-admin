@@ -34,6 +34,8 @@ export type Profile = {
   membership_status: string | null;
   membership_started_at: string | null;
   membership_expires_at: string | null;
+  agreement_accepted_at?: string | null;
+  agreement_version?: string | null;
   created_at: string;
 };
 
@@ -117,6 +119,11 @@ function isMissingColumnError(message: string | null | undefined, column: string
   return text.includes(`column bookings.${column} does not exist`) || text.includes(`could not find the '${column}' column`);
 }
 
+function isMissingProfilesColumnError(message: string | null | undefined, column: string): boolean {
+  const text = (message ?? "").toLowerCase();
+  return text.includes(`column profiles.${column} does not exist`) || text.includes(`could not find the '${column}' column`);
+}
+
 function isMissingTableError(message: string | null | undefined, table: string): boolean {
   const text = (message ?? "").toLowerCase();
   return text.includes(`could not find the table 'public.${table.toLowerCase()}'`) || text.includes(`relation "public.${table.toLowerCase()}" does not exist`);
@@ -183,7 +190,7 @@ export default function UsersSection() {
   const [resettingCheckin, setResettingCheckin] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
-    member: true, phone: true, organization: true, tier: true, startDate: true, expireDate: true,
+    member: true, phone: true, organization: true, tier: true, agreement: true, startDate: true, expireDate: true,
   });
   const [sortColumn, setSortColumn] = useState<UsersSortColumn | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -200,7 +207,8 @@ export default function UsersSection() {
   const paidDateInputRef = useRef<HTMLInputElement | null>(null);
   const paidDatePickerRef = useRef<flatpickr.Instance | null>(null);
 
-  const PROFILE_SELECT = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT_BASE = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT = `${PROFILE_SELECT_BASE}, agreement_accepted_at, agreement_version`;
   const ORG_SELECT = "id,name";
 
   const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
@@ -209,11 +217,24 @@ export default function UsersSection() {
     const PAGE = 1000;
     let from = 0;
     while (true) {
-      const { data, error: err } = await supabase
+      let { data, error: err } = await supabase
         .from("profiles")
         .select(PROFILE_SELECT)
         .order("created_at", { ascending: false })
         .range(from, from + PAGE - 1);
+      if (err && isMissingProfilesColumnError(err.message, "agreement_accepted_at")) {
+        const fallback = await supabase
+          .from("profiles")
+          .select(PROFILE_SELECT_BASE)
+          .order("created_at", { ascending: false })
+          .range(from, from + PAGE - 1);
+        data = ((fallback.data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => ({
+          ...row,
+          agreement_accepted_at: null,
+          agreement_version: null,
+        })) as unknown as typeof data;
+        err = fallback.error;
+      }
       if (err) return { data: all, error: err.message };
       all.push(...((data ?? []) as Profile[]));
       if (!data || data.length < PAGE) break;
@@ -921,6 +942,7 @@ export default function UsersSection() {
                 { key: "phone", label: "Утас" },
                 { key: "organization", label: "Байгууллага" },
                 { key: "tier", label: "Тариф · төрөл" },
+                { key: "agreement", label: "Гэрээ" },
                 { key: "startDate", label: "Эхлэх огноо" },
                 { key: "expireDate", label: "Дуусах огноо" },
               ]}
