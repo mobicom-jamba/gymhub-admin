@@ -100,11 +100,20 @@ export async function GET(request: Request) {
           if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
           if (!safePath) return;
 
-          // Prefer signed URL so avatars work even if bucket isn't public.
+          // Prefer a small public thumbnail URL (fast + stable). Fallback to signed URL if needed.
+          const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
+          if (base) {
+            const thumb =
+              `${base}/storage/v1/render/image/public/media-public/${encodeURI(safePath)}` +
+              `?width=96&height=96&resize=cover&quality=60`;
+            signedAvatarUrls[avatarPathRaw] = thumb;
+            return;
+          }
+
+          // Last resort: signed or public URL from client SDK.
           const signed = await supabase.storage.from("media-public").createSignedUrl(safePath, 60 * 60);
-          if (signed.data?.signedUrl) {
-            signedAvatarUrls[avatarPathRaw] = signed.data.signedUrl;
-          } else {
+          if (signed.data?.signedUrl) signedAvatarUrls[avatarPathRaw] = signed.data.signedUrl;
+          else {
             const pub = supabase.storage.from("media-public").getPublicUrl(safePath).data.publicUrl;
             if (pub) signedAvatarUrls[avatarPathRaw] = pub;
           }
