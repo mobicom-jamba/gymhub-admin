@@ -76,6 +76,42 @@ export async function GET(request: Request) {
       }
     }
 
+    const uniqueAvatarPaths = [
+      ...new Set(
+        Object.values(profiles)
+          .map((p) => (p?.avatar_path ?? "").trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    const signedAvatarUrls: Record<string, string> = {};
+    if (uniqueAvatarPaths.length > 0) {
+      await Promise.all(
+        uniqueAvatarPaths.map(async (raw) => {
+          const avatarPathRaw = raw.trim();
+          if (!avatarPathRaw) return;
+          // If already full URL, keep it.
+          if (/^https?:\/\//i.test(avatarPathRaw)) {
+            signedAvatarUrls[avatarPathRaw] = avatarPathRaw;
+            return;
+          }
+          // Normalize storage object path
+          let safePath = avatarPathRaw.startsWith("/") ? avatarPathRaw.slice(1) : avatarPathRaw;
+          if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
+          if (!safePath) return;
+
+          // Prefer signed URL so avatars work even if bucket isn't public.
+          const signed = await supabase.storage.from("media-public").createSignedUrl(safePath, 60 * 60);
+          if (signed.data?.signedUrl) {
+            signedAvatarUrls[avatarPathRaw] = signed.data.signedUrl;
+          } else {
+            const pub = supabase.storage.from("media-public").getPublicUrl(safePath).data.publicUrl;
+            if (pub) signedAvatarUrls[avatarPathRaw] = pub;
+          }
+        })
+      );
+    }
+
     const enriched = (data ?? []).map((v) => {
       const p = profiles[v.user_id];
       const a = authUsers[v.user_id];
@@ -93,10 +129,11 @@ export async function GET(request: Request) {
         p?.email?.trim() ||
         (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) ||
         null;
-      const avatarPath = p?.avatar_path?.trim() || null;
-      const avatarUrl = avatarPath
-        ? supabase.storage.from("media-public").getPublicUrl(avatarPath).data.publicUrl
-        : null;
+      const avatarPathRaw = p?.avatar_path?.trim() || null;
+      const avatarUrl =
+        (avatarPathRaw && signedAvatarUrls[avatarPathRaw]) ||
+        (avatarPathRaw && signedAvatarUrls[avatarPathRaw.startsWith("/") ? avatarPathRaw.slice(1) : avatarPathRaw]) ||
+        null;
       return {
         ...v,
         user_name: name,
