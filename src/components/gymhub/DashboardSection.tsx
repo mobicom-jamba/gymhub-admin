@@ -5,11 +5,12 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { GymHubMetrics } from "./GymHubMetrics";
 import MemberGrowthChart from "./MemberGrowthChart";
 import BookingsChart from "./BookingsChart";
-import PaymentChannelsCard from "./PaymentChannelsCard";
 import NewUsersCard from "./NewUsersCard";
 import NewGymsCard from "./NewGymsCard";
 import SalesPromosAdminCard from "./SalesPromosAdminCard";
+import FitnessCountsChart from "./FitnessCountsChart";
 import ComponentCard from "../common/ComponentCard";
+import { Modal } from "@/components/ui/modal";
 import { t } from "@/lib/i18n";
 import UserFormModal from "@/app/(admin)/users/UserFormModal";
 import type { OrganizationOption, Profile } from "@/app/(admin)/users/UsersSection";
@@ -28,8 +29,8 @@ type UserRow = {
   membership_expires_at?: string | null;
 };
 type GymRow = { id: string; name: string | null; address: string | null; phone?: string | null; image_url?: string | null; created_at?: string };
-type PaymentChannels = { qpay: number; sono: number; pocket: number; gift: number; other?: number };
 type PaymentsMonthsSource = "bookings" | "lending" | "membership_starts";
+type FitnessMonthCount = { gym_id: string; gym_name: string | null; count: number };
 
 export default function DashboardSection() {
   const [userCount, setUserCount] = useState(0);
@@ -41,7 +42,7 @@ export default function DashboardSection() {
   const [paymentsByMonth, setPaymentsByMonth] = useState<MonthPoint[]>([]);
   const [commissionsByMonth, setCommissionsByMonth] = useState<MonthPoint[]>([]);
   const [visitsByMonth, setVisitsByMonth] = useState<MonthPoint[]>([]);
-  const [paymentChannels, setPaymentChannels] = useState<PaymentChannels>({ qpay: 0, sono: 0, pocket: 0, gift: 0 });
+  const [thisMonthFitnessCounts, setThisMonthFitnessCounts] = useState<FitnessMonthCount[]>([]);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [paymentsMonthsSource, setPaymentsMonthsSource] = useState<PaymentsMonthsSource>("bookings");
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
@@ -49,6 +50,8 @@ export default function DashboardSection() {
   const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [editProfile, setEditProfile] = useState<Profile | null>(null);
+  const [fitnessModalOpen, setFitnessModalOpen] = useState(false);
+  const [fitnessModalAnimateIn, setFitnessModalAnimateIn] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Fast fetch: all count queries + recent lists + orgs ──────────────────
@@ -151,7 +154,7 @@ export default function DashboardSection() {
         commissionsByMonth?: MonthPoint[];
         visitsByMonth?: MonthPoint[];
         paymentsMonthsSource?: PaymentsMonthsSource;
-        paymentChannels?: PaymentChannels;
+        thisMonthFitnessCounts?: FitnessMonthCount[];
         error?: string;
       };
       if (!res.ok) {
@@ -173,6 +176,7 @@ export default function DashboardSection() {
       if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
       if (Array.isArray(body.commissionsByMonth)) setCommissionsByMonth(body.commissionsByMonth);
       if (Array.isArray(body.visitsByMonth)) setVisitsByMonth(body.visitsByMonth);
+      if (Array.isArray(body.thisMonthFitnessCounts)) setThisMonthFitnessCounts(body.thisMonthFitnessCounts);
       if (
         body.paymentsMonthsSource === "bookings" ||
         body.paymentsMonthsSource === "lending" ||
@@ -182,7 +186,6 @@ export default function DashboardSection() {
       } else {
         setPaymentsMonthsSource("bookings");
       }
-      if (body.paymentChannels) setPaymentChannels(body.paymentChannels);
     } catch (e) {
       setAnalyticsError("Сүлжээний алдаа. Дахин оролдоно уу.");
       console.warn("[dashboard] dashboard-analytics", e);
@@ -216,6 +219,15 @@ export default function DashboardSection() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [fetchFast, fetchAnalytics]);
+
+  useEffect(() => {
+    if (!fitnessModalOpen) {
+      setFitnessModalAnimateIn(false);
+      return;
+    }
+    const t = setTimeout(() => setFitnessModalAnimateIn(true), 10);
+    return () => clearTimeout(t);
+  }, [fitnessModalOpen]);
 
   const handleEditUser = useCallback(async (id: string) => {
     const supabase = createBrowserSupabaseClient();
@@ -303,13 +315,40 @@ export default function DashboardSection() {
       </div>
 
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Төлбөр төлсөн суваг" subtitle="Суваг тус бүрээр (тоо)">
+        <ComponentCard title="Энэ сарын фитнесүүд оролтуудын тоо" subtitle="Фитнес тус бүрээр (тоо)">
           {analyticsError && (
             <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               {analyticsError}
             </div>
           )}
-          <PaymentChannelsCard channels={paymentChannels} />
+          {thisMonthFitnessCounts.length === 0 ? (
+            <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+              Энэ сард ирц бүртгэгдээгүй байна.
+            </div>
+          ) : (
+            <div>
+              <FitnessCountsChart
+                data={thisMonthFitnessCounts
+                  .slice(0, 10)
+                  .map((r) => ({ gym: r.gym_name || r.gym_id, count: r.count }))}
+                height={360}
+              />
+              {thisMonthFitnessCounts.length > 10 && (
+                <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-white/[0.06]">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Нийт: <span className="font-semibold">{thisMonthFitnessCounts.length.toLocaleString()}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFitnessModalOpen(true)}
+                    className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+                  >
+                    Дэлгэрэнгүй
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </ComponentCard>
       </div>
 
@@ -355,6 +394,81 @@ export default function DashboardSection() {
       onOrganizationsRefresh={fetchFast}
       onSuccess={() => { setEditProfile(null); fetchFast(); }}
     />
+
+    <Modal
+      isOpen={fitnessModalOpen}
+      onClose={() => setFitnessModalOpen(false)}
+      className="m-4 w-full max-w-2xl"
+    >
+      <div
+        className={[
+          "gh-modal flex max-h-[85vh] flex-col overflow-hidden rounded-3xl",
+          fitnessModalAnimateIn ? "gh-modal-in" : "",
+        ].join(" ")}
+      >
+        <div className="px-6 py-5">
+          <h3 className="text-base font-bold text-gray-800 dark:text-white/90">Энэ сарын фитнесүүд оролтуудын тоо</h3>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Бүх фитнесүүд (тоо)</p>
+        </div>
+        <div className="h-px bg-gray-100 dark:bg-white/[0.06]" />
+
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="space-y-2">
+            {thisMonthFitnessCounts.map((row, idx) => (
+              <div
+                key={row.gym_id}
+                className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-gray-800 dark:text-white/90">
+                    {idx + 1}. {row.gym_name || row.gym_id}
+                  </p>
+                </div>
+                <span className="shrink-0 pl-3 text-sm font-bold tabular-nums text-gray-800 dark:text-white/90">
+                  {row.count.toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-6 py-4 dark:border-white/[0.06]">
+          <button
+            type="button"
+            onClick={() => setFitnessModalOpen(false)}
+            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/[0.04]"
+          >
+            Хаах
+          </button>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        /* Smooth open animation for this modal instance */
+        .modal > .gh-modal {
+          transform: translateY(10px) scale(0.985);
+          opacity: 0;
+          transition:
+            transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+          will-change: transform, opacity;
+        }
+        .modal > .gh-modal.gh-modal-in {
+          transform: translateY(0) scale(1);
+          opacity: 1;
+        }
+        .modal > .fixed.inset-0.h-full.w-full {
+          opacity: 0;
+          transition: opacity 220ms ease;
+        }
+        .modal > .fixed.inset-0.h-full.w-full + .gh-modal.gh-modal-in ~ * {
+          /* no-op; keep selector stable */
+        }
+        .modal > .fixed.inset-0.h-full.w-full {
+          opacity: 1;
+        }
+      `}</style>
+    </Modal>
     </>
   );
 }
