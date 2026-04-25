@@ -17,6 +17,18 @@ function analyticsWindowStartIso(lookbackMonths: number): string {
   return d.toISOString();
 }
 
+function currentMonthStartUtc8Iso(): string {
+  // Ulaanbaatar time is UTC+8 (no DST). We derive yyyy-mm in that tz, then create a +08:00 date.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ulaanbaatar",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const m = parts.find((p) => p.type === "month")?.value ?? "01";
+  return new Date(`${y}-${m}-01T00:00:00+08:00`).toISOString();
+}
+
 async function bookingsHasPaymentAnalyticsColumns(supabase: SupabaseClient): Promise<boolean> {
   // Be conservative here: only require the columns we actually need to classify channels.
   // `paid_at` is optional and may not exist in some deployments.
@@ -38,6 +50,17 @@ async function bookingsColumnExists(
 ): Promise<boolean> {
   const { error } = await supabase
     .from("bookings")
+    .select(column)
+    .limit(1);
+  return !error;
+}
+
+async function gymVisitsColumnExists(
+  supabase: SupabaseClient,
+  column: string,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("gym_visits")
     .select(column)
     .limit(1);
   return !error;
@@ -327,6 +350,78 @@ async function aggregateVisitsByMonth(
     .map(([month, count]) => ({ month, count }));
 }
 
+type FitnessMonthCount = { gym_id: string; gym_name: string | null; count: number };
+
+async function aggregateThisMonthFitnessCounts(
+  supabase: SupabaseClient,
+  startIso: string,
+): Promise<FitnessMonthCount[]> {
+  // gym_visits schema differs across deployments; be defensive.
+  const [hasCheckedInAt, hasCreatedAt, hasStatus, hasGymName] = await Promise.all([
+    gymVisitsColumnExists(supabase, "checked_in_at"),
+    gymVisitsColumnExists(supabase, "created_at"),
+    gymVisitsColumnExists(supabase, "status"),
+    gymVisitsColumnExists(supabase, "gym_name"),
+  ]);
+  const timeCol = hasCheckedInAt ? "checked_in_at" : hasCreatedAt ? "created_at" : "checked_in_at";
+
+  const PAGE = 2000;
+  let from = 0;
+  const map = new Map<string, { gym_id: string; gym_name: string | null; count: number }>();
+
+  for (;;) {
+    let q = supabase
+      .from("gym_visits")
+      .select(
+        [
+          "gym_id",
+          hasGymName ? "gym_name" : null,
+          hasStatus ? "status" : null,
+          timeCol,
+        ]
+          .filter(Boolean)
+          .join(", "),
+      )
+      .gte(timeCol, startIso)
+      .order(timeCol, { ascending: false })
+      .range(from, from + PAGE - 1);
+
+    if (hasStatus) {
+      q = q.neq("status", "rejected");
+    }
+
+    const { data, error } = await q;
+    if (error) {
+      if (error.code === "42P01") return [];
+      throw new Error(error.message);
+    }
+
+    const rows = (data ?? []) as {
+      gym_id?: string | null;
+      gym_name?: string | null;
+      status?: string | null;
+      checked_in_at?: string | null;
+    }[];
+
+    for (const r of rows) {
+      const gymId = String(r.gym_id ?? "").trim();
+      if (!gymId) continue;
+      const existing = map.get(gymId);
+      if (existing) {
+        existing.count += 1;
+        if (!existing.gym_name && r.gym_name) existing.gym_name = r.gym_name;
+      } else {
+        map.set(gymId, { gym_id: gymId, gym_name: r.gym_name ?? null, count: 1 });
+      }
+    }
+
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+
+  return [...map.values()].sort((a, b) => b.count - a.count);
+}
+
 /** GET — aggregated dashboard chart + payment channel data. */
 export async function GET() {
   try {
@@ -350,13 +445,15 @@ export async function GET() {
 
     const nowIso = new Date().toISOString();
     const windowStartIso = analyticsWindowStartIso(ANALYTICS_LOOKBACK_MONTHS);
+    const thisMonthStartIso = currentMonthStartUtc8Iso();
     const PAGE = 1000;
 
-    const [usersByMonth, useBookingsPayments, commissionsByMonth, visitsByMonth] = await Promise.all([
+    const [usersByMonth, useBookingsPayments, commissionsByMonth, visitsByMonth, thisMonthFitnessCounts] = await Promise.all([
       paginateMembershipStarts(supabase, windowStartIso, nowIso, PAGE),
       bookingsHasPaymentAnalyticsColumns(supabase),
       aggregateCommissionsByMonth(supabase, windowStartIso),
       aggregateVisitsByMonth(supabase, windowStartIso),
+      aggregateThisMonthFitnessCounts(supabase, thisMonthStartIso),
     ]);
 
     let paymentsByMonth: MonthPoint[];
@@ -394,6 +491,7 @@ export async function GET() {
         visitsByMonth,
         paymentsMonthsSource,
         analyticsLookbackMonths: ANALYTICS_LOOKBACK_MONTHS,
+        thisMonthFitnessCounts,
         paymentChannels: {
           qpay: channelCounts.qpay,
           sono: channelCounts.sono,
