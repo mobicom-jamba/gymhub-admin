@@ -40,6 +40,11 @@ const navItems: NavItem[] = [
     path: "/gyms",
   },
   {
+    icon: <BoxCubeIcon />,   // ← өөр icon байвал солиорой
+    name: "Йога төвүүд",
+    path: "/yoga",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Хэрэглэгчид",
     path: "/users",
@@ -65,6 +70,11 @@ const navItems: NavItem[] = [
     path: "/coupons",
   },
   {
+    icon: <PageIcon />,
+    name: "Мэдээ",
+    path: "/news",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Профайл",
     path: "/profile",
@@ -82,6 +92,7 @@ const AppSidebar: React.FC = () => {
     if (item.path === "/users") return can("users.view");
     if (item.path === "/organizations") return can("organizations.view");
     if (item.path === "/gyms") return can("gyms.view");
+    if (item.path === "/yoga") return can("gyms.view");
     if (item.path === "/coupons") return can("coupons.manage");
     return true;
   });
