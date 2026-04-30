@@ -72,7 +72,8 @@ export async function GET(request: Request) {
       // Per-user auth lookup: listUsers(first page) misses most users; getUserById is reliable.
       const needAuthIds = userIds.filter((id) => {
         const p = profiles[id];
-        return !p?.full_name?.trim() || !p?.phone?.trim();
+        const hasAvatar = !!(p?.avatar_path?.trim() || p?.avatar_url?.trim());
+        return !p?.full_name?.trim() || !p?.phone?.trim() || !hasAvatar;
       });
       if (needAuthIds.length > 0) {
         authUsers = await fetchAuthUsersByIds(supabase, needAuthIds);
@@ -107,13 +108,10 @@ export async function GET(request: Request) {
           if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
           if (!safePath) return;
 
-          // Prefer a small public thumbnail URL (fast + stable). Fallback to signed URL if needed.
+          // Use plain public object URL (works without image transformation add-on).
           const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
           if (base) {
-            const thumb =
-              `${base}/storage/v1/render/image/public/media-public/${encodeURI(safePath)}` +
-              `?width=96&height=96&resize=cover&quality=60`;
-            signedAvatarUrls[avatarPathRaw] = thumb;
+            signedAvatarUrls[avatarPathRaw] = `${base}/storage/v1/object/public/media-public/${encodeURI(safePath)}`;
             return;
           }
 
