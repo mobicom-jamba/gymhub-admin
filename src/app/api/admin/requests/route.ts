@@ -83,6 +83,8 @@ export async function GET(request: Request) {
       }
     }
 
+    console.log("[requests] profiles:", JSON.stringify(Object.values(profiles).map(p => ({ id: (p as {id?:string}).id, avatar_path: (p as {avatar_path?:string|null}).avatar_path }))));
+
     const uniqueAvatarPaths = [
       ...new Set(
         Object.values(profiles)
@@ -94,6 +96,8 @@ export async function GET(request: Request) {
           .filter((v) => Boolean(v) && !/^https?:\/\//i.test(v))
       ),
     ];
+
+    console.log("[requests] uniqueAvatarPaths:", uniqueAvatarPaths);
 
     const signedAvatarUrls: Record<string, string> = {};
     for (const raw of uniqueAvatarPaths) {
@@ -107,8 +111,10 @@ export async function GET(request: Request) {
       if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
       if (!safePath) continue;
       const { data: urlData } = supabase.storage.from("media-public").getPublicUrl(safePath);
+      console.log("[requests] getPublicUrl", safePath, "->", urlData.publicUrl);
       if (urlData.publicUrl) signedAvatarUrls[avatarPathRaw] = urlData.publicUrl;
     }
+    console.log("[requests] signedAvatarUrls keys:", Object.keys(signedAvatarUrls));
 
     const enriched = (data ?? []).map((v) => {
       const p = profiles[v.user_id];
