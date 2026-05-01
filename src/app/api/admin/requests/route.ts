@@ -61,10 +61,13 @@ export async function GET(request: Request) {
     let authUsers: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
 
     if (userIds.length > 0) {
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select("id, full_name, phone, email, avatar_path, avatar_url")
         .in("id", userIds);
+      if (profileError) {
+        console.error("[requests] profiles fetch error:", profileError.message);
+      }
       if (profileData) {
         profiles = Object.fromEntries(profileData.map((p) => [p.id, p]));
       }
@@ -93,37 +96,18 @@ export async function GET(request: Request) {
     ];
 
     const signedAvatarUrls: Record<string, string> = {};
-    if (uniqueAvatarPaths.length > 0) {
-      await Promise.all(
-        uniqueAvatarPaths.map(async (raw) => {
-          const avatarPathRaw = raw.trim();
-          if (!avatarPathRaw) return;
-          // If already full URL, keep it.
-          if (/^https?:\/\//i.test(avatarPathRaw)) {
-            signedAvatarUrls[avatarPathRaw] = avatarPathRaw;
-            return;
-          }
-          // Normalize storage object path
-          let safePath = avatarPathRaw.startsWith("/") ? avatarPathRaw.slice(1) : avatarPathRaw;
-          if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
-          if (!safePath) return;
-
-          // Use plain public object URL (works without image transformation add-on).
-          const base = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").replace(/\/$/, "");
-          if (base) {
-            signedAvatarUrls[avatarPathRaw] = `${base}/storage/v1/object/public/media-public/${encodeURI(safePath)}`;
-            return;
-          }
-
-          // Last resort: signed or public URL from client SDK.
-          const signed = await supabase.storage.from("media-public").createSignedUrl(safePath, 60 * 60);
-          if (signed.data?.signedUrl) signedAvatarUrls[avatarPathRaw] = signed.data.signedUrl;
-          else {
-            const pub = supabase.storage.from("media-public").getPublicUrl(safePath).data.publicUrl;
-            if (pub) signedAvatarUrls[avatarPathRaw] = pub;
-          }
-        })
-      );
+    for (const raw of uniqueAvatarPaths) {
+      const avatarPathRaw = raw.trim();
+      if (!avatarPathRaw) continue;
+      if (/^https?:\/\//i.test(avatarPathRaw)) {
+        signedAvatarUrls[avatarPathRaw] = avatarPathRaw;
+        continue;
+      }
+      let safePath = avatarPathRaw.startsWith("/") ? avatarPathRaw.slice(1) : avatarPathRaw;
+      if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
+      if (!safePath) continue;
+      const { data: urlData } = supabase.storage.from("media-public").getPublicUrl(safePath);
+      if (urlData.publicUrl) signedAvatarUrls[avatarPathRaw] = urlData.publicUrl;
     }
 
     const enriched = (data ?? []).map((v) => {
