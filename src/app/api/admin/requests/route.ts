@@ -56,14 +56,14 @@ export async function GET(request: Request) {
     const userIds = [...new Set((data ?? []).map((v) => v.user_id))];
     let profiles: Record<
       string,
-      { full_name?: string; phone?: string; email?: string; avatar_path?: string | null; avatar_url?: string | null }
+      { full_name?: string; phone?: string; avatar_path?: string | null; avatar_url?: string | null }
     > = {};
     let authUsers: Record<string, { email?: string; phone?: string; user_metadata?: Record<string, unknown> }> = {};
 
     if (userIds.length > 0) {
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, phone, email, avatar_path, avatar_url")
+        .select("id, full_name, phone, avatar_path, avatar_url")
         .in("id", userIds);
       if (profileError) {
         console.error("[requests] profiles fetch error:", profileError.message);
@@ -83,8 +83,6 @@ export async function GET(request: Request) {
       }
     }
 
-    console.log("[requests] profiles:", JSON.stringify(Object.values(profiles).map(p => ({ id: (p as {id?:string}).id, avatar_path: (p as {avatar_path?:string|null}).avatar_path }))));
-
     const uniqueAvatarPaths = [
       ...new Set(
         Object.values(profiles)
@@ -96,8 +94,6 @@ export async function GET(request: Request) {
           .filter((v) => Boolean(v) && !/^https?:\/\//i.test(v))
       ),
     ];
-
-    console.log("[requests] uniqueAvatarPaths:", uniqueAvatarPaths);
 
     const signedAvatarUrls: Record<string, string> = {};
     for (const raw of uniqueAvatarPaths) {
@@ -111,10 +107,8 @@ export async function GET(request: Request) {
       if (safePath.startsWith("media-public/")) safePath = safePath.slice("media-public/".length);
       if (!safePath) continue;
       const { data: urlData } = supabase.storage.from("media-public").getPublicUrl(safePath);
-      console.log("[requests] getPublicUrl", safePath, "->", urlData.publicUrl);
       if (urlData.publicUrl) signedAvatarUrls[avatarPathRaw] = urlData.publicUrl;
     }
-    console.log("[requests] signedAvatarUrls keys:", Object.keys(signedAvatarUrls));
 
     const enriched = (data ?? []).map((v) => {
       const p = profiles[v.user_id];
@@ -130,7 +124,6 @@ export async function GET(request: Request) {
         phoneFromVirtualEmail(a?.email) ||
         null;
       const email =
-        p?.email?.trim() ||
         (a?.email && !a.email.endsWith("@gymhub.mn") ? a.email : null) ||
         null;
       const authAvatar =
