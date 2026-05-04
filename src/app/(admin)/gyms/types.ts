@@ -13,4 +13,5 @@ export type Gym = {
   /** Max check-ins per local day (UTC+8); null = unlimited */
   daily_visitor_limit?: number | null;
   created_at?: string;
+  type?: string | null;  
 };
