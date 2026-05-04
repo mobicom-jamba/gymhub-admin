@@ -78,19 +78,25 @@ export function computeMembershipDatesAfterPayment(args: {
   const { now, profile } = args;
 
   if (parsed.kind === "early_first") {
-    if (
-      profile.membership_expires_at &&
-      profile.membership_status === "active" &&
-      isApproximatelyEarlyFirstSegmentOnly(profile) &&
-      new Date(profile.membership_expires_at) > now
-    ) {
-      return null;
+    const isActive = String(profile.membership_status ?? "").toLowerCase() === "active";
+    const hasFutureExpiry =
+      !!profile.membership_expires_at && new Date(profile.membership_expires_at) > now;
+
+    let baseDate = now;
+    if (isActive && hasFutureExpiry) {
+      baseDate = new Date(profile.membership_expires_at!);
     }
+
+    const startedAt =
+      isActive && hasFutureExpiry && profile.membership_started_at
+        ? profile.membership_started_at
+        : now.toISOString();
+
     return {
       membership_tier: "early",
       membership_status: "active",
-      membership_started_at: now.toISOString(),
-      membership_expires_at: addCalendarMonths(now, 1).toISOString(),
+      membership_started_at: startedAt,
+      membership_expires_at: addCalendarMonths(baseDate, 1).toISOString(),
     };
   }
 
