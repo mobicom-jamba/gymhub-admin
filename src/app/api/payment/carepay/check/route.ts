@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
-import { safeUpdateBookingById } from "../../_lib/bookings";
-import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
-import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
-import { isCarepayConfigured, checkInvoice } from "@/lib/carepay";
+import { isCarepayConfigured } from "@/lib/carepay";
+import { settleCarepayPayment } from "@/lib/carepay-settle";
 
 /**
  * POST /api/payment/carepay/check — Check Carepay invoice payment status
@@ -19,60 +17,42 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { invoice_id, booking_id, user_id } = body as {
+    const { invoice_id, invoice_number, booking_id, user_id } = body as {
       invoice_id?: string;
+      invoice_number?: string;
       booking_id?: string;
       user_id?: string;
     };
 
-    const invoiceNumber = String(invoice_id ?? "").trim();
+    const invoiceNumber = String(invoice_number ?? invoice_id ?? "").trim();
     if (!invoiceNumber) {
       return NextResponse.json({ error: "invoice_id шаардлагатай" }, { status: 400 });
     }
 
-    const result = await checkInvoice(invoiceNumber);
-    const paid = result.paid;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-    if (paid) {
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (serviceKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
-        const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL,
-          serviceKey,
-          { auth: { persistSession: false } },
-        );
-
-        if (booking_id) {
-          await safeUpdateBookingById(supabase, booking_id, {
-            payment_status: "paid",
-            payment_channel: "carepay",
-            paid_at: new Date().toISOString(),
-          });
-        }
-
-        if (user_id && booking_id?.startsWith("membership-")) {
-          try {
-            await applyMembershipActivationForPaidBooking(supabase, {
-              userId: user_id,
-              bookingId: booking_id,
-            });
-            await recordSalesCommissionForPaidMembership(supabase, {
-              buyerUserId: user_id,
-              bookingId: booking_id,
-              grossAmountFallback: null,
-            });
-          } catch (e) {
-            console.error("Carepay membership activation failed:", e);
-          }
-        }
-      }
+    if (!serviceKey || !supabaseUrl) {
+      const { checkInvoice } = await import("@/lib/carepay");
+      const result = await checkInvoice(invoiceNumber);
+      return NextResponse.json({
+        paid: result.paid,
+        message: result.message,
+        invoice_id: invoiceNumber,
+      });
     }
 
-    return NextResponse.json({
-      paid,
-      message: result.message,
-      invoice_id: invoiceNumber,
+    const supabase = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false },
     });
+
+    const result = await settleCarepayPayment(supabase, {
+      invoiceNumber,
+      bookingId: booking_id,
+      userId: user_id,
+    });
+
+    return NextResponse.json(result);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error("Carepay check error:", msg);

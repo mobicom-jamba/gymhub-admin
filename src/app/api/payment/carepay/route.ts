@@ -106,6 +106,7 @@ export async function POST(request: Request) {
         payment_status: "pending",
         qpay_invoice_id: invoice.invoice_number,
         amount: amountMnt,
+        user_id,
       });
     }
 

@@ -131,8 +131,35 @@ export async function createPhoneInvoice(opts: {
   };
 }
 
-export async function checkInvoice(invoiceNumber: string): Promise<{ paid: boolean; message: string }> {
-  const token = await getAccessToken();
+function carepayResponseMessage(data: CarepayApiResponse): string {
+  return String(data.msg ?? data.message ?? "").trim();
+}
+
+/** Carepay may return status as bool, 1, or "true"; paid success text is also reliable. */
+export function parseCarepayPaidStatus(data: CarepayApiResponse): boolean {
+  const s = data.status as unknown;
+  if (s === true || s === 1) return true;
+  if (typeof s === "string" && (s === "true" || s === "1")) return true;
+  const msg = carepayResponseMessage(data).toLowerCase();
+  if (/амжилттай/.test(msg) && /төл/.test(msg)) return true;
+  if (/төлөгдлөө/.test(msg) && !/төлөгдөөгүй/.test(msg)) return true;
+  return false;
+}
+
+function isCarepayAuthErrorMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    /token/.test(m) ||
+    /authorization/.test(m) ||
+    /мерчант/.test(m) ||
+    /хандах эрх/.test(m)
+  );
+}
+
+async function fetchCheckInvoiceOnce(
+  token: string,
+  invoiceNumber: string,
+): Promise<{ httpOk: boolean; data: CarepayApiResponse }> {
   const res = await fetch(`${CAREPAY_BASE}/check-invoice`, {
     method: "POST",
     headers: {
@@ -142,14 +169,39 @@ export async function checkInvoice(invoiceNumber: string): Promise<{ paid: boole
     body: JSON.stringify({ invoice_number: invoiceNumber }),
     signal: AbortSignal.timeout(15_000),
   });
-
   const data = (await res.json().catch(() => ({}))) as CarepayApiResponse;
-  const msg = data.msg || data.message || "";
-  if (!res.ok) {
-    throw new Error(msg || `Carepay check error (${res.status})`);
+  return { httpOk: res.ok, data };
+}
+
+export async function checkInvoice(invoiceNumber: string): Promise<{ paid: boolean; message: string }> {
+  const trimmed = String(invoiceNumber ?? "").trim();
+  if (!trimmed) {
+    throw new Error("invoice_number хоосон байна");
   }
 
-  return { paid: data.status === true, message: msg };
+  let token = await getAccessToken();
+  let { httpOk, data } = await fetchCheckInvoiceOnce(token, trimmed);
+  let msg = carepayResponseMessage(data);
+
+  if (!httpOk) {
+    throw new Error(msg || "Carepay check error");
+  }
+
+  if (!parseCarepayPaidStatus(data) && isCarepayAuthErrorMessage(msg)) {
+    _accessToken = null;
+    _tokenExpiresAt = 0;
+    token = await getAccessToken();
+    ({ httpOk, data } = await fetchCheckInvoiceOnce(token, trimmed));
+    msg = carepayResponseMessage(data);
+    if (!httpOk) {
+      throw new Error(msg || "Carepay check error");
+    }
+    if (isCarepayAuthErrorMessage(msg) && !parseCarepayPaidStatus(data)) {
+      throw new Error(msg);
+    }
+  }
+
+  return { paid: parseCarepayPaidStatus(data), message: msg };
 }
 
 export async function healthCheck(): Promise<{ ok: boolean; message: string }> {
