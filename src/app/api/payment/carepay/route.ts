@@ -9,9 +9,22 @@ import {
   generateQrImage,
 } from "@/lib/carepay";
 
-const DEFAULT_CALLBACK =
-  process.env.CAREPAY_CALLBACK_URL ??
-  `${process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payment/carepay/callback`;
+const CAREPAY_CALLBACK_PATH = "/api/payment/carepay/callback";
+
+function resolveCallbackUrl(request: Request): string | null {
+  const explicit = (process.env.CAREPAY_CALLBACK_URL ?? "").trim();
+  if (explicit) return explicit;
+
+  const base = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "").trim();
+  if (base) return `${base.replace(/\/$/, "")}${CAREPAY_CALLBACK_PATH}`;
+
+  try {
+    const reqUrl = new URL(request.url);
+    return `${reqUrl.origin}${CAREPAY_CALLBACK_PATH}`;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * POST /api/payment/carepay — Create Carepay QR invoice
@@ -63,13 +76,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: msg }, { status: 400 });
     }
 
-    const callbackUrl = new URL(DEFAULT_CALLBACK);
-    callbackUrl.searchParams.set("booking_id", booking_id);
+    const callbackBase = resolveCallbackUrl(request);
+    let callbackUrlStr: string | undefined;
+    if (callbackBase) {
+      try {
+        const cb = new URL(callbackBase);
+        cb.searchParams.set("booking_id", booking_id);
+        callbackUrlStr = cb.toString();
+      } catch {
+        callbackUrlStr = undefined;
+      }
+    }
 
     const invoice = await createQrInvoice({
       phone: phoneNum,
       price: amountMnt,
-      callbackUrl: callbackUrl.toString(),
+      callbackUrl: callbackUrlStr,
     });
 
     const qrImageBase64 = await generateQrImage(invoice.encrypted);
