@@ -5,8 +5,7 @@ import { safeUpdateBookingById } from "../_lib/bookings";
 import {
   isCarepayConfigured,
   normalizeCarepayPhone,
-  createQrInvoice,
-  generateQrImage,
+  createPhoneInvoice,
 } from "@/lib/carepay";
 
 const CAREPAY_CALLBACK_PATH = "/api/payment/carepay/callback";
@@ -27,7 +26,7 @@ function resolveCallbackUrl(request: Request): string | null {
 }
 
 /**
- * POST /api/payment/carepay — Create Carepay QR invoice
+ * POST /api/payment/carepay — Push invoice to user's Carepay app (create-invoice-phone)
  */
 export async function POST(request: Request) {
   try {
@@ -88,13 +87,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const invoice = await createQrInvoice({
+    const invoice = await createPhoneInvoice({
       phone: phoneNum,
       price: amountMnt,
       callbackUrl: callbackUrlStr,
     });
-
-    const qrImageBase64 = await generateQrImage(invoice.encrypted);
 
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (serviceKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -117,11 +114,12 @@ export async function POST(request: Request) {
       invoice_id: invoice.invoice_number,
       id: invoice.invoice_number,
       invoice_number: invoice.invoice_number,
-      qr_image: qrImageBase64,
-      qr_string: qrImageBase64,
       channel: "carepay",
+      flow: "phone",
       status: "pending",
-      message: "Carepay апп-аар QR уншуулж төлнө үү",
+      message:
+        invoice.message ||
+        "Carepay апп-д нэхэмжлэл илгээгдлээ. Апп-аа нээгээд баталгаажуулна уу.",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

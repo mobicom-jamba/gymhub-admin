@@ -1,5 +1,7 @@
 /**
- * Carepay merchant integration (QR / phone invoice).
+ * Carepay merchant integration (phone push invoice + status check).
+ *
+ * Flow: create-invoice-phone → user approves in Carepay app → check-invoice / callback.
  *
  * Environment:
  *   CAREPAY_BASE_URL   – default https://merchant.carepay.mn/api/int
@@ -7,8 +9,6 @@
  *   CAREPAY_PASSWORD     – integration password
  *   CAREPAY_CALLBACK_URL – optional webhook base (booking_id appended as query)
  */
-
-import QRCode from "qrcode";
 
 const CAREPAY_BASE = (process.env.CAREPAY_BASE_URL ?? "https://merchant.carepay.mn/api/int").replace(
   /\/$/,
@@ -85,16 +85,17 @@ export async function getAccessToken(): Promise<string> {
   return _accessToken;
 }
 
-export type CarepayQrInvoice = {
+export type CarepayPhoneInvoice = {
   invoice_number: string;
-  encrypted: string;
+  message: string;
 };
 
-export async function createQrInvoice(opts: {
+/** Push invoice to the user's Carepay app (no merchant-side QR). */
+export async function createPhoneInvoice(opts: {
   phone: number;
   price: number;
   callbackUrl?: string;
-}): Promise<CarepayQrInvoice> {
+}): Promise<CarepayPhoneInvoice> {
   const token = await getAccessToken();
   const body: Record<string, unknown> = {
     phone: opts.phone,
@@ -104,7 +105,7 @@ export async function createQrInvoice(opts: {
     body.call_back_url = opts.callbackUrl;
   }
 
-  const res = await fetch(`${CAREPAY_BASE}/create-qr-data`, {
+  const res = await fetch(`${CAREPAY_BASE}/create-invoice-phone`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -114,18 +115,20 @@ export async function createQrInvoice(opts: {
     signal: AbortSignal.timeout(20_000),
   });
 
-  const data = (await res.json().catch(() => ({}))) as CarepayApiResponse<{ encrypted?: string }>;
+  const data = (await res.json().catch(() => ({}))) as CarepayApiResponse;
   if (!res.ok || !data.status) {
     throw new Error(data.msg || data.message || `Carepay invoice error (${res.status})`);
   }
 
-  const encrypted = data.data?.encrypted;
   const invoiceNumber = data.invoice_number;
-  if (!invoiceNumber || !encrypted) {
-    throw new Error("Carepay-с invoice_number эсвэл QR өгөгдөл буцаагдсангүй");
+  if (!invoiceNumber) {
+    throw new Error("Carepay-с invoice_number буцаагдсангүй");
   }
 
-  return { invoice_number: invoiceNumber, encrypted };
+  return {
+    invoice_number: invoiceNumber,
+    message: data.msg || data.message || "Нэхэмжлэх бүртгэгдлээ",
+  };
 }
 
 export async function checkInvoice(invoiceNumber: string): Promise<{ paid: boolean; message: string }> {
@@ -147,16 +150,6 @@ export async function checkInvoice(invoiceNumber: string): Promise<{ paid: boole
   }
 
   return { paid: data.status === true, message: msg };
-}
-
-export async function generateQrImage(encryptedPayload: string): Promise<string> {
-  const dataUrl = await QRCode.toDataURL(encryptedPayload, {
-    errorCorrectionLevel: "M",
-    margin: 2,
-    width: 400,
-    color: { dark: "#000000", light: "#ffffff" },
-  });
-  return dataUrl.replace(/^data:image\/png;base64,/, "");
 }
 
 export async function healthCheck(): Promise<{ ok: boolean; message: string }> {
