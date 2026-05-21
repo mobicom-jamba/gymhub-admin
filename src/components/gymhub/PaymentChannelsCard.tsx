@@ -8,6 +8,7 @@ type Props = {
     qpay: number;
     sono: number;
     pocket: number;
+    carepay?: number;
     gift: number;
     other?: number;
   };
@@ -33,6 +34,12 @@ const items = [
     logo: "/logos/pocket.png",
   },
   {
+    key: "carepay" as const,
+    label: "Carepay",
+    description: "Carepay зээлээр төлсөн",
+    logo: "/logos/carepay.png",
+  },
+  {
     key: "gift" as const,
     label: "Gift",
     description: "Урамшуулал болон бэлэг",
@@ -47,7 +54,11 @@ const items = [
 ];
 
 export default function PaymentChannelsCard({ channels }: Props) {
-  const rows = items.filter((ch) => ch.key !== "other" || (channels.other ?? 0) > 0);
+  const rows = items.filter((ch) => {
+    if (ch.key === "other") return (channels.other ?? 0) > 0;
+    if (ch.key === "carepay") return (channels.carepay ?? 0) > 0;
+    return true;
+  });
 
   return (
     <div className="space-y-3">
@@ -86,7 +97,12 @@ export default function PaymentChannelsCard({ channels }: Props) {
             </div>
           </div>
           <span className="font-bold text-gray-800 dark:text-white/90 text-lg tabular-nums">
-            {(ch.key === "other" ? (channels.other ?? 0) : channels[ch.key]).toLocaleString()}
+            {(ch.key === "other"
+              ? (channels.other ?? 0)
+              : ch.key === "carepay"
+                ? (channels.carepay ?? 0)
+                : channels[ch.key]
+            ).toLocaleString()}
           </span>
         </div>
       ))}

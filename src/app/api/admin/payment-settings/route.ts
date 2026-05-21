@@ -32,6 +32,7 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   if ("payment_qpay_enabled" in o) out.payment_qpay_enabled = Boolean(o.payment_qpay_enabled);
   if ("payment_sono_enabled" in o) out.payment_sono_enabled = Boolean(o.payment_sono_enabled);
   if ("payment_pocket_enabled" in o) out.payment_pocket_enabled = Boolean(o.payment_pocket_enabled);
+  if ("payment_carepay_enabled" in o) out.payment_carepay_enabled = Boolean(o.payment_carepay_enabled);
 
   return Object.keys(out).length ? out : null;
 }
@@ -101,6 +102,7 @@ export async function PATCH(request: Request) {
           payment_qpay_enabled: next.payment_qpay_enabled,
           payment_sono_enabled: next.payment_sono_enabled,
           payment_pocket_enabled: next.payment_pocket_enabled,
+          payment_carepay_enabled: next.payment_carepay_enabled,
           updated_at: next.updated_at,
         },
         { onConflict: "id" }
@@ -141,6 +143,7 @@ function normalizeFromDb(data: Record<string, unknown>): PaymentAppSettingsRow {
     payment_qpay_enabled: data.payment_qpay_enabled !== false,
     payment_sono_enabled: data.payment_sono_enabled !== false,
     payment_pocket_enabled: data.payment_pocket_enabled !== false,
+    payment_carepay_enabled: data.payment_carepay_enabled !== false,
     updated_at: (data.updated_at as string) || new Date().toISOString(),
   };
 }

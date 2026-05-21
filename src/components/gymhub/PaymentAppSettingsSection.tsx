@@ -14,6 +14,7 @@ type Settings = {
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
+  payment_carepay_enabled: boolean;
   updated_at: string;
 };
 
@@ -34,6 +35,7 @@ export default function PaymentAppSettingsSection() {
   const [qpay, setQpay] = useState(true);
   const [sono, setSono] = useState(true);
   const [pocket, setPocket] = useState(true);
+  const [carepay, setCarepay] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const getAuthHeaders = useCallback(async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
@@ -62,6 +64,7 @@ export default function PaymentAppSettingsSection() {
       setQpay(s.payment_qpay_enabled);
       setSono(s.payment_sono_enabled);
       setPocket(s.payment_pocket_enabled);
+      setCarepay(s.payment_carepay_enabled);
       setUpdatedAt(s.updated_at);
     } catch (e) {
       console.error(e);
@@ -93,6 +96,7 @@ export default function PaymentAppSettingsSection() {
           payment_qpay_enabled: qpay,
           payment_sono_enabled: sono,
           payment_pocket_enabled: pocket,
+          payment_carepay_enabled: carepay,
         }),
       });
       const data = await res.json();
@@ -113,7 +117,7 @@ export default function PaymentAppSettingsSection() {
   return (
     <ComponentCard
       title="Төлбөр ба гишүүнчлэлийн үнэ"
-      subtitle="Early (эхний сар + үлдсэн 11 сар), legacy нэг дор, Premium — QPay · Sono · Pocket"
+      subtitle="Early (эхний сар + үлдсэн 11 сар), legacy нэг дор, Premium — QPay · Sono · Pocket · Carepay"
       desc="Өөрчлөлт нь шууд /api/payment/health болон төлбөрийн API-д тусгагдана. Supabase дээр хүснэгт байхгүй бол эхлээд sql/payment_app_settings.sql ажиллуулна уу."
     >
       {loading ? (
@@ -211,6 +215,13 @@ export default function PaymentAppSettingsSection() {
                 logo: "/logos/pocket.png",
                 checked: pocket,
                 set: setPocket,
+              },
+              {
+                id: "carepay",
+                label: "Carepay зээл",
+                logo: "/logos/carepay.png",
+                checked: carepay,
+                set: setCarepay,
               },
             ].map((row) => (
               <label

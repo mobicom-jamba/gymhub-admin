@@ -125,9 +125,39 @@ export async function GET() {
   const sonoTech = checkSonoHealth();
   const pocketTech = await checkPocketHealth();
 
+  let carepayTech: ProviderPayload = {
+    enabled: false,
+    message: "Carepay тохиргоо дутуу байна",
+    configured: false,
+  };
+  try {
+    const { healthCheck, isCarepayConfigured } = await import("@/lib/carepay");
+    if (!isCarepayConfigured()) {
+      carepayTech = {
+        enabled: false,
+        message: "Carepay тохиргоо дутуу байна",
+        configured: false,
+      };
+    } else {
+      const result = await healthCheck();
+      carepayTech = {
+        enabled: result.ok,
+        message: result.message,
+        configured: true,
+      };
+    }
+  } catch {
+    carepayTech = {
+      enabled: false,
+      message: "Carepay үйлчилгээ түр тасалдалтай байна",
+      configured: true,
+    };
+  }
+
   const qpay = applyAdminSwitch(qpayTech, settings.payment_qpay_enabled, "QPay");
   const sono = applyAdminSwitch(sonoTech, settings.payment_sono_enabled, "Sono");
   const pocket = applyAdminSwitch(pocketTech, settings.payment_pocket_enabled, "Pocket");
+  const carepay = applyAdminSwitch(carepayTech, settings.payment_carepay_enabled, "Carepay");
 
   return NextResponse.json({
     ok: true,
@@ -135,6 +165,7 @@ export async function GET() {
       qpay,
       sono,
       pocket,
+      carepay,
     },
     membership_prices: {
       early_mnt:

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
+import { normalizeQpayBankUrls } from "@/lib/qpay-bank-urls";
 import { safeUpdateBookingById } from "../_lib/bookings";
 
 const QPAY_BASE = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
@@ -97,13 +98,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const invoice = await invoiceRes.json();
+    const invoice = (await invoiceRes.json()) as Record<string, unknown>;
     if (!invoice?.invoice_id) {
       return NextResponse.json(
         { error: "QPay-с invoice_id буцаагдсангүй" },
         { status: 502 },
       );
     }
+
+    const bankUrls = normalizeQpayBankUrls(invoice);
 
     // Persist invoice_id → booking linkage in Supabase
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -112,7 +115,7 @@ export async function POST(request: Request) {
         auth: { persistSession: false },
       });
       const updateError = await safeUpdateBookingById(supabase, booking_id, {
-        qpay_invoice_id: invoice.invoice_id,
+        qpay_invoice_id: String(invoice.invoice_id),
         payment_status: "pending",
         payment_channel: "qpay",
         amount,
@@ -127,9 +130,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       invoice_id: invoice.invoice_id,
-      qr_image: invoice.qr_image,        // base64 PNG
-      qr_text: invoice.qr_text,          // raw QR string
-      urls: invoice.urls ?? [],           // bank deeplinks
+      qr_image: invoice.qr_image, // base64 PNG
+      qr_text: invoice.qr_text, // raw QR string
+      urls: bankUrls,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
