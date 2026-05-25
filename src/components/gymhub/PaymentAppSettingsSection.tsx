@@ -15,6 +15,7 @@ type Settings = {
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
   payment_carepay_enabled: boolean;
+  payment_monpay_enabled: boolean;
   updated_at: string;
 };
 
@@ -36,6 +37,7 @@ export default function PaymentAppSettingsSection() {
   const [sono, setSono] = useState(true);
   const [pocket, setPocket] = useState(true);
   const [carepay, setCarepay] = useState(true);
+  const [monpay, setMonpay] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const getAuthHeaders = useCallback(async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
@@ -65,6 +67,7 @@ export default function PaymentAppSettingsSection() {
       setSono(s.payment_sono_enabled);
       setPocket(s.payment_pocket_enabled);
       setCarepay(s.payment_carepay_enabled);
+      setMonpay(s.payment_monpay_enabled);
       setUpdatedAt(s.updated_at);
     } catch (e) {
       console.error(e);
@@ -97,6 +100,7 @@ export default function PaymentAppSettingsSection() {
           payment_sono_enabled: sono,
           payment_pocket_enabled: pocket,
           payment_carepay_enabled: carepay,
+          payment_monpay_enabled: monpay,
         }),
       });
       const data = await res.json();
@@ -117,7 +121,7 @@ export default function PaymentAppSettingsSection() {
   return (
     <ComponentCard
       title="Төлбөр ба гишүүнчлэлийн үнэ"
-      subtitle="Early (эхний сар + үлдсэн 11 сар), legacy нэг дор, Premium — QPay · Sono · Pocket · Carepay"
+      subtitle="Early (эхний сар + үлдсэн 11 сар), legacy нэг дор, Premium — QPay · Sono · Pocket · Carepay · MonPay"
       desc="Өөрчлөлт нь шууд /api/payment/health болон төлбөрийн API-д тусгагдана. Supabase дээр хүснэгт байхгүй бол эхлээд sql/payment_app_settings.sql ажиллуулна уу."
     >
       {loading ? (
@@ -222,6 +226,13 @@ export default function PaymentAppSettingsSection() {
                 logo: "/logos/carepay.png",
                 checked: carepay,
                 set: setCarepay,
+              },
+              {
+                id: "monpay",
+                label: "MonPay мини апп",
+                logo: "/logos/monpay.png",
+                checked: monpay,
+                set: setMonpay,
               },
             ].map((row) => (
               <label

@@ -159,6 +159,37 @@ export async function GET() {
   const pocket = applyAdminSwitch(pocketTech, settings.payment_pocket_enabled, "Pocket");
   const carepay = applyAdminSwitch(carepayTech, settings.payment_carepay_enabled, "Carepay");
 
+  let monpayTech: ProviderPayload = {
+    enabled: false,
+    message: "MonPay тохиргоо дутуу байна",
+    configured: false,
+  };
+  try {
+    const { healthCheck, isMonpayConfigured } = await import("@/lib/monpay");
+    if (!isMonpayConfigured()) {
+      monpayTech = {
+        enabled: false,
+        message: "MonPay тохиргоо дутуу байна",
+        configured: false,
+      };
+    } else {
+      const result = await healthCheck();
+      monpayTech = {
+        enabled: result.ok,
+        message: result.message,
+        configured: true,
+      };
+    }
+  } catch {
+    monpayTech = {
+      enabled: false,
+      message: "MonPay үйлчилгээ түр тасалдалтай байна",
+      configured: true,
+    };
+  }
+
+  const monpay = applyAdminSwitch(monpayTech, settings.payment_monpay_enabled, "MonPay");
+
   return NextResponse.json({
     ok: true,
     providers: {
@@ -166,6 +197,7 @@ export async function GET() {
       sono,
       pocket,
       carepay,
+      monpay,
     },
     membership_prices: {
       early_mnt:

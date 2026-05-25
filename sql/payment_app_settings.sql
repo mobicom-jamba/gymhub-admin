@@ -11,6 +11,7 @@ create table if not exists public.payment_app_settings (
   payment_sono_enabled boolean not null default true,
   payment_pocket_enabled boolean not null default true,
   payment_carepay_enabled boolean not null default true,
+  payment_monpay_enabled boolean not null default true,
   updated_at timestamptz not null default now()
 );
 

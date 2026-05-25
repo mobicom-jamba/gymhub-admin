@@ -12,6 +12,7 @@ export type PaymentAppSettingsRow = {
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
   payment_carepay_enabled: boolean;
+  payment_monpay_enabled: boolean;
   updated_at: string;
 };
 
@@ -25,6 +26,7 @@ const DEFAULTS: Omit<PaymentAppSettingsRow, "updated_at"> = {
   payment_sono_enabled: true,
   payment_pocket_enabled: true,
   payment_carepay_enabled: true,
+  payment_monpay_enabled: true,
 };
 
 function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
@@ -52,6 +54,7 @@ function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
     payment_sono_enabled: row.payment_sono_enabled !== false,
     payment_pocket_enabled: row.payment_pocket_enabled !== false,
     payment_carepay_enabled: row.payment_carepay_enabled !== false,
+    payment_monpay_enabled: row.payment_monpay_enabled !== false,
     updated_at: (row.updated_at as string) || new Date().toISOString(),
   };
 }
@@ -79,7 +82,7 @@ export async function getPaymentAppSettings(): Promise<PaymentAppSettingsRow> {
   }
 }
 
-export type PaymentChannel = "qpay" | "sono" | "pocket" | "carepay";
+export type PaymentChannel = "qpay" | "sono" | "pocket" | "carepay" | "monpay";
 
 export async function requirePaymentChannel(
   channel: PaymentChannel
@@ -92,7 +95,9 @@ export async function requirePaymentChannel(
         ? s.payment_sono_enabled
         : channel === "carepay"
           ? s.payment_carepay_enabled
-          : s.payment_pocket_enabled;
+          : channel === "monpay"
+            ? s.payment_monpay_enabled
+            : s.payment_pocket_enabled;
   if (!allowed) {
     return NextResponse.json(
       { error: "Энэ төлбөрийн хэлбэр админы тохиргоогоор идэвхгүй байна." },
