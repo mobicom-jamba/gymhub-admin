@@ -1,6 +1,11 @@
 import { earlyFirstSegmentDaySpan, isApproximatelyEarlyFirstSegmentOnly } from "@/lib/membership-from-booking";
 
-export type MembershipPlanVariant = "premium_year" | "early_year" | "early_month" | "neutral";
+export type MembershipPlanVariant =
+  | "premium_year"
+  | "early_year"
+  | "early_month"
+  | "early_rest_due"
+  | "neutral";
 
 export type MembershipPlanVisual = {
   /** Урт тайлбар — жагсаалт дээр title / tooltip */
@@ -46,9 +51,9 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
       isApproximatelyEarlyFirstSegmentOnly(snap)
     ) {
       return {
-        title: "Early — эхний сарын төлбөр (ойролцоо 1 сарын хугацаа)",
-        shortLabel: "Early · 1 сар",
-        variant: "early_month",
+        title: "Early — эхний сар төлсөн, үлдсэн 11 сарын төлбөр төлөх шаардлагатай",
+        shortLabel: "Early · 11 сар төлөх",
+        variant: "early_rest_due",
       };
     }
 
@@ -105,6 +110,8 @@ export function membershipPlanBadgeClass(variant: MembershipPlanVariant): string
       return "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400";
     case "early_month":
       return "bg-teal-50 text-teal-800 dark:bg-teal-900/25 dark:text-teal-300";
+    case "early_rest_due":
+      return "bg-amber-50 text-amber-800 dark:bg-amber-900/25 dark:text-amber-300";
     default:
       return "bg-gray-50 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400";
   }

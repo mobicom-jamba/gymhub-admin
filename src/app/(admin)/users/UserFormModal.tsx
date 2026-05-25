@@ -755,7 +755,8 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
               </div>
               <p className="mb-3 text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
                 Жагсаалт дээр ялгах:{" "}
-                <span className="font-semibold text-teal-600 dark:text-teal-400">Early · 1 сар</span> — эхний сарын төлбөр;{" "}
+                <span className="font-semibold text-amber-600 dark:text-amber-400">Early · 11 сар төлөх</span> — эхний сар төлсөн, үлдсэн 11 сар;{" "}
+                <span className="font-semibold text-teal-600 dark:text-teal-400">Early · 1 сар</span> — эхний сарын төлбөр (хуучин шошго);{" "}
                 <span className="font-semibold text-blue-600 dark:text-blue-400">Early · 1 жил</span> — бүтэн жилийн early;{" "}
                 <span className="font-semibold text-violet-600 dark:text-violet-400">Premium · 1 жил</span> — premium жилийн багц. Эхлэх/дуусах огноогоор автоматаар тооцогдоно.
               </p>
