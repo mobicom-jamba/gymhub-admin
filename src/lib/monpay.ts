@@ -23,8 +23,23 @@ const MONPAY_REDIRECT_URI = (process.env.MONPAY_REDIRECT_URI ?? "").trim();
 const MONPAY_RECEIVER = (process.env.MONPAY_RECEIVER ?? "partnerBayas").trim();
 const MONPAY_WEBHOOK_SECRET = (process.env.MONPAY_WEBHOOK_SECRET ?? "").trim();
 
+/** Env names missing on the server (safe to expose in /api/payment/health). */
+export function getMonpayMissingEnvKeys(): string[] {
+  const missing: string[] = [];
+  if (!MONPAY_CLIENT_ID.trim()) missing.push("MONPAY_CLIENT_ID");
+  if (!MONPAY_CLIENT_SECRET.trim()) missing.push("MONPAY_CLIENT_SECRET");
+  if (!MONPAY_REDIRECT_URI.trim()) missing.push("MONPAY_REDIRECT_URI");
+  return missing;
+}
+
 export function isMonpayConfigured(): boolean {
-  return !!(MONPAY_CLIENT_ID && MONPAY_CLIENT_SECRET && MONPAY_REDIRECT_URI);
+  return getMonpayMissingEnvKeys().length === 0;
+}
+
+export function monpayConfigStatusMessage(): string {
+  const missing = getMonpayMissingEnvKeys();
+  if (missing.length === 0) return "MonPay тохиргоо бэлэн";
+  return `MonPay: Vercel дээр нэмнэ үү — ${missing.join(", ")}`;
 }
 
 export function getMonpayRedirectUri(): string {

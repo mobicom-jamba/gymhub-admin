@@ -165,11 +165,13 @@ export async function GET() {
     configured: false,
   };
   try {
-    const { healthCheck, isMonpayConfigured } = await import("@/lib/monpay");
+    const { healthCheck, isMonpayConfigured, monpayConfigStatusMessage } = await import(
+      "@/lib/monpay",
+    );
     if (!isMonpayConfigured()) {
       monpayTech = {
         enabled: false,
-        message: "MonPay тохиргоо дутуу байна",
+        message: monpayConfigStatusMessage(),
         configured: false,
       };
     } else {
