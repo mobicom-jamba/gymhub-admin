@@ -20,11 +20,13 @@ export default function GymsTable({
   error,
   onEdit,
   onDelete,
+  onQR,
 }: {
   gyms: Gym[];
   error?: string;
   onEdit?: (gym: Gym) => void;
   onDelete?: (gym: Gym) => void;
+  onQR?: (gym: Gym) => void;
 }) {
   if (error) {
     return (
@@ -78,7 +80,7 @@ export default function GymsTable({
               >
                 {t("status")}
               </TableCell>
-              {(onEdit || onDelete) && (
+              {(onEdit || onDelete || onQR) && (
                 <TableCell
                   isHeader
                   className="px-5 py-3 font-medium text-gray-500 text-end text-theme-xs dark:text-gray-400"
@@ -129,9 +131,18 @@ export default function GymsTable({
                     {gym.is_active ? t("active") : t("inactive")}
                   </Badge>
                 </TableCell>
-                {(onEdit || onDelete) && (
+                {(onEdit || onDelete || onQR) && (
                   <TableCell className="px-5 py-4 text-end">
                     <div className="flex justify-end gap-2">
+                      {onQR && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onQR(gym)}
+                        >
+                          QR
+                        </Button>
+                      )}
                       {onEdit && (
                         <Button
                           size="sm"

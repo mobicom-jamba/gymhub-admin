@@ -5,6 +5,7 @@ import ComponentCard from "@/components/common/ComponentCard";
 import Button from "@/components/ui/button/Button";
 import GymsTable from "./GymsTable";
 import GymFormModal from "./GymFormModal";
+import GymQRModal from "./GymQRModal";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import { PlusIcon, PencilIcon, TrashBinIcon } from "@/icons";
@@ -20,6 +21,7 @@ export default function GymsSection() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGym, setEditingGym] = useState<Gym | null>(null);
+  const [qrGym, setQrGym] = useState<Gym | null>(null);
   const [search, setSearch] = useState("");
   const [cityFilter, setCityFilter] = useState<"ulaanbaatar" | "darkhan" | "all">(
     "ulaanbaatar",
@@ -153,6 +155,7 @@ export default function GymsSection() {
           error={error ?? undefined}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onQR={setQrGym}
         />
         <TablePagination
           page={page}
@@ -175,6 +178,7 @@ export default function GymsSection() {
         gym={editingGym}
         onSuccess={fetchGyms}
       />
+      <GymQRModal gym={qrGym} onClose={() => setQrGym(null)} />
     </>
   );
 }
