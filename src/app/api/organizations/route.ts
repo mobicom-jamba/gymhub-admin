@@ -9,7 +9,7 @@ export async function GET() {
       .from("organizations")
       .select("id, name")
       .order("name", { ascending: true })
-      .limit(200);
+      .limit(1000);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
