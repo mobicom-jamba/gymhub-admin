@@ -16,6 +16,14 @@ import TableSkeleton from "@/components/ui/TableSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
+import { EMPTY_VISIT_STATS, type UserVisitStatsMap } from "./user-visit-stats";
+
+function formatVisitDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("mn-MN");
+}
 
 const roleLabels: Record<string, string> = {
   user: "Гишүүн",
@@ -100,6 +108,9 @@ export default function UsersTable({
   sortColumn = null,
   sortDir = "asc",
   onSort,
+  statsMap,
+  statsLoading,
+  onRowClick,
 }: {
   profiles: Profile[];
   error?: string;
@@ -117,6 +128,11 @@ export default function UsersTable({
   sortColumn?: UsersSortColumn | null;
   sortDir?: "asc" | "desc";
   onSort?: (column: UsersSortColumn) => void;
+  /** Per-user gym-visit stats keyed by profile id. */
+  statsMap?: UserVisitStatsMap;
+  statsLoading?: boolean;
+  /** Open the per-user stats detail panel. */
+  onRowClick?: (profile: Profile) => void;
 }) {
   const py = density === "compact" ? "py-1.5" : "py-3";
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -206,6 +222,12 @@ export default function UsersTable({
                 <Th col="startDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Эхлэх огноо" />}
               {(visibleColumns?.expireDate ?? true) &&
                 <Th col="expireDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Дуусах огноо" />}
+              {(visibleColumns?.totalVisits ?? false) &&
+                <Th col="totalVisits" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[110px]`} label="Нийт ирц" />}
+              {(visibleColumns?.lastVisit ?? false) &&
+                <Th col="lastVisit" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Сүүлд ирсэн" />}
+              {(visibleColumns?.streak ?? false) &&
+                <Th col="streak" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[100px]`} label="Streak" />}
               {(onEdit || onDelete || onResetDailyCheckin) && (
                 <TableCell isHeader className={`${hdrPlain} text-end sticky top-0 bg-white dark:bg-gray-900 min-w-[9rem]`}>Үйлдлүүд</TableCell>
               )}
@@ -214,11 +236,17 @@ export default function UsersTable({
 
           <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
             {profiles.map((p) => {
+              const stats = statsMap?.[p.id] ?? EMPTY_VISIT_STATS;
               return (
-                <TableRow key={p.id} className="transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
+                <TableRow
+                  key={p.id}
+                  onClick={onRowClick ? () => onRowClick(p) : undefined}
+                  className={`transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02] ${onRowClick ? "cursor-pointer" : ""}`}
+                >
                   {selectedIds && onToggleSelect && (
                     <TableCell className={`w-10 px-4 ${py}`}>
                       <input type="checkbox" checked={selectedIds.has(p.id)}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={() => onToggleSelect(p.id)} className="size-4 cursor-pointer" />
                     </TableCell>
                   )}
@@ -308,10 +336,45 @@ export default function UsersTable({
                     })() : <span className="text-gray-400">—</span>}
                   </TableCell>}
 
+                  {(visibleColumns?.totalVisits ?? false) && (
+                    <TableCell className={`px-4 ${py} text-sm tabular-nums whitespace-nowrap`}>
+                      {statsLoading && !statsMap ? (
+                        <span className="inline-block h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-white/[0.08]" />
+                      ) : stats.total > 0 ? (
+                        <span className="font-semibold text-gray-800 dark:text-white/90">{stats.total.toLocaleString()}</span>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-600">0</span>
+                      )}
+                    </TableCell>
+                  )}
+
+                  {(visibleColumns?.lastVisit ?? false) && (
+                    <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>
+                      {statsLoading && !statsMap ? (
+                        <span className="inline-block h-3 w-16 animate-pulse rounded bg-gray-200 dark:bg-white/[0.08]" />
+                      ) : (
+                        <span title={stats.lastGymName ?? undefined}>{formatVisitDate(stats.lastVisitAt)}</span>
+                      )}
+                    </TableCell>
+                  )}
+
+                  {(visibleColumns?.streak ?? false) && (
+                    <TableCell className={`px-4 ${py} text-sm tabular-nums whitespace-nowrap`}>
+                      {statsLoading && !statsMap ? (
+                        <span className="inline-block h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-white/[0.08]" />
+                      ) : stats.streakDays > 0 ? (
+                        <span className="inline-flex items-center gap-1 font-semibold text-orange-500 dark:text-orange-400">
+                          <span aria-hidden>🔥</span>{stats.streakDays}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300 dark:text-gray-600">—</span>
+                      )}
+                    </TableCell>
+                  )}
 
                   {(onEdit || onDelete || onResetDailyCheckin) && (
                     <TableCell className={`px-4 ${py} text-end`}>
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         {onResetDailyCheckin && (
                           <button
                             type="button"

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
+import UserStatsPanel from "./UserStatsPanel";
+import { fetchUserVisitStats, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UsersSortColumn } from "./users-sort";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
@@ -137,7 +139,8 @@ function isLegacyPaidStatus(status: string | null | undefined): boolean {
   return s === "paid" || s === "completed" || s === "success" || s === "succeeded" || s === "settled" || s === "approved" || s === "done";
 }
 
-const DATE_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate"]);
+const DATE_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate", "lastVisit"]);
+const DESC_FIRST_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate", "lastVisit", "totalVisits", "streak"]);
 
 function compareNullableDates(a: string | null, b: string | null, ascending: boolean): number {
   const parse = (s: string | null) => {
@@ -164,6 +167,8 @@ function tierRank(t: string | null): number {
 const PAGE_SIZES = [25, 50, 100, 500];
 const USERS_CACHE_TTL_MS = 30_000;
 let usersSectionCache: { at: number; profiles: Profile[]; organizations: OrganizationOption[] } | null = null;
+let visitStatsCache: { at: number; stats: UserVisitStatsMap } | null = null;
+const VISIT_STATS_CACHE_TTL_MS = 60_000;
 
 type UsersRoleTab = "user" | "admin" | "moderator" | "sales";
 
@@ -194,7 +199,11 @@ export default function UsersSection() {
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
     member: true, phone: true, organization: true, tier: true, agreement: true, startDate: true, expireDate: true,
+    totalVisits: false, lastVisit: false, streak: false,
   });
+  const [statsMap, setStatsMap] = useState<UserVisitStatsMap | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [panelProfile, setPanelProfile] = useState<Profile | null>(null);
   const [sortColumn, setSortColumn] = useState<UsersSortColumn | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
@@ -325,6 +334,29 @@ export default function UsersSection() {
   };
 
   useEffect(() => { fetchProfiles(); }, []);
+
+  // Load per-user visit stats once profiles are available (single RPC, cached).
+  useEffect(() => {
+    if (profiles.length === 0) return;
+    if (visitStatsCache && Date.now() - visitStatsCache.at < VISIT_STATS_CACHE_TTL_MS) {
+      setStatsMap(visitStatsCache.stats);
+      return;
+    }
+    let cancelled = false;
+    setStatsLoading(true);
+    (async () => {
+      const { stats, error: err } = await fetchUserVisitStats(profiles.map((p) => p.id));
+      if (cancelled) return;
+      if (!err) {
+        visitStatsCache = { at: Date.now(), stats };
+        setStatsMap(stats);
+      }
+      setStatsLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profiles]);
 
   useEffect(() => {
     if (loading || tab !== "user" || !paidDateInputRef.current) return;
@@ -603,10 +635,22 @@ export default function UsersSection() {
         case "expireDate":
           cmp = compareNullableDates(a.membership_expires_at, b.membership_expires_at, asc);
           break;
+        case "lastVisit": {
+          const sa = statsMap?.[a.id]?.lastVisitAt ?? null;
+          const sb = statsMap?.[b.id]?.lastVisitAt ?? null;
+          cmp = compareNullableDates(sa, sb, asc);
+          break;
+        }
+        case "totalVisits":
+          cmp = (statsMap?.[a.id]?.total ?? 0) - (statsMap?.[b.id]?.total ?? 0);
+          break;
+        case "streak":
+          cmp = (statsMap?.[a.id]?.streakDays ?? 0) - (statsMap?.[b.id]?.streakDays ?? 0);
+          break;
         default:
           break;
       }
-      if (sortColumn === "startDate" || sortColumn === "expireDate") {
+      if (DATE_SORT_COLS.has(sortColumn)) {
         if (cmp !== 0) return cmp;
         return a.id.localeCompare(b.id);
       }
@@ -614,14 +658,14 @@ export default function UsersSection() {
       return a.id.localeCompare(b.id);
     });
     return list;
-  }, [filteredProfiles, sortColumn, sortDir]);
+  }, [filteredProfiles, sortColumn, sortDir, statsMap]);
 
   const handleColumnSort = (column: UsersSortColumn) => {
     if (sortColumn === column) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortColumn(column);
-      setSortDir(DATE_SORT_COLS.has(column) ? "desc" : "asc");
+      setSortDir(DESC_FIRST_SORT_COLS.has(column) ? "desc" : "asc");
     }
     setPage(1);
   };
@@ -972,6 +1016,9 @@ export default function UsersSection() {
                 { key: "agreement", label: "Гэрээ" },
                 { key: "startDate", label: "Эхлэх огноо" },
                 { key: "expireDate", label: "Дуусах огноо" },
+                { key: "totalVisits", label: "Нийт ирц" },
+                { key: "lastVisit", label: "Сүүлд ирсэн" },
+                { key: "streak", label: "Streak" },
               ]}
               visible={visibleColumns}
               onChange={setVisibleColumns}
@@ -1050,6 +1097,9 @@ export default function UsersSection() {
           sortColumn={sortColumn}
           sortDir={sortDir}
           onSort={handleColumnSort}
+          statsMap={statsMap ?? undefined}
+          statsLoading={statsLoading}
+          onRowClick={(p) => setPanelProfile(p)}
         />
 
         {/* ── Pagination ── */}
@@ -1108,6 +1158,13 @@ export default function UsersSection() {
           </div>
         )}
       </ComponentCard>
+
+      <UserStatsPanel
+        profile={panelProfile}
+        stats={panelProfile ? (statsMap?.[panelProfile.id] ?? null) : null}
+        loading={statsLoading}
+        onClose={() => setPanelProfile(null)}
+      />
 
       <UserFormModal
         isOpen={formProfile !== null}

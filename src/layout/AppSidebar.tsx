@@ -35,6 +35,11 @@ const navItems: NavItem[] = [
     path: "/",
   },
   {
+    icon: <TaskIcon />,
+    name: "Ирц",
+    path: "/visits",
+  },
+  {
     icon: <BoxCubeIcon />,
     name: "Фитнес төвүүд",
     path: "/gyms",
@@ -58,11 +63,6 @@ const navItems: NavItem[] = [
     icon: <CalenderIcon />,
     name: "Захиалгууд",
     path: "/bookings",
-  },
-  {
-    icon: <TaskIcon />,
-    name: "Ирц",
-    path: "/visits",
   },
   {
     icon: <PlugInIcon />,
