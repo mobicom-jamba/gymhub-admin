@@ -13,7 +13,7 @@ import Badge from "@/components/ui/badge/Badge";
 import Button from "@/components/ui/button/Button";
 import { t } from "@/lib/i18n";
 import { PencilIcon, TrashBinIcon } from "@/icons";
-import type { Gym } from "./types";
+import type { Gym, VisitPeriod } from "./types";
 
 export default function GymsTable({
   gyms,
@@ -21,12 +21,16 @@ export default function GymsTable({
   onEdit,
   onDelete,
   onQR,
+  visitCounts,
+  visitPeriod,
 }: {
   gyms: Gym[];
   error?: string;
   onEdit?: (gym: Gym) => void;
   onDelete?: (gym: Gym) => void;
   onQR?: (gym: Gym) => void;
+  visitCounts?: Record<string, number>;
+  visitPeriod?: VisitPeriod;
 }) {
   if (error) {
     return (
@@ -80,6 +84,17 @@ export default function GymsTable({
               >
                 {t("status")}
               </TableCell>
+              {visitCounts && (
+                <TableCell
+                  isHeader
+                  className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
+                >
+                  Оролт{" "}
+                  <span className="text-gray-400 font-normal">
+                    ({visitPeriod === "today" ? "өнөөдөр" : visitPeriod === "month" ? "сар" : "7 хоног"})
+                  </span>
+                </TableCell>
+              )}
               {(onEdit || onDelete || onQR) && (
                 <TableCell
                   isHeader
@@ -131,6 +146,11 @@ export default function GymsTable({
                     {gym.is_active ? t("active") : t("inactive")}
                   </Badge>
                 </TableCell>
+                {visitCounts && (
+                  <TableCell className="px-5 py-4 text-gray-700 text-theme-sm font-medium dark:text-gray-300">
+                    {visitCounts[gym.id] ?? 0}
+                  </TableCell>
+                )}
                 {(onEdit || onDelete || onQR) && (
                   <TableCell className="px-5 py-4 text-end">
                     <div className="flex justify-end gap-2">
