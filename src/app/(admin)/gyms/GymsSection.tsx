@@ -10,7 +10,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import { PlusIcon, PencilIcon, TrashBinIcon } from "@/icons";
 import SearchInput from "@/components/common/SearchInput";
-import type { Gym } from "./types";
+import type { Gym, VisitPeriod } from "./types";
 import { useToast } from "@/components/ui/Toast";
 import { toMnErrorMessage } from "@/lib/error-message";
 import TablePagination from "@/components/ui/TablePagination";
@@ -28,6 +28,8 @@ export default function GymsSection() {
   );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [visitPeriod, setVisitPeriod] = useState<VisitPeriod>("today");
+  const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
   const toast = useToast();
 
   const fetchGyms = async () => {
@@ -42,9 +44,44 @@ export default function GymsSection() {
     setLoading(false);
   };
 
+  const fetchVisitCounts = async (period: VisitPeriod) => {
+    const supabase = createBrowserSupabaseClient();
+    let since: string;
+    if (period === "today") {
+      // Mongolia time UTC+8: start of today
+      const now = new Date();
+      const offset = 8 * 60 * 60 * 1000;
+      const mnNow = new Date(now.getTime() + offset);
+      const todayMn = new Date(
+        Date.UTC(mnNow.getUTCFullYear(), mnNow.getUTCMonth(), mnNow.getUTCDate())
+      );
+      since = new Date(todayMn.getTime() - offset).toISOString();
+    } else if (period === "7d") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      since = d.toISOString();
+    } else {
+      const d = new Date();
+      since = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+    }
+    const { data } = await supabase
+      .from("gym_visits")
+      .select("gym_id")
+      .gte("checked_in_at", since);
+    const counts: Record<string, number> = {};
+    (data ?? []).forEach((row: { gym_id: string }) => {
+      counts[row.gym_id] = (counts[row.gym_id] ?? 0) + 1;
+    });
+    setVisitCounts(counts);
+  };
+
   useEffect(() => {
     fetchGyms();
   }, []);
+
+  useEffect(() => {
+    fetchVisitCounts(visitPeriod);
+  }, [visitPeriod]);
 
   const handleAdd = () => {
     setEditingGym(null);
@@ -146,9 +183,27 @@ export default function GymsSection() {
               </button>
             </div>
           </div>
-          <Button size="sm" onClick={handleAdd} startIcon={<PlusIcon />}>
-            {t("add")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800">
+              {(["today", "7d", "month"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setVisitPeriod(p)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                    visitPeriod === p
+                      ? "bg-brand-500 text-white"
+                      : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
+                  }`}
+                >
+                  {p === "today" ? "Өнөөдөр" : p === "7d" ? "7 хоног" : "Сар"}
+                </button>
+              ))}
+            </div>
+            <Button size="sm" onClick={handleAdd} startIcon={<PlusIcon />}>
+              {t("add")}
+            </Button>
+          </div>
         </div>
         <GymsTable
           gyms={paginatedGyms}
@@ -156,6 +211,8 @@ export default function GymsSection() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onQR={setQrGym}
+          visitCounts={visitCounts}
+          visitPeriod={visitPeriod}
         />
         <TablePagination
           page={page}
