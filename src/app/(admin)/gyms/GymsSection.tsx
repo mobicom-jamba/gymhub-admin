@@ -6,6 +6,7 @@ import Button from "@/components/ui/button/Button";
 import GymsTable from "./GymsTable";
 import GymFormModal from "./GymFormModal";
 import GymQRModal from "./GymQRModal";
+import GymVisitMonthlyPanel from "./GymVisitMonthlyPanel";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import { PlusIcon, PencilIcon, TrashBinIcon } from "@/icons";
@@ -14,6 +15,28 @@ import type { Gym, VisitPeriod } from "./types";
 import { useToast } from "@/components/ui/Toast";
 import { toMnErrorMessage } from "@/lib/error-message";
 import TablePagination from "@/components/ui/TablePagination";
+
+function sinceForPeriod(period: VisitPeriod): string {
+  const now = new Date();
+  const offset = 8 * 60 * 60 * 1000;
+  const mnNow = new Date(now.getTime() + offset);
+  if (period === "today") {
+    const todayMn = new Date(
+      Date.UTC(mnNow.getUTCFullYear(), mnNow.getUTCMonth(), mnNow.getUTCDate()),
+    );
+    return new Date(todayMn.getTime() - offset).toISOString();
+  }
+  if (period === "7d") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 7);
+    return d.toISOString();
+  }
+  // month
+  const monthStart = new Date(
+    Date.UTC(mnNow.getUTCFullYear(), mnNow.getUTCMonth(), 1),
+  );
+  return new Date(monthStart.getTime() - offset).toISOString();
+}
 
 export default function GymsSection() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -30,6 +53,8 @@ export default function GymsSection() {
   const [pageSize, setPageSize] = useState(25);
   const [visitPeriod, setVisitPeriod] = useState<VisitPeriod>("today");
   const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
+  const [visitLoading, setVisitLoading] = useState(false);
+  const [monthlyGym, setMonthlyGym] = useState<Gym | null>(null);
   const toast = useToast();
 
   const fetchGyms = async () => {
@@ -45,23 +70,8 @@ export default function GymsSection() {
   };
 
   const fetchVisitCounts = async (period: VisitPeriod) => {
-    let since: string;
-    if (period === "today") {
-      const now = new Date();
-      const offset = 8 * 60 * 60 * 1000;
-      const mnNow = new Date(now.getTime() + offset);
-      const todayMn = new Date(
-        Date.UTC(mnNow.getUTCFullYear(), mnNow.getUTCMonth(), mnNow.getUTCDate())
-      );
-      since = new Date(todayMn.getTime() - offset).toISOString();
-    } else if (period === "7d") {
-      const d = new Date();
-      d.setDate(d.getDate() - 7);
-      since = d.toISOString();
-    } else {
-      const d = new Date();
-      since = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
-    }
+    const since = sinceForPeriod(period);
+    setVisitLoading(true);
     try {
       const supabase = createBrowserSupabaseClient();
       const { data: { session } } = await supabase.auth.getSession();
@@ -74,11 +84,14 @@ export default function GymsSection() {
       setVisitCounts(json.counts ?? {});
     } catch {
       setVisitCounts({});
+    } finally {
+      setVisitLoading(false);
     }
   };
 
   useEffect(() => {
     fetchGyms();
+    fetchVisitCounts("today");
   }, []);
 
   useEffect(() => {
@@ -215,6 +228,8 @@ export default function GymsSection() {
           onQR={setQrGym}
           visitCounts={visitCounts}
           visitPeriod={visitPeriod}
+          visitLoading={visitLoading}
+          onVisitCountClick={setMonthlyGym}
         />
         <TablePagination
           page={page}
@@ -228,6 +243,7 @@ export default function GymsSection() {
           pageSizeOptions={[25, 50, 100]}
         />
       </ComponentCard>
+
       <GymFormModal
         isOpen={modalOpen}
         onClose={() => {
@@ -238,6 +254,7 @@ export default function GymsSection() {
         onSuccess={fetchGyms}
       />
       <GymQRModal gym={qrGym} onClose={() => setQrGym(null)} />
+      <GymVisitMonthlyPanel gym={monthlyGym} onClose={() => setMonthlyGym(null)} />
     </>
   );
 }

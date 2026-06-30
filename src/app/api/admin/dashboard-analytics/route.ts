@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase";
 
 type MonthPoint = { month: string; count: number };
 
@@ -55,16 +56,6 @@ async function bookingsColumnExists(
   return !error;
 }
 
-async function gymVisitsColumnExists(
-  supabase: SupabaseClient,
-  column: string,
-): Promise<boolean> {
-  const { error } = await supabase
-    .from("gym_visits")
-    .select(column)
-    .limit(1);
-  return !error;
-}
 
 function classifyPaymentChannel(row: {
   payment_channel?: string | null;
@@ -209,6 +200,9 @@ async function createAnalyticsSupabase(): Promise<
       error: null,
     };
   }
+  // Service role key байхгүй тохиолдолд: auth verification хийгдсэний дараа
+  // createAdminClient() ашиглана (auth context-гүй → RLS хязгаарлахгүй).
+  // gym-monthly-stats-тай ижил хэлбэр.
   const sb = await createServerSupabaseClient();
   const {
     data: { user },
@@ -216,7 +210,7 @@ async function createAnalyticsSupabase(): Promise<
   if (!user) return { client: null, error: "UNAUTHORIZED" };
   const { data: prof } = await sb.from("profiles").select("role").eq("id", user.id).maybeSingle();
   if ((prof as { role?: string } | null)?.role !== "admin") return { client: null, error: "FORBIDDEN" };
-  return { client: sb, error: null };
+  return { client: createAdminClient(), error: null };
 }
 
 /**
@@ -450,58 +444,30 @@ async function aggregateVisitsByMonth(
 
 type FitnessMonthCount = { gym_id: string; gym_name: string | null; count: number };
 
+// gym-visit-counts route-тай яг ижил хэлбэр: createAdminClient() шууд → RLS bypass
 async function aggregateThisMonthFitnessCounts(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   startIso: string,
 ): Promise<FitnessMonthCount[]> {
-  // gym_visits schema differs across deployments; be defensive.
-  const [hasCheckedInAt, hasCreatedAt, hasStatus, hasGymName] = await Promise.all([
-    gymVisitsColumnExists(supabase, "checked_in_at"),
-    gymVisitsColumnExists(supabase, "created_at"),
-    gymVisitsColumnExists(supabase, "status"),
-    gymVisitsColumnExists(supabase, "gym_name"),
-  ]);
-  const timeCol = hasCheckedInAt ? "checked_in_at" : hasCreatedAt ? "created_at" : "checked_in_at";
-
-  const PAGE = 2000;
-  let from = 0;
+  const supabase = createAdminClient();
   const map = new Map<string, { gym_id: string; gym_name: string | null; count: number }>();
+  const PAGE = 1000;
+  let from = 0;
 
   for (;;) {
-    let q = supabase
+    const { data, error } = await supabase
       .from("gym_visits")
-      .select(
-        [
-          "gym_id",
-          hasGymName ? "gym_name" : null,
-          hasStatus ? "status" : null,
-          timeCol,
-        ]
-          .filter(Boolean)
-          .join(", "),
-      )
-      .gte(timeCol, startIso)
-      .order(timeCol, { ascending: false })
+      .select("gym_id, gym_name")
+      .neq("status", "rejected")
+      .gte("checked_in_at", startIso)
       .range(from, from + PAGE - 1);
 
-    if (hasStatus) {
-      q = q.neq("status", "rejected");
-    }
-
-    const { data, error } = await q;
     if (error) {
       if (error.code === "42P01") return [];
       throw new Error(error.message);
     }
 
-    const rows = (data ?? []) as {
-      gym_id?: string | null;
-      gym_name?: string | null;
-      status?: string | null;
-      checked_in_at?: string | null;
-    }[];
-
-    for (const r of rows) {
+    for (const r of (data ?? []) as { gym_id?: string | null; gym_name?: string | null }[]) {
       const gymId = String(r.gym_id ?? "").trim();
       if (!gymId) continue;
       const existing = map.get(gymId);
@@ -513,7 +479,7 @@ async function aggregateThisMonthFitnessCounts(
       }
     }
 
-    if (rows.length < PAGE) break;
+    if (!data || data.length < PAGE) break;
     from += PAGE;
   }
 
@@ -603,7 +569,7 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "private, max-age=300, stale-while-revalidate=600",
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
         },
       },
     );
