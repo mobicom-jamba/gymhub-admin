@@ -23,6 +23,8 @@ export default function GymsTable({
   onQR,
   visitCounts,
   visitPeriod,
+  visitLoading,
+  onVisitCountClick,
 }: {
   gyms: Gym[];
   error?: string;
@@ -31,6 +33,8 @@ export default function GymsTable({
   onQR?: (gym: Gym) => void;
   visitCounts?: Record<string, number>;
   visitPeriod?: VisitPeriod;
+  visitLoading?: boolean;
+  onVisitCountClick?: (gym: Gym) => void;
 }) {
   if (error) {
     return (
@@ -91,7 +95,7 @@ export default function GymsTable({
                 >
                   Оролт{" "}
                   <span className="text-gray-400 font-normal">
-                    ({visitPeriod === "today" ? "өнөөдөр" : visitPeriod === "month" ? "сар" : "7 хоног"})
+                    ({visitPeriod === "today" ? "өнөөдөр" : visitPeriod === "7d" ? "7 хоног" : "сар"})
                   </span>
                 </TableCell>
               )}
@@ -147,8 +151,32 @@ export default function GymsTable({
                   </Badge>
                 </TableCell>
                 {visitCounts && (
-                  <TableCell className="px-5 py-4 text-gray-700 text-theme-sm font-medium dark:text-gray-300">
-                    {visitCounts[gym.id] ?? 0}
+                  <TableCell className="px-5 py-4">
+                    {visitLoading ? (
+                      <div className="h-5 w-10 animate-pulse rounded-md bg-gray-200 dark:bg-white/10" />
+                    ) : onVisitCountClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onVisitCountClick(gym)}
+                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold text-brand-600 tabular-nums transition hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                        title="Сараар харах"
+                      >
+                        {visitCounts[gym.id] ?? 0}
+                        <svg
+                          className="size-3.5 text-brand-400 dark:text-brand-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.5}
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <span className="text-sm font-bold text-brand-600 tabular-nums dark:text-brand-400">
+                        {visitCounts[gym.id] ?? 0}
+                      </span>
+                    )}
                   </TableCell>
                 )}
                 {(onEdit || onDelete || onQR) && (
