@@ -101,6 +101,102 @@ function emptyChannels() {
   return { qpay: 0, sono: 0, pocket: 0, carepay: 0, gift: 0, other: 0 };
 }
 
+type RecentPayment = {
+  id: string;
+  amount: number | null;
+  channel: ReturnType<typeof classifyPaymentChannel>;
+  paid_at: string | null;
+  user_name: string | null;
+  user_phone: string | null;
+};
+
+/** Last N paid bookings with their resolved payment channel + buyer info (per-transaction view). */
+async function fetchRecentPayments(
+  supabase: SupabaseClient,
+  limit = 25,
+): Promise<RecentPayment[]> {
+  const [hasPaymentChannel, hasQpayInvoiceId, hasPaidAt, hasAmount, hasUserId] =
+    await Promise.all([
+      bookingsColumnExists(supabase, "payment_channel"),
+      bookingsColumnExists(supabase, "qpay_invoice_id"),
+      bookingsColumnExists(supabase, "paid_at"),
+      bookingsColumnExists(supabase, "amount"),
+      bookingsColumnExists(supabase, "user_id"),
+    ]);
+
+  const selectCols = [
+    "id",
+    "payment_status",
+    hasPaymentChannel ? "payment_channel" : null,
+    hasQpayInvoiceId ? "qpay_invoice_id" : null,
+    hasPaidAt ? "paid_at" : null,
+    hasAmount ? "amount" : null,
+    hasUserId ? "user_id" : null,
+    "created_at",
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  let res = await supabase
+    .from("bookings")
+    .select(selectCols)
+    .in("payment_status", [...PAID_STATUS])
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (res.error) {
+    res = await supabase
+      .from("bookings")
+      .select(selectCols)
+      .eq("payment_status", "paid")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+  }
+  if (res.error) return [];
+
+  const rows = (res.data ?? []) as unknown as Record<string, unknown>[];
+  const paid = rows.filter(
+    (r) => String(r.payment_status ?? "").trim().toLowerCase() === "paid",
+  );
+
+  const userIds = [
+    ...new Set(paid.map((r) => String(r.user_id ?? "")).filter(Boolean)),
+  ];
+  const profById = new Map<string, { full_name: string | null; phone: string | null }>();
+  if (hasUserId && userIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone")
+      .in("id", userIds);
+    for (const p of (profs ?? []) as {
+      id: string;
+      full_name: string | null;
+      phone: string | null;
+    }[]) {
+      profById.set(p.id, { full_name: p.full_name, phone: p.phone });
+    }
+  }
+
+  return paid.map((r) => {
+    const prof = profById.get(String(r.user_id ?? ""));
+    const paidAt =
+      typeof r.paid_at === "string"
+        ? r.paid_at
+        : typeof r.created_at === "string"
+          ? r.created_at
+          : null;
+    return {
+      id: String(r.id ?? ""),
+      amount: r.amount != null ? Number(r.amount) : null,
+      channel: classifyPaymentChannel(
+        r as { payment_channel?: string | null; qpay_invoice_id?: string | null },
+      ),
+      paid_at: paidAt,
+      user_name: prof?.full_name ?? null,
+      user_phone: prof?.phone ?? null,
+    };
+  });
+}
+
 async function createAnalyticsSupabase(): Promise<
   | { client: SupabaseClient; error: null }
   | { client: null; error: "UNAUTHORIZED" | "FORBIDDEN" }
@@ -450,12 +546,13 @@ export async function GET() {
     const thisMonthStartIso = currentMonthStartUtc8Iso();
     const PAGE = 1000;
 
-    const [usersByMonth, useBookingsPayments, commissionsByMonth, visitsByMonth, thisMonthFitnessCounts] = await Promise.all([
+    const [usersByMonth, useBookingsPayments, commissionsByMonth, visitsByMonth, thisMonthFitnessCounts, recentPayments] = await Promise.all([
       paginateMembershipStarts(supabase, windowStartIso, nowIso, PAGE),
       bookingsHasPaymentAnalyticsColumns(supabase),
       aggregateCommissionsByMonth(supabase, windowStartIso),
       aggregateVisitsByMonth(supabase, windowStartIso),
       aggregateThisMonthFitnessCounts(supabase, thisMonthStartIso),
+      fetchRecentPayments(supabase),
     ]);
 
     let paymentsByMonth: MonthPoint[];
@@ -502,6 +599,7 @@ export async function GET() {
           gift: channelCounts.gift,
           other: channelCounts.other,
         },
+        recentPayments,
       },
       {
         headers: {
