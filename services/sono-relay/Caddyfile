@@ -1,0 +1,17 @@
+{
+	admin off
+	# Fly edge terminates TLS for *.fly.dev and forwards plain HTTP here on :80.
+}
+
+:80 {
+	# Forward every request to Sono (rico.mn) over HTTPS, preserving
+	# method, path, body and the x-and-auth-* headers our app sends.
+	reverse_proxy https://rico.mn {
+		header_up Host rico.mn
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
