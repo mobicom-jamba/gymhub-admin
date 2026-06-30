@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const sonoAuthToken = process.env.SONO_AUTH_TOKEN ?? "";
     const sonoCallbackUrl =
       process.env.SONO_CALLBACK_URL ??
-      `${process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/payment/sono/callback`;
+      `${process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "https://gymhub-admin.vercel.app"}/api/payment/sono/callback`;
     const sonoTrackingData = process.env.SONO_TRACKING_DATA ?? "";
 
     if (!sonoAuthUser || !sonoAuthToken) {
