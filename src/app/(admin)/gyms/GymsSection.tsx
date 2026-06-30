@@ -45,10 +45,8 @@ export default function GymsSection() {
   };
 
   const fetchVisitCounts = async (period: VisitPeriod) => {
-    const supabase = createBrowserSupabaseClient();
     let since: string;
     if (period === "today") {
-      // Mongolia time UTC+8: start of today
       const now = new Date();
       const offset = 8 * 60 * 60 * 1000;
       const mnNow = new Date(now.getTime() + offset);
@@ -64,15 +62,19 @@ export default function GymsSection() {
       const d = new Date();
       since = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
     }
-    const { data } = await supabase
-      .from("gym_visits")
-      .select("gym_id")
-      .gte("checked_in_at", since);
-    const counts: Record<string, number> = {};
-    (data ?? []).forEach((row: { gym_id: string }) => {
-      counts[row.gym_id] = (counts[row.gym_id] ?? 0) + 1;
-    });
-    setVisitCounts(counts);
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : "";
+      const res = await fetch(
+        `/api/admin/gym-visit-counts?since=${encodeURIComponent(since)}`,
+        { headers: { Authorization: authHeader } },
+      );
+      const json = await res.json();
+      setVisitCounts(json.counts ?? {});
+    } catch {
+      setVisitCounts({});
+    }
   };
 
   useEffect(() => {
