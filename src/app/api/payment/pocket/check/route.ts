@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     const paid = status.state === "paid";
 
     // If paid, update Supabase booking + membership
+    let membershipActivated = false;
     if (paid) {
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (serviceKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
 
         if (user_id && effectiveBookingId?.startsWith("membership-")) {
           try {
-            await applyMembershipActivationForPaidBooking(supabase, {
+            membershipActivated = await applyMembershipActivationForPaidBooking(supabase, {
               userId: user_id,
               bookingId: effectiveBookingId,
             });
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
       amount: status.amount,
       order_number: status.orderNumber,
       invoice_id: status.id,
+      membership_activated: membershipActivated,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

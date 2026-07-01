@@ -82,6 +82,7 @@ export async function POST(request: Request) {
       rows.some((row) => row?.payment_status === "PAID");
 
     // If paid, update Supabase
+    let membershipActivated = false;
     if (paid) {
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (serviceKey && process.env.NEXT_PUBLIC_SUPABASE_URL) {
@@ -102,7 +103,7 @@ export async function POST(request: Request) {
 
         if (user_id && booking_id?.startsWith("membership-")) {
           try {
-            await applyMembershipActivationForPaidBooking(supabase, {
+            membershipActivated = await applyMembershipActivationForPaidBooking(supabase, {
               userId: user_id,
               bookingId: booking_id,
             });
@@ -128,6 +129,7 @@ export async function POST(request: Request) {
       count: result.count ?? rows.length,
       paid_amount: result.paid_amount ?? 0,
       rows,
+      membership_activated: membershipActivated,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

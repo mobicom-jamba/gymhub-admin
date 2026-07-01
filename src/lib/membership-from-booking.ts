@@ -127,6 +127,45 @@ export function computeMembershipDatesAfterPayment(args: {
   };
 }
 
+const missingColumnRegex = /Could not find the '([^']+)' column|column .*membership_applied_at.* does not exist/i;
+
+/**
+ * booking-ийг гишүүнчлэл идэвхжүүлэхээр "эзэмших" оролдлого (atomic).
+ * membership_applied_at багана хараахан үүсээгүй байвал fallback хийж хуучин зан төлөвөөр ажиллана.
+ * @returns "claimed" — энэ дуудалт эзэмшсэн (үргэлжлүүлнэ) | "already" — өмнө нь идэвхжсэн (алгасна) | "no_column" — багана байхгүй (fallback)
+ */
+async function claimMembershipBooking(
+  supabase: SupabaseClient,
+  bookingId: string,
+): Promise<"claimed" | "already" | "no_column"> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .update({ membership_applied_at: new Date().toISOString() })
+    .eq("id", bookingId)
+    .is("membership_applied_at", null)
+    .select("id");
+
+  if (error) {
+    if (missingColumnRegex.test(error.message ?? "")) return "no_column";
+    // Тодорхойгүй алдаа — давхарлахаас сэргийлж эзэмшээгүй гэж үзнэ.
+    console.warn("[membership-from-booking] claim booking:", error.message);
+    return "already";
+  }
+
+  return Array.isArray(data) && data.length > 0 ? "claimed" : "already";
+}
+
+/** Эзэмшлийг буцаах (profile шинэчлэлт бүтэлгүйтвэл дараагийн оролдлого дахин хийх боломжтой) */
+async function releaseMembershipBooking(supabase: SupabaseClient, bookingId: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({ membership_applied_at: null })
+    .eq("id", bookingId);
+  if (error && !missingColumnRegex.test(error.message ?? "")) {
+    console.warn("[membership-from-booking] release booking:", error.message);
+  }
+}
+
 /** Төлбөр баталгаажсаны дараа profile шинэчлэх (алдаа гарвал дотроо log, throw хийхгүй) */
 export async function applyMembershipActivationForPaidBooking(
   supabase: SupabaseClient,
@@ -134,6 +173,13 @@ export async function applyMembershipActivationForPaidBooking(
 ): Promise<boolean> {
   const { userId, bookingId } = params;
   if (!bookingId.startsWith("membership-")) return false;
+
+  // Idempotency: booking тус бүрт зөвхөн нэг л удаа идэвхжүүлнэ (давтагдсан төлбөр шалгалт хугацаа нэмэхгүй).
+  const claim = await claimMembershipBooking(supabase, bookingId);
+  if (claim === "already") {
+    // Сервер аль хэдийн боловсруулсан — клиент дахин давхарлахгүйн тулд true буцаана.
+    return true;
+  }
 
   const now = new Date();
   const { data: profile, error: selErr } = await supabase
@@ -144,6 +190,7 @@ export async function applyMembershipActivationForPaidBooking(
 
   if (selErr) {
     console.warn("[membership-from-booking] profile select:", selErr.message);
+    if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
     return false;
   }
 
@@ -154,11 +201,15 @@ export async function applyMembershipActivationForPaidBooking(
   };
 
   const update = computeMembershipDatesAfterPayment({ bookingId, now, profile: snap });
-  if (!update) return false;
+  if (!update) {
+    if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
+    return false;
+  }
 
   const { error: upErr } = await supabase.from("profiles").update(update).eq("id", userId);
   if (upErr) {
     console.error("[membership-from-booking] profile update:", upErr.message);
+    if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
     return false;
   }
   return true;
