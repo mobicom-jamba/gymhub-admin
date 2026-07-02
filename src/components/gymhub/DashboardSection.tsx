@@ -68,7 +68,8 @@ export default function DashboardSection() {
         .from("profiles")
         .select("id", { count: "exact", head: true })
         .eq("role", "user")
-        .eq("membership_status", "active"),
+        .eq("membership_status", "active")
+        .or(`membership_expires_at.is.null,membership_expires_at.gte.${new Date().toISOString()}`),
       supabase.from("gyms").select("id, name, amenities", { count: "exact" }),
       supabase.from("organizations").select("id", { count: "exact", head: true }),
       supabase

@@ -88,6 +88,32 @@ export async function POST(request: Request) {
       );
     }
 
+    // Гишүүнчлэл идэвхтэй бөгөөд хугацаа нь дуусаагүй эсэхийг шалгах
+    const { data: memberRow, error: memberErr } = await supabase
+      .from("profiles")
+      .select("membership_status, membership_expires_at")
+      .eq("id", user_id)
+      .maybeSingle();
+
+    if (memberErr) {
+      return NextResponse.json({ error: memberErr.message }, { status: 500 });
+    }
+
+    const membershipValid =
+      memberRow?.membership_status === "active" &&
+      (memberRow?.membership_expires_at == null ||
+        new Date(memberRow.membership_expires_at as string).getTime() >= Date.now());
+
+    if (!membershipValid) {
+      return NextResponse.json(
+        {
+          error: "Гишүүнчлэлийн хугацаа дууссан байна. Сунгана уу.",
+          membership_expired: true,
+        },
+        { status: 403 }
+      );
+    }
+
     const { data: gymRow, error: gymErr } = await supabase
       .from("gyms")
       .select("daily_visitor_limit")
