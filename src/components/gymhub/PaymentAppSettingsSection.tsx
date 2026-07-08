@@ -11,11 +11,15 @@ type Settings = {
   early_first_month_price_mnt: number;
   early_remainder_price_mnt: number;
   premium_membership_price_mnt: number;
+  smart1_price_mnt: number;
+  standard3_price_mnt: number;
+  premium4_price_mnt: number;
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
   payment_carepay_enabled: boolean;
   payment_monpay_enabled: boolean;
+  payment_gymfintech_enabled: boolean;
   updated_at: string;
 };
 
@@ -33,11 +37,15 @@ export default function PaymentAppSettingsSection() {
   const [earlyFirst, setEarlyFirst] = useState(150_000);
   const [earlyRest, setEarlyRest] = useState(330_000);
   const [premium, setPremium] = useState(780_000);
+  const [smart1, setSmart1] = useState(780_000);
+  const [standard3, setStandard3] = useState(480_000);
+  const [premium4, setPremium4] = useState(980_000);
   const [qpay, setQpay] = useState(true);
   const [sono, setSono] = useState(true);
   const [pocket, setPocket] = useState(true);
   const [carepay, setCarepay] = useState(true);
   const [monpay, setMonpay] = useState(true);
+  const [gymfintech, setGymfintech] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const getAuthHeaders = useCallback(async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
@@ -63,11 +71,15 @@ export default function PaymentAppSettingsSection() {
       setEarlyFirst(s.early_first_month_price_mnt);
       setEarlyRest(s.early_remainder_price_mnt);
       setPremium(s.premium_membership_price_mnt);
+      setSmart1(s.smart1_price_mnt);
+      setStandard3(s.standard3_price_mnt);
+      setPremium4(s.premium4_price_mnt);
       setQpay(s.payment_qpay_enabled);
       setSono(s.payment_sono_enabled);
       setPocket(s.payment_pocket_enabled);
       setCarepay(s.payment_carepay_enabled);
       setMonpay(s.payment_monpay_enabled);
+      setGymfintech(s.payment_gymfintech_enabled);
       setUpdatedAt(s.updated_at);
     } catch (e) {
       console.error(e);
@@ -96,11 +108,15 @@ export default function PaymentAppSettingsSection() {
           early_first_month_price_mnt: earlyFirst,
           early_remainder_price_mnt: earlyRest,
           premium_membership_price_mnt: premium,
+          smart1_price_mnt: smart1,
+          standard3_price_mnt: standard3,
+          premium4_price_mnt: premium4,
           payment_qpay_enabled: qpay,
           payment_sono_enabled: sono,
           payment_pocket_enabled: pocket,
           payment_carepay_enabled: carepay,
           payment_monpay_enabled: monpay,
+          payment_gymfintech_enabled: gymfintech,
         }),
       });
       const data = await res.json();
@@ -191,6 +207,57 @@ export default function PaymentAppSettingsSection() {
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
               <p className="mt-1 text-xs text-gray-400">{formatMnt(premium)}</p>
+              <p className="mt-0.5 text-xs text-gray-400">Smart багц-2-т ашиглагдана (Fitness + Иога)</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="sm:col-span-2 lg:col-span-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                5 багцын систем (төлбөрийн хуудсанд харагдах сонголтууд)
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Smart багц-1 (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={smart1}
+                onChange={(e) => setSmart1(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(smart1)} — Fitness 1 жил + Бассейн 3 сар</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Standard багц-3 (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={standard3}
+                onChange={(e) => setStandard3(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(standard3)} — Fitness 6 сар</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Premium багц-4 (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={premium4}
+                onChange={(e) => setPremium4(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium4)} — Бүгд (Fitness+Бассейн+Иога)</p>
             </div>
           </div>
 
@@ -233,6 +300,13 @@ export default function PaymentAppSettingsSection() {
                 logo: "/logos/monpay.png",
                 checked: monpay,
                 set: setMonpay,
+              },
+              {
+                id: "gymfintech",
+                label: "GymFinTech хуваан төлөлт",
+                logo: "/images/logo/logo-icon.svg",
+                checked: gymfintech,
+                set: setGymfintech,
               },
             ].map((row) => (
               <label

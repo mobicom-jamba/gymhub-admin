@@ -4,30 +4,7 @@ import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../_lib/bookings";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
-
-const QPAY_BASE = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
-const QPAY_USERNAME = process.env.QPAY_CLIENT_ID ?? process.env.QPAY_USERNAME ?? "";
-const QPAY_PASSWORD = process.env.QPAY_CLIENT_SECRET ?? process.env.QPAY_PASSWORD ?? "";
-
-let _token: string | null = null;
-let _tokenExpiresAt = 0;
-
-async function getToken(): Promise<string> {
-  if (_token && Date.now() < _tokenExpiresAt) return _token;
-  if (!QPAY_USERNAME || !QPAY_PASSWORD) {
-    throw new Error("QPay credentials are not configured");
-  }
-  const basic = Buffer.from(`${QPAY_USERNAME}:${QPAY_PASSWORD}`).toString("base64");
-  const res = await fetch(`${QPAY_BASE}/auth/token`, {
-    method: "POST",
-    headers: { Authorization: `Basic ${basic}` },
-  });
-  if (!res.ok) throw new Error(`QPay auth failed (${res.status})`);
-  const data = await res.json();
-  _token = data.access_token as string;
-  _tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
-  return _token;
-}
+import { QPayError, checkQpayInvoice } from "@/lib/qpay-client";
 
 export async function POST(request: Request) {
   try {
@@ -44,42 +21,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "invoice_id required" }, { status: 400 });
     }
 
-    const token = await getToken();
-
-    const checkRes = await fetch(`${QPAY_BASE}/payment/check`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        object_type: "INVOICE",
-        object_id: invoice_id,
-        offset: {
-          page_number: 1,
-          page_limit: 100,
-        },
-      }),
-    });
-
-    if (!checkRes.ok) {
-      const errText = await checkRes.text();
-      return NextResponse.json(
-        { error: `QPay төлбөр шалгахад алдаа гарлаа: ${errText || checkRes.status}` },
-        { status: checkRes.status },
-      );
-    }
-
-    const result = await checkRes.json() as {
-      payment_status?: string;
-      count?: number;
-      paid_amount?: number;
-      rows?: Array<{ payment_status?: string }>;
-    };
-    const rows = Array.isArray(result.rows) ? result.rows : [];
-    const paid = result.payment_status === "PAID" ||
-      (typeof result.paid_amount === "number" && result.paid_amount > 0) ||
-      rows.some((row) => row?.payment_status === "PAID");
+    const result = await checkQpayInvoice(invoice_id);
+    const { paid, rows } = result;
 
     // If paid, update Supabase
     let membershipActivated = false;
@@ -132,6 +75,9 @@ export async function POST(request: Request) {
       membership_activated: membershipActivated,
     });
   } catch (err: unknown) {
+    if (err instanceof QPayError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
