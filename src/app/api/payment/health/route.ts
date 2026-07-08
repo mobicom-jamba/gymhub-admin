@@ -192,6 +192,13 @@ export async function GET() {
 
   const monpay = applyAdminSwitch(monpayTech, settings.payment_monpay_enabled, "MonPay");
 
+  const gymfintechTech: ProviderPayload = {
+    enabled: true,
+    message: "GymFinTech бэлэн",
+    configured: true,
+  };
+  const gymfintech = applyAdminSwitch(gymfintechTech, settings.payment_gymfintech_enabled, "GymFinTech");
+
   return NextResponse.json({
     ok: true,
     providers: {
@@ -200,6 +207,7 @@ export async function GET() {
       pocket,
       carepay,
       monpay,
+      gymfintech,
     },
     membership_prices: {
       early_mnt:
@@ -208,6 +216,9 @@ export async function GET() {
       early_first_month_mnt: settings.early_first_month_price_mnt,
       early_remainder_mnt: settings.early_remainder_price_mnt,
       premium_mnt: settings.premium_membership_price_mnt,
+      smart1_mnt: settings.smart1_price_mnt,
+      standard3_mnt: settings.standard3_price_mnt,
+      premium4_mnt: settings.premium4_price_mnt,
     },
   });
 }

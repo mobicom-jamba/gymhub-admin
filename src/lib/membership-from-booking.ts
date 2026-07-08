@@ -119,49 +119,54 @@ export function computeMembershipDatesAfterPayment(args: {
       baseDate = currentExpiry;
     }
   }
+
+  // Standard багц-3 (membership-standard3-<ts>) нь зөвхөн 6 сарын эрхтэй — бусад бүх багц (early,
+  // premium, smart1, premium4 гэх мэт) урьдын адил 1 жилийн хугацаатай.
+  const expiresAt =
+    parsed.tier === "standard3" ? addCalendarMonths(baseDate, 6) : addCalendarYears(baseDate, 1);
+
   return {
     membership_tier: parsed.tier,
     membership_status: "active",
     membership_started_at: now.toISOString(),
-    membership_expires_at: addCalendarYears(baseDate, 1).toISOString(),
+    membership_expires_at: expiresAt.toISOString(),
   };
 }
 
-const missingColumnRegex = /Could not find the '([^']+)' column|column .*membership_applied_at.* does not exist/i;
+const missingTableRegex = /relation .*membership_activations.* does not exist/i;
 
 /**
- * booking-ийг гишүүнчлэл идэвхжүүлэхээр "эзэмших" оролдлого (atomic).
- * membership_applied_at багана хараахан үүсээгүй байвал fallback хийж хуучин зан төлөвөөр ажиллана.
- * @returns "claimed" — энэ дуудалт эзэмшсэн (үргэлжлүүлнэ) | "already" — өмнө нь идэвхжсэн (алгасна) | "no_column" — багана байхгүй (fallback)
+ * booking-ийг гишүүнчлэл идэвхжүүлэхээр "эзэмших" оролдлого (atomic insert, text PK дээр).
+ * Хуучин хувилбар нь bookings.membership_applied_at ашигладаг байсан ч bookings.id нь uuid
+ * тул "membership-early-<ts>" маягийн string ID-тай хэзээ ч таарахгүй байсан (22P02) — үүнээс
+ * болж claim үргэлж "already" буцаж, profiles хэзээ ч шинэчлэгдэхгүй байв. membership_activations
+ * (supabase/migrations/create_membership_activations.sql) нь энэ асуудлыг зассан зориулалтын хүснэгт.
+ * @returns "claimed" — энэ дуудалт эзэмшсэн (үргэлжлүүлнэ) | "already" — өмнө нь идэвхжсэн (алгасна) | "no_table" — миграц ажиллуулаагүй (fallback, guard-гүй)
  */
 async function claimMembershipBooking(
   supabase: SupabaseClient,
   bookingId: string,
-): Promise<"claimed" | "already" | "no_column"> {
-  const { data, error } = await supabase
-    .from("bookings")
-    .update({ membership_applied_at: new Date().toISOString() })
-    .eq("id", bookingId)
-    .is("membership_applied_at", null)
-    .select("id");
+  userId: string,
+): Promise<"claimed" | "already" | "no_table"> {
+  const { error } = await supabase
+    .from("membership_activations")
+    .insert({ booking_id: bookingId, user_id: userId });
 
-  if (error) {
-    if (missingColumnRegex.test(error.message ?? "")) return "no_column";
-    // Тодорхойгүй алдаа — давхарлахаас сэргийлж эзэмшээгүй гэж үзнэ.
-    console.warn("[membership-from-booking] claim booking:", error.message);
-    return "already";
+  if (!error) return "claimed";
+
+  if (error.code === "23505") return "already"; // unique_violation — өмнө нь claim хийгдсэн
+  if (missingTableRegex.test(error.message ?? "") || error.code === "42P01") {
+    return "no_table";
   }
-
-  return Array.isArray(data) && data.length > 0 ? "claimed" : "already";
+  // Тодорхойгүй алдаа — давхарлахаас сэргийлж эзэмшээгүй гэж үзнэ.
+  console.warn("[membership-from-booking] claim booking:", error.message);
+  return "already";
 }
 
 /** Эзэмшлийг буцаах (profile шинэчлэлт бүтэлгүйтвэл дараагийн оролдлого дахин хийх боломжтой) */
 async function releaseMembershipBooking(supabase: SupabaseClient, bookingId: string): Promise<void> {
-  const { error } = await supabase
-    .from("bookings")
-    .update({ membership_applied_at: null })
-    .eq("id", bookingId);
-  if (error && !missingColumnRegex.test(error.message ?? "")) {
+  const { error } = await supabase.from("membership_activations").delete().eq("booking_id", bookingId);
+  if (error && !missingTableRegex.test(error.message ?? "")) {
     console.warn("[membership-from-booking] release booking:", error.message);
   }
 }
@@ -175,7 +180,7 @@ export async function applyMembershipActivationForPaidBooking(
   if (!bookingId.startsWith("membership-")) return false;
 
   // Idempotency: booking тус бүрт зөвхөн нэг л удаа идэвхжүүлнэ (давтагдсан төлбөр шалгалт хугацаа нэмэхгүй).
-  const claim = await claimMembershipBooking(supabase, bookingId);
+  const claim = await claimMembershipBooking(supabase, bookingId, userId);
   if (claim === "already") {
     // Сервер аль хэдийн боловсруулсан — клиент дахин давхарлахгүйн тулд true буцаана.
     return true;

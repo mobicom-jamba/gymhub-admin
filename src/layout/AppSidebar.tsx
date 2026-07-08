@@ -65,6 +65,11 @@ const navItems: NavItem[] = [
     path: "/bookings",
   },
   {
+    icon: <ListIcon />,
+    name: "Хуваан төлөлт",
+    path: "/installments",
+  },
+  {
     icon: <PlugInIcon />,
     name: "Купон",
     path: "/coupons",

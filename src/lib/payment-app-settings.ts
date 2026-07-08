@@ -8,11 +8,18 @@ export type PaymentAppSettingsRow = {
   early_first_month_price_mnt: number;
   early_remainder_price_mnt: number;
   premium_membership_price_mnt: number;
+  /** Smart багц-1: Fitness 1 жил + Бассейн 3 сар + Инбоди + Амар даатгал + Nova 10 хоног */
+  smart1_price_mnt: number;
+  /** Standard багц-3: Fitness 6 сар */
+  standard3_price_mnt: number;
+  /** Premium багц-4: Fitness 1 жил + Бассейн 3 сар + Иога 3 сар + Инбоди + Амар даатгал + Nova 10 хоног */
+  premium4_price_mnt: number;
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
   payment_carepay_enabled: boolean;
   payment_monpay_enabled: boolean;
+  payment_gymfintech_enabled: boolean;
   updated_at: string;
 };
 
@@ -22,11 +29,15 @@ const DEFAULTS: Omit<PaymentAppSettingsRow, "updated_at"> = {
   early_first_month_price_mnt: 150_000,
   early_remainder_price_mnt: 330_000,
   premium_membership_price_mnt: 780_000,
+  smart1_price_mnt: 780_000,
+  standard3_price_mnt: 480_000,
+  premium4_price_mnt: 980_000,
   payment_qpay_enabled: true,
   payment_sono_enabled: true,
   payment_pocket_enabled: true,
   payment_carepay_enabled: true,
   payment_monpay_enabled: true,
+  payment_gymfintech_enabled: true,
 };
 
 function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
@@ -34,6 +45,9 @@ function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
   const earlyFirst = Number(row.early_first_month_price_mnt);
   const earlyRest = Number(row.early_remainder_price_mnt);
   const premium = Number(row.premium_membership_price_mnt);
+  const smart1 = Number(row.smart1_price_mnt);
+  const standard3 = Number(row.standard3_price_mnt);
+  const premium4 = Number(row.premium4_price_mnt);
   return {
     id: (row.id as string) || "default",
     early_membership_price_mnt:
@@ -50,11 +64,18 @@ function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
       Number.isFinite(premium) && premium >= 0
         ? Math.floor(premium)
         : DEFAULTS.premium_membership_price_mnt,
+    smart1_price_mnt:
+      Number.isFinite(smart1) && smart1 >= 0 ? Math.floor(smart1) : DEFAULTS.smart1_price_mnt,
+    standard3_price_mnt:
+      Number.isFinite(standard3) && standard3 >= 0 ? Math.floor(standard3) : DEFAULTS.standard3_price_mnt,
+    premium4_price_mnt:
+      Number.isFinite(premium4) && premium4 >= 0 ? Math.floor(premium4) : DEFAULTS.premium4_price_mnt,
     payment_qpay_enabled: row.payment_qpay_enabled !== false,
     payment_sono_enabled: row.payment_sono_enabled !== false,
     payment_pocket_enabled: row.payment_pocket_enabled !== false,
     payment_carepay_enabled: row.payment_carepay_enabled !== false,
     payment_monpay_enabled: row.payment_monpay_enabled !== false,
+    payment_gymfintech_enabled: row.payment_gymfintech_enabled !== false,
     updated_at: (row.updated_at as string) || new Date().toISOString(),
   };
 }
@@ -82,7 +103,7 @@ export async function getPaymentAppSettings(): Promise<PaymentAppSettingsRow> {
   }
 }
 
-export type PaymentChannel = "qpay" | "sono" | "pocket" | "carepay" | "monpay";
+export type PaymentChannel = "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech";
 
 export async function requirePaymentChannel(
   channel: PaymentChannel
@@ -97,7 +118,9 @@ export async function requirePaymentChannel(
           ? s.payment_carepay_enabled
           : channel === "monpay"
             ? s.payment_monpay_enabled
-            : s.payment_pocket_enabled;
+            : channel === "gymfintech"
+              ? s.payment_gymfintech_enabled
+              : s.payment_pocket_enabled;
   if (!allowed) {
     return NextResponse.json(
       { error: "Энэ төлбөрийн хэлбэр админы тохиргоогоор идэвхгүй байна." },

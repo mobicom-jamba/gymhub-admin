@@ -29,11 +29,27 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
     if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
     out.premium_membership_price_mnt = Math.floor(n);
   }
+  if ("smart1_price_mnt" in o) {
+    const n = Number(o.smart1_price_mnt);
+    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
+    out.smart1_price_mnt = Math.floor(n);
+  }
+  if ("standard3_price_mnt" in o) {
+    const n = Number(o.standard3_price_mnt);
+    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
+    out.standard3_price_mnt = Math.floor(n);
+  }
+  if ("premium4_price_mnt" in o) {
+    const n = Number(o.premium4_price_mnt);
+    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
+    out.premium4_price_mnt = Math.floor(n);
+  }
   if ("payment_qpay_enabled" in o) out.payment_qpay_enabled = Boolean(o.payment_qpay_enabled);
   if ("payment_sono_enabled" in o) out.payment_sono_enabled = Boolean(o.payment_sono_enabled);
   if ("payment_pocket_enabled" in o) out.payment_pocket_enabled = Boolean(o.payment_pocket_enabled);
   if ("payment_carepay_enabled" in o) out.payment_carepay_enabled = Boolean(o.payment_carepay_enabled);
   if ("payment_monpay_enabled" in o) out.payment_monpay_enabled = Boolean(o.payment_monpay_enabled);
+  if ("payment_gymfintech_enabled" in o) out.payment_gymfintech_enabled = Boolean(o.payment_gymfintech_enabled);
 
   return Object.keys(out).length ? out : null;
 }
@@ -100,11 +116,15 @@ export async function PATCH(request: Request) {
           early_first_month_price_mnt: next.early_first_month_price_mnt,
           early_remainder_price_mnt: next.early_remainder_price_mnt,
           premium_membership_price_mnt: next.premium_membership_price_mnt,
+          smart1_price_mnt: next.smart1_price_mnt,
+          standard3_price_mnt: next.standard3_price_mnt,
+          premium4_price_mnt: next.premium4_price_mnt,
           payment_qpay_enabled: next.payment_qpay_enabled,
           payment_sono_enabled: next.payment_sono_enabled,
           payment_pocket_enabled: next.payment_pocket_enabled,
           payment_carepay_enabled: next.payment_carepay_enabled,
           payment_monpay_enabled: next.payment_monpay_enabled,
+          payment_gymfintech_enabled: next.payment_gymfintech_enabled,
           updated_at: next.updated_at,
         },
         { onConflict: "id" }
@@ -142,11 +162,15 @@ function normalizeFromDb(data: Record<string, unknown>): PaymentAppSettingsRow {
     early_first_month_price_mnt: Number(data.early_first_month_price_mnt) || 150_000,
     early_remainder_price_mnt: Number(data.early_remainder_price_mnt) || 330_000,
     premium_membership_price_mnt: Number(data.premium_membership_price_mnt) || 780_000,
+    smart1_price_mnt: Number(data.smart1_price_mnt) || 780_000,
+    standard3_price_mnt: Number(data.standard3_price_mnt) || 480_000,
+    premium4_price_mnt: Number(data.premium4_price_mnt) || 980_000,
     payment_qpay_enabled: data.payment_qpay_enabled !== false,
     payment_sono_enabled: data.payment_sono_enabled !== false,
     payment_pocket_enabled: data.payment_pocket_enabled !== false,
     payment_carepay_enabled: data.payment_carepay_enabled !== false,
     payment_monpay_enabled: data.payment_monpay_enabled !== false,
+    payment_gymfintech_enabled: data.payment_gymfintech_enabled !== false,
     updated_at: (data.updated_at as string) || new Date().toISOString(),
   };
 }
