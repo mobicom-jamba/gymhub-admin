@@ -17,6 +17,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
 import { EMPTY_VISIT_STATS, type UserVisitStatsMap } from "./user-visit-stats";
+import type { UserSalesNote } from "./UserNoteModal";
 
 function formatVisitDate(iso: string | null): string {
   if (!iso) return "—";
@@ -111,6 +112,8 @@ export default function UsersTable({
   statsMap,
   statsLoading,
   onRowClick,
+  notesMap,
+  onNoteClick,
 }: {
   profiles: Profile[];
   error?: string;
@@ -133,6 +136,10 @@ export default function UsersTable({
   statsLoading?: boolean;
   /** Open the per-user stats detail panel. */
   onRowClick?: (profile: Profile) => void;
+  /** Sales call notes map keyed by profile id. */
+  notesMap?: Record<string, UserSalesNote>;
+  /** Open the note modal for a user. */
+  onNoteClick?: (profile: Profile) => void;
 }) {
   const py = density === "compact" ? "py-1.5" : "py-3";
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -372,9 +379,38 @@ export default function UsersTable({
                     </TableCell>
                   )}
 
-                  {(onEdit || onDelete || onResetDailyCheckin) && (
+                  {(onEdit || onDelete || onResetDailyCheckin || onNoteClick) && (
                     <TableCell className={`px-4 ${py} text-end`}>
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                        {onNoteClick && (() => {
+                          const n = notesMap?.[p.id];
+                          const called = n?.called ?? false;
+                          const hasNote = !!(n?.note?.trim());
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => onNoteClick(p)}
+                              title={called ? "Залгасан · Тэмдэглэл харах" : hasNote ? "Тэмдэглэл байна · Нэмэх" : "Тэмдэглэл нэмэх"}
+                              className={`rounded-xl p-2 transition ${
+                                called
+                                  ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/25"
+                                  : hasNote
+                                    ? "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/25"
+                                    : "text-gray-300 hover:bg-gray-100 hover:text-gray-500 dark:text-gray-600 dark:hover:bg-white/8 dark:hover:text-gray-400"
+                              }`}
+                            >
+                              <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                {called ? (
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                ) : (
+                                  <>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                  </>
+                                )}
+                              </svg>
+                            </button>
+                          );
+                        })()}
                         {onResetDailyCheckin && (
                           <button
                             type="button"
