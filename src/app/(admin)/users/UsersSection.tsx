@@ -5,6 +5,7 @@ import ComponentCard from "@/components/common/ComponentCard";
 import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
 import UserStatsPanel from "./UserStatsPanel";
+import UserNoteModal, { type UserSalesNote } from "./UserNoteModal";
 import { fetchUserVisitStats, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UsersSortColumn } from "./users-sort";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -204,6 +205,8 @@ export default function UsersSection() {
   const [statsMap, setStatsMap] = useState<UserVisitStatsMap | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [panelProfile, setPanelProfile] = useState<Profile | null>(null);
+  const [notesMap, setNotesMap] = useState<Record<string, UserSalesNote>>({});
+  const [noteProfile, setNoteProfile] = useState<Profile | null>(null);
   const [sortColumn, setSortColumn] = useState<UsersSortColumn | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [organizationOptions, setOrganizationOptions] = useState<OrganizationOption[]>([]);
@@ -333,7 +336,21 @@ export default function UsersSection() {
     if (err) setError(err);
   };
 
-  useEffect(() => { fetchProfiles(); }, []);
+  const fetchNotes = async () => {
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : "";
+      const res = await fetch("/api/admin/user-notes", { headers: { Authorization: authHeader } });
+      if (!res.ok) return;
+      const json = await res.json();
+      const map: Record<string, UserSalesNote> = {};
+      for (const n of json.notes ?? []) map[n.user_id] = n;
+      setNotesMap(map);
+    } catch { /* чимээгүй алдаа */ }
+  };
+
+  useEffect(() => { fetchProfiles(); fetchNotes(); }, []);
 
   // Load per-user visit stats once profiles are available (single RPC, cached).
   useEffect(() => {
@@ -1100,6 +1117,8 @@ export default function UsersSection() {
           statsMap={statsMap ?? undefined}
           statsLoading={statsLoading}
           onRowClick={(p) => setPanelProfile(p)}
+          notesMap={notesMap}
+          onNoteClick={(p) => setNoteProfile(p)}
         />
 
         {/* ── Pagination ── */}
@@ -1164,6 +1183,16 @@ export default function UsersSection() {
         stats={panelProfile ? (statsMap?.[panelProfile.id] ?? null) : null}
         loading={statsLoading}
         onClose={() => setPanelProfile(null)}
+      />
+
+      <UserNoteModal
+        profile={noteProfile}
+        note={noteProfile ? (notesMap[noteProfile.id] ?? null) : null}
+        onClose={() => setNoteProfile(null)}
+        onSave={(saved) => {
+          setNotesMap((prev) => ({ ...prev, [saved.user_id]: saved }));
+          setNoteProfile(null);
+        }}
       />
 
       <UserFormModal
