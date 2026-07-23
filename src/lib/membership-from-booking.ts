@@ -13,7 +13,7 @@ export type ParsedMembershipBooking =
   | { kind: "early_rest" }
   | { kind: "annual_from_payment"; tier: string };
 
-/** Booking slug → profiles.membership_tier (шинэ нэршил) */
+/** Booking slug → profiles.membership_tier */
 export function canonicalStoredTier(bookingTier: string): string {
   switch (bookingTier) {
     case "smart1":
@@ -30,10 +30,13 @@ export function canonicalStoredTier(bookingTier: string): string {
       return "gymcore";
     case "standard3":
     case "standard":
+    case "basic":
+      return "standard";
+    // Хуучин Early — DB-д early үлдээнэ
     case "early":
     case "early_year":
     case "early_month":
-      return "standard";
+      return "early";
     default:
       return bookingTier || "standard";
   }
@@ -131,8 +134,8 @@ export function computeMembershipDatesAfterPayment(args: {
       ? new Date(profile.membership_started_at)
       : now;
     return {
-      // Үлдсэн 11 сар төлөгдсөний дараа Standard жилийн эрх
-      membership_tier: "standard",
+      // Үлдсэн 11 сар төлөгдсөний дараа Early жилийн эрх (хуучин багц)
+      membership_tier: "early",
       membership_status: "active",
       membership_started_at: anchor.toISOString(),
       membership_expires_at: addCalendarYears(anchor, 1).toISOString(),
