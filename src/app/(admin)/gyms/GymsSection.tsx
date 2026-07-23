@@ -63,6 +63,7 @@ export default function GymsSection() {
     const { data, error: err } = await supabase
       .from("gyms")
       .select("*")
+      .order("sort_order", { ascending: true })
       .order("name");
     setGyms(data ?? []);
     setError(err?.message ?? null);

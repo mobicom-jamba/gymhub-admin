@@ -102,6 +102,9 @@ export default function GymFormModal({
   const [dailyVisitorLimit, setDailyVisitorLimit] = useState(
     () => (gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : "")
   );
+  const [sortOrder, setSortOrder] = useState(
+    () => (gym?.sort_order != null ? String(gym.sort_order) : "")
+  );
   const [daySchedules, setDaySchedules] = useState<DaySchedules>(() =>
     parseRaw(gym?.opening_hours)
   );
@@ -142,6 +145,7 @@ export default function GymFormModal({
       setDailyVisitorLimit(
         gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : ""
       );
+      setSortOrder(gym?.sort_order != null ? String(gym.sort_order) : "");
       setDaySchedules(parseRaw(gym?.opening_hours));
       setError("");
       setOwnerName("");
@@ -243,6 +247,29 @@ export default function GymFormModal({
       }
       daily_visitor_limit = n;
     }
+
+    let sort_order = 9999;
+    const orderTrim = sortOrder.trim();
+    if (orderTrim !== "") {
+      const n = parseInt(orderTrim, 10);
+      if (!Number.isFinite(n) || n < 1) {
+        setError("Дараалал нь 1-ээс их бүхэл тоо байна (жишээ нь 1, 2, 3)");
+        return;
+      }
+      sort_order = n;
+    } else if (!gym) {
+      const supabaseForMax = createBrowserSupabaseClient();
+      const { data: maxRow } = await supabaseForMax
+        .from("gyms")
+        .select("sort_order")
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      sort_order = ((maxRow?.sort_order as number | undefined) ?? 0) + 1;
+    } else if (typeof gym.sort_order === "number") {
+      sort_order = gym.sort_order;
+    }
+
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
@@ -254,6 +281,7 @@ export default function GymFormModal({
       image_url: imageUrl || null,
       is_active: isActive,
       daily_visitor_limit,
+      sort_order,
       opening_hours: buildSchedule(daySchedules),
       type: type,
     };
@@ -496,6 +524,21 @@ export default function GymFormModal({
               onChange={(checked) => setIsActive(checked)}
             />
             <Label className="!mb-0">{t("active")}</Label>
+          </div>
+
+          <div>
+            <Label>Жагсаалтын дараалал</Label>
+            <Input
+              type="number"
+              min="1"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value)}
+              placeholder="1, 2, 3… (бага = эхэнд)"
+            />
+            <p className="mt-1 text-[11px] text-gray-500">
+              Апп дээрх фитнес жагсаалтын эрэмбэ. 1 = эхнийх, 2 = дараагийнх гэх мэт.
+              Шинэ бүртгэлд хоосон бол сүүлд нэмэгдэнэ.
+            </p>
           </div>
 
           <div>

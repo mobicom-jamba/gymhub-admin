@@ -60,6 +60,12 @@ export default function GymsTable({
             <TableRow>
               <TableCell
                 isHeader
+                className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400 w-12"
+              >
+                #
+              </TableCell>
+              <TableCell
+                isHeader
                 className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400 w-14"
               >
                 {t("logo")}
@@ -112,6 +118,9 @@ export default function GymsTable({
           <TableBody className="divide-y divide-gray-100 dark:divide-white/[0.05]">
             {gyms.map((gym) => (
               <TableRow key={gym.id}>
+                <TableCell className="px-5 py-4 text-start tabular-nums text-gray-500 text-theme-sm dark:text-gray-400">
+                  {gym.sort_order ?? "—"}
+                </TableCell>
                 <TableCell className="px-5 py-4">
                   {gym.image_url ? (
                     <div className="relative size-10 overflow-hidden rounded-lg border border-gray-100 dark:border-white/[0.05]">

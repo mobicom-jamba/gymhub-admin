@@ -12,6 +12,8 @@ export type Gym = {
   is_active?: boolean | null;
   /** Max check-ins per local day (UTC+8); null = unlimited */
   daily_visitor_limit?: number | null;
+  /** Lower = earlier in app fitness list */
+  sort_order?: number | null;
   created_at?: string;
   type?: string | null;
 };

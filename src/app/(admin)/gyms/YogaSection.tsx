@@ -32,6 +32,7 @@ export default function YogaSection() {
       .from("gyms")
       .select("*")
       .eq("type", "yoga")   // ← yoga filter
+      .order("sort_order", { ascending: true })
       .order("name");
     setGyms(data ?? []);
     setError(err?.message ?? null);
