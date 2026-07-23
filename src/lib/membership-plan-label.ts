@@ -4,9 +4,12 @@ export type MembershipPlanVariant =
   | "premium1"
   | "premium2"
   | "gymcore"
+  | "early_year"
+  | "early_month"
+  | "early_rest_due"
   | "standard_year"
   | "standard_month"
-  | "standard_rest_due"
+  | "unpaid"
   | "neutral";
 
 export type MembershipPlanVisual = {
@@ -21,9 +24,49 @@ type ProfileLike = {
   membership_tier: string | null;
   membership_started_at: string | null;
   membership_expires_at: string | null;
+  /** Байвал төлөөгүй үед багцын нэр харуулахгүй */
+  membership_status?: string | null;
 };
 
-/** Booking / DB slug → шинэ багцын canonical key */
+function durationSnap(profile: ProfileLike) {
+  return {
+    membership_started_at: profile.membership_started_at,
+    membership_expires_at: profile.membership_expires_at,
+    membership_status: null as string | null,
+  };
+}
+
+/** Төлбөр төлөөгүй / идэвхгүй */
+export function isUnpaidMembership(status: string | null | undefined): boolean {
+  const s = (status ?? "inactive").trim().toLowerCase();
+  return s !== "active" && s !== "expired";
+}
+
+export function getMembershipPaymentBadge(status: string | null | undefined): {
+  label: string;
+  className: string;
+} {
+  const s = (status ?? "inactive").trim().toLowerCase();
+  if (s === "active") {
+    return {
+      label: "Төлсөн",
+      className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-300",
+    };
+  }
+  if (s === "expired") {
+    return {
+      label: "Дууссан",
+      className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200",
+    };
+  }
+  return {
+    label: "Төлөөгүй",
+    className:
+      "bg-rose-50 text-rose-500 ring-1 ring-rose-100 dark:bg-rose-950/20 dark:text-rose-400/80 dark:ring-rose-900/30",
+  };
+}
+
+/** Booking / DB slug → canonical key (legacy early ≠ шинэ standard) */
 export function canonicalPlanKey(tier: string | null | undefined): string {
   const t = (tier ?? "").trim().toLowerCase();
   if (!t) return "";
@@ -32,29 +75,31 @@ export function canonicalPlanKey(tier: string | null | undefined): string {
   // Legacy `premium` booking = Smart-2 / йог багц → Premium 2
   if (t === "premium") return "premium2";
   if (t === "premium4" || t === "gymcore" || t === "prime") return "gymcore";
-  if (
-    t === "standard3" ||
-    t === "standard" ||
-    t === "early" ||
-    t === "early_year" ||
-    t === "early_month" ||
-    t === "basic"
-  ) {
-    return "standard";
-  }
+  // Хуучин Early багц — нэршлийг Early-ээр үлдээнэ
+  if (t === "early" || t === "early_year" || t === "early_month") return "early";
+  // Шинэ Standard багц
+  if (t === "standard3" || t === "standard" || t === "basic") return "standard";
   return t;
 }
 
 /**
- * Гишүүнчлэлийн төрлийг шинэ нэршил + хугацаагаар ялгана:
- * - smart1 → Premium 1
- * - premium / smart2 → Premium 2
- * - early / standard3 → Standard
- * - premium4 → GymCore
+ * Гишүүнчлэлийн төрлийг нэршил + хугацаагаар ялгана.
+ * Төлөөгүй (inactive) үед багцын нэр биш "Төлөөгүй" буцаана.
  */
 export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVisual {
+  const status = profile.membership_status;
+  if (status !== undefined && isUnpaidMembership(status)) {
+    return {
+      title: "Төлбөр төлөөгүй — багц идэвхжээгүй",
+      shortLabel: "Төлөөгүй",
+      variant: "unpaid",
+    };
+  }
+
   const tier = (profile.membership_tier ?? "").trim().toLowerCase();
   const key = canonicalPlanKey(tier);
+  const snap = durationSnap(profile);
+  const days = earlyFirstSegmentDaySpan(snap);
 
   if (key === "premium1") {
     return {
@@ -80,14 +125,8 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
     };
   }
 
-  if (key === "standard") {
-    const snap = {
-      membership_started_at: profile.membership_started_at,
-      membership_expires_at: profile.membership_expires_at,
-      membership_status: null as string | null,
-    };
-
-    // Хуучин Early эхний сарын төлбөр — үлдсэн 11 сар төлөх шаардлагатай
+  // ── Хуучин Early — хуучнаар нь харуулна ───────────────────────────────
+  if (key === "early") {
     if (
       tier === "early" &&
       profile.membership_started_at &&
@@ -95,18 +134,60 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
       isApproximatelyEarlyFirstSegmentOnly(snap)
     ) {
       return {
-        title: "Standard — эхний сар төлсөн, үлдсэн 11 сарын төлбөр төлөх шаардлагатай",
-        shortLabel: "Standard · 11 сар төлөх",
-        variant: "standard_rest_due",
+        title: "Early — эхний сар төлсөн, үлдсэн 11 сарын төлбөр төлөх шаардлагатай",
+        shortLabel: "Early · 1 сар",
+        variant: "early_rest_due",
       };
     }
 
-    const days = earlyFirstSegmentDaySpan(snap);
+    if (days != null && days >= 280) {
+      return {
+        title: "Early — 1 жилийн гишүүнчлэл (legacy 480k)",
+        shortLabel: "Early",
+        variant: "early_year",
+      };
+    }
+
+    if (days != null && days >= 150 && days < 280) {
+      const approxMonths = Math.max(2, Math.round(days / 30));
+      return {
+        title: `Early — ${approxMonths} сарын эрх`,
+        shortLabel: approxMonths === 6 ? "Early · 6 сар" : `Early · ~${approxMonths} сар`,
+        variant: "early_year",
+      };
+    }
+
+    if (days != null && days >= 20 && days <= 45) {
+      return {
+        title: "Early — эхний сарын төлбөр",
+        shortLabel: "Early · 1 сар",
+        variant: "early_month",
+      };
+    }
+
+    if (days != null && days >= 46) {
+      const approxMonths = Math.max(2, Math.round(days / 30));
+      return {
+        title: `Early — ~${approxMonths} сарын идэвхтэй хугацаа`,
+        shortLabel: `Early · ~${approxMonths} сар`,
+        variant: "early_year",
+      };
+    }
+
+    return {
+      title: "Early — хуучин Early багц",
+      shortLabel: "Early",
+      variant: "early_year",
+    };
+  }
+
+  // ── Шинэ Standard ─────────────────────────────────────────────────────
+  if (key === "standard") {
     if (days != null && days >= 280) {
       const approxYears = Math.round(days / 365);
       if (approxYears <= 1) {
         return {
-          title: "Standard — 1 жилийн гишүүнчлэл (бүтэн жил эсвэл хуучин Early багц)",
+          title: "Standard — 1 жилийн гишүүнчлэл",
           shortLabel: "Standard · 1 жил",
           variant: "standard_year",
         };
@@ -118,7 +199,7 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
       };
     }
 
-    // Standard багц-3 ≈ 6 сар
+    // Standard / standard3 ≈ 6 сар
     if (days != null && days >= 150 && days < 280) {
       const approxMonths = Math.max(2, Math.round(days / 30));
       return {
@@ -139,14 +220,14 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
 
     if (days != null && days >= 20 && days <= 45) {
       return {
-        title: "Standard — эхний сарын төлбөр (хуучин Early)",
+        title: "Standard — богино хугацааны эрх",
         shortLabel: "Standard · 1 сар",
         variant: "standard_month",
       };
     }
 
     return {
-      title: "Standard — тариф (огноо дутуу эсвэл товч хугацаа)",
+      title: "Standard — шинэ багц",
       shortLabel: "Standard",
       variant: "neutral",
     };
@@ -171,12 +252,17 @@ export function membershipPlanBadgeClass(variant: MembershipPlanVariant): string
       return "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400";
     case "gymcore":
       return "bg-amber-50 text-amber-800 dark:bg-amber-900/25 dark:text-amber-300";
+    case "early_year":
+      return "bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400";
+    case "early_month":
+    case "early_rest_due":
+      return "bg-teal-50 text-teal-800 dark:bg-teal-900/25 dark:text-teal-300";
     case "standard_year":
       return "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400";
     case "standard_month":
-      return "bg-teal-50 text-teal-800 dark:bg-teal-900/25 dark:text-teal-300";
-    case "standard_rest_due":
-      return "bg-amber-50 text-amber-800 dark:bg-amber-900/25 dark:text-amber-300";
+      return "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/25 dark:text-indigo-300";
+    case "unpaid":
+      return "bg-rose-50 text-rose-500 ring-1 ring-rose-100 dark:bg-rose-950/20 dark:text-rose-400/80 dark:ring-rose-900/30";
     default:
       return "bg-gray-50 text-gray-500 dark:bg-white/[0.06] dark:text-gray-400";
   }

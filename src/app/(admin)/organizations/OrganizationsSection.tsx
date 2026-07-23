@@ -40,6 +40,7 @@ type OrgGroup = {
   premium2Count: number;
   gymcoreCount: number;
   standardCount: number;
+  earlyCount: number;
 };
 
 const avatarColors = [
@@ -216,6 +217,7 @@ export default function OrganizationsSection() {
         premium2Count: mems.filter(m => canonicalPlanKey(m.membership_tier) === "premium2").length,
         gymcoreCount: mems.filter(m => canonicalPlanKey(m.membership_tier) === "gymcore").length,
         standardCount: mems.filter(m => canonicalPlanKey(m.membership_tier) === "standard").length,
+        earlyCount: mems.filter(m => canonicalPlanKey(m.membership_tier) === "early").length,
       }))
       .sort((a, b) => {
         if (b.members.length !== a.members.length) return b.members.length - a.members.length;
@@ -458,6 +460,11 @@ export default function OrganizationsSection() {
                           {org.gymcoreCount}G
                         </span>
                       )}
+                      {org.earlyCount > 0 && (
+                        <span className="rounded-full bg-sky-100 px-1.5 py-0 text-[10px] font-semibold text-sky-700 dark:bg-sky-900/20 dark:text-sky-400">
+                          {org.earlyCount}E
+                        </span>
+                      )}
                       {org.standardCount > 0 && (
                         <span className="rounded-full bg-blue-100 px-1.5 py-0 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
                           {org.standardCount}S
@@ -595,7 +602,7 @@ function OrgDetailPanel({
   avatarColors: string[];
 }) {
   const [memberSearch, setMemberSearch] = useState("");
-  const [tierFilter, setTierFilter]     = useState<"" | "standard" | "premium1" | "premium2" | "gymcore">("");
+  const [tierFilter, setTierFilter]     = useState<"" | "early" | "standard" | "premium1" | "premium2" | "gymcore">("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
   const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("organizations.members.visibleColumns", {
@@ -650,6 +657,11 @@ function OrgDetailPanel({
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <span className="text-sm text-gray-500">{org.members.length} гишүүн</span>
+              {org.earlyCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700 dark:bg-sky-900/20 dark:text-sky-400">
+                  Early {org.earlyCount}
+                </span>
+              )}
               {org.standardCount > 0 && (
                 <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
                   Standard {org.standardCount}
@@ -816,7 +828,7 @@ function OrgDetailPanel({
 
         {/* Tier filter */}
         <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
-          {([["", "Бүгд"], ["standard", "Standard"], ["premium1", "Premium 1"], ["premium2", "Premium 2"], ["gymcore", "GymCore"]] as const).map(([v, label]) => (
+          {([["", "Бүгд"], ["early", "Early"], ["standard", "Standard"], ["premium1", "Premium 1"], ["premium2", "Premium 2"], ["gymcore", "GymCore"]] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => setTierFilter(v)}
               className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-all ${
                 tierFilter === v
@@ -919,6 +931,7 @@ function OrgDetailPanel({
                           membership_tier: m.membership_tier,
                           membership_started_at: m.membership_started_at,
                           membership_expires_at: m.membership_expires_at,
+                          membership_status: m.membership_status,
                         });
                         if (plan.shortLabel === "—") {
                           return <span className="text-gray-400 text-xs">—</span>;

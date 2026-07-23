@@ -2,7 +2,12 @@
 
 import React from "react";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
-import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
+import {
+  getMembershipPaymentBadge,
+  getMembershipPlanVisual,
+  isUnpaidMembership,
+  membershipPlanBadgeClass,
+} from "@/lib/membership-plan-label";
 
 type UserRow = {
   id: string;
@@ -16,17 +21,6 @@ type UserRow = {
   membership_expires_at?: string | null;
 };
 
-function paymentBadge(status: string | null | undefined) {
-  const s = (status ?? "inactive").toLowerCase();
-  if (s === "active") {
-    return { label: "Төлсөн", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/35 dark:text-emerald-300" };
-  }
-  if (s === "expired") {
-    return { label: "Дууссан", className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200" };
-  }
-  return { label: "Төлөөгүй", className: "bg-slate-100 text-slate-600 dark:bg-white/[0.08] dark:text-slate-300" };
-}
-
 export default function NewUsersCard({ users }: { users: UserRow[] }) {
   if (users.length === 0) {
     return (
@@ -39,16 +33,23 @@ export default function NewUsersCard({ users }: { users: UserRow[] }) {
   return (
     <div className="space-y-1">
       {users.map((u) => {
-        const pay = paymentBadge(u.membership_status);
+        const pay = getMembershipPaymentBadge(u.membership_status);
+        const unpaid = isUnpaidMembership(u.membership_status);
         const plan = getMembershipPlanVisual({
           membership_tier: u.membership_tier ?? null,
           membership_started_at: u.membership_started_at ?? null,
           membership_expires_at: u.membership_expires_at ?? null,
+          membership_status: u.membership_status ?? null,
         });
         return (
         <div
           key={u.id}
-          className="flex items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-gray-50 dark:hover:bg-white/[0.03]"
+          className={[
+            "flex items-center gap-3 rounded-lg px-2 py-2.5 transition",
+            unpaid
+              ? "bg-rose-50/40 hover:bg-rose-50/70 dark:bg-rose-950/10 dark:hover:bg-rose-950/20"
+              : "hover:bg-gray-50 dark:hover:bg-white/[0.03]",
+          ].join(" ")}
         >
           <img
             src={getUserPlaceholderAvatar(u.id || u.full_name)}
@@ -63,7 +64,7 @@ export default function NewUsersCard({ users }: { users: UserRow[] }) {
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${pay.className}`}>
                 {pay.label}
               </span>
-              {plan.shortLabel !== "—" && (
+              {!unpaid && plan.shortLabel !== "—" && plan.variant !== "unpaid" && (
                 <span
                   title={plan.title}
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${membershipPlanBadgeClass(plan.variant)}`}

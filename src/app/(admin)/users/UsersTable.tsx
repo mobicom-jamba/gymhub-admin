@@ -293,6 +293,7 @@ export default function UsersTable({
                         membership_tier: p.membership_tier,
                         membership_started_at: p.membership_started_at,
                         membership_expires_at: p.membership_expires_at,
+                        membership_status: p.membership_status,
                       });
                       if (plan.shortLabel === "—") {
                         return <span className="text-gray-400 text-xs">—</span>;

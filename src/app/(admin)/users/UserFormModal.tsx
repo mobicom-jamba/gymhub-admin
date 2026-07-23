@@ -336,12 +336,8 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       {
         const raw = profile.membership_tier ?? "standard";
         const key = canonicalPlanKey(raw);
-        // early_first сегмент — DB-д early үлдээнэ (11 сар төлөх логик)
-        setTier(
-          raw === "early" && key === "standard"
-            ? "early"
-            : key || "standard",
-        );
+        // Хуучин Early — DB-д early үлдээнэ (Standard руу бүү map)
+        setTier(key === "early" ? "early" : key || "standard");
       }
       setMembershipStatus(profile.membership_status ?? "active");
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
@@ -782,11 +778,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 ))}
               </div>
               <p className="mb-3 text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
-                Хуучин нэршил: Smart-1→Premium 1, Smart-2→Premium 2, Early/Standard-3→Standard, Premium-4→GymCore.
+                Хуучин Early хэрэглэгчид Early-ээр үлдэнэ. Шинэ багц: Standard, Premium 1/2, GymCore.
                 Жагсаалт дээр хугацаагаар автоматаар ялгагдана (жнь.{" "}
-                <span className="font-semibold text-blue-600 dark:text-blue-400">Standard · 1 жил</span>,{" "}
-                <span className="font-semibold text-violet-600 dark:text-violet-400">Premium 1 · 1 жил</span>,{" "}
-                <span className="font-semibold text-amber-600 dark:text-amber-400">GymCore · 1 жил</span>).
+                <span className="font-semibold text-sky-600 dark:text-sky-400">Early</span>,{" "}
+                <span className="font-semibold text-blue-600 dark:text-blue-400">Standard · 6 сар</span>,{" "}
+                <span className="font-semibold text-violet-600 dark:text-violet-400">Premium 1 · 1 жил</span>).
               </p>
 
               <div className="grid grid-cols-2 gap-3">

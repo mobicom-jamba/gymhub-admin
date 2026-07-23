@@ -22,7 +22,9 @@ type Props = {
 };
 
 const tierLabels: Record<string, string> = {
-  early: "Standard",
+  early: "Early",
+  early_year: "Early",
+  early_month: "Early",
   standard: "Standard",
   standard3: "Standard",
   smart1: "Premium 1",
