@@ -443,14 +443,24 @@ export default function OrganizationsSection() {
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-gray-400">{org.members.length} гишүүн</span>
-                      {org.premiumCount > 0 && (
+                      {org.premium1Count > 0 && (
                         <span className="rounded-full bg-violet-100 px-1.5 py-0 text-[10px] font-semibold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
-                          {org.premiumCount}P
+                          {org.premium1Count}P1
                         </span>
                       )}
-                      {org.earlyCount > 0 && (
+                      {org.premium2Count > 0 && (
+                        <span className="rounded-full bg-fuchsia-100 px-1.5 py-0 text-[10px] font-semibold text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400">
+                          {org.premium2Count}P2
+                        </span>
+                      )}
+                      {org.gymcoreCount > 0 && (
+                        <span className="rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                          {org.gymcoreCount}G
+                        </span>
+                      )}
+                      {org.standardCount > 0 && (
                         <span className="rounded-full bg-blue-100 px-1.5 py-0 text-[10px] font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
-                          {org.earlyCount}E
+                          {org.standardCount}S
                         </span>
                       )}
                     </div>
