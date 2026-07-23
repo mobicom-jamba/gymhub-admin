@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const ADMIN_PATHS = ["/", "/gyms", "/users", "/bookings", "/schedules", "/calendar", "/profile", "/visits", "/organizations", "/coupons", "/news", "/notifications", "/installments", "/settings", "/yoga"];
+const ADMIN_PATHS = ["/", "/gyms", "/users", "/bookings", "/schedules", "/calendar", "/profile", "/visits", "/organizations", "/coupons", "/news", "/notifications", "/installments", "/settings", "/yoga", "/settlements"];
 const HIDDEN_TEMPLATE_PATHS = ["/form-elements", "/basic-tables", "/blank", "/error-404", "/line-chart", "/bar-chart", "/alerts", "/avatars", "/badge", "/buttons", "/images", "/videos", "/modals"];
 const AUTH_PATHS = ["/signin", "/signup", "/auth"];
 

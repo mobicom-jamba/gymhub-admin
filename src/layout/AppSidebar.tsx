@@ -50,6 +50,11 @@ const navItems: NavItem[] = [
     path: "/yoga",
   },
   {
+    icon: <PieChartIcon />,
+    name: "Тооцоо",
+    path: "/settlements",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Хэрэглэгчид",
     path: "/users",
@@ -95,7 +100,7 @@ const othersItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { can } = useAuth();
+  const { can, isAdmin } = useAuth();
   const pathname = usePathname();
   const allowedNavItems = navItems.filter((item) => {
     if (!item.path) return true;
@@ -103,6 +108,7 @@ const AppSidebar: React.FC = () => {
     if (item.path === "/organizations") return can("organizations.view");
     if (item.path === "/gyms") return can("gyms.view");
     if (item.path === "/yoga") return can("gyms.view");
+    if (item.path === "/settlements") return isAdmin;
     if (item.path === "/coupons") return can("coupons.manage");
     if (item.path === "/notifications") return can("users.manage");
     return true;
