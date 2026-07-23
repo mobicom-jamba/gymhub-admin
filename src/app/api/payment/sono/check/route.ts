@@ -89,6 +89,7 @@ export async function POST(request: Request) {
         payment_status: "paid",
         payment_channel: "sono",
         paid_at: new Date().toISOString(),
+        ...(user_id ? { user_id } : {}),
       });
 
       if (booking_id.startsWith("membership-")) {

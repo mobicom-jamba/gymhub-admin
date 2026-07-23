@@ -126,6 +126,7 @@ export async function POST(request: Request) {
       payment_status: "pending",
       qpay_invoice_id: returnedInvoiceId,
       amount,
+      ...(user_id ? { user_id } : {}),
     });
     if (bookingError) {
       return NextResponse.json({ error: bookingError }, { status: 500 });

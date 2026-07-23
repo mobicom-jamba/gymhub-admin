@@ -3,16 +3,17 @@ import { createAdminClient } from "@/lib/supabase";
 
 export type PaymentAppSettingsRow = {
   id: string;
-  /** Legacy: нэг дор төлөх Early (membership-early-<ts>) */
+  /** Legacy: нэг дор төлөх Standard / Early (membership-early-<ts>) */
   early_membership_price_mnt: number;
   early_first_month_price_mnt: number;
   early_remainder_price_mnt: number;
+  /** Premium 2 (хуучин Smart-2 / membership-premium-<ts>) */
   premium_membership_price_mnt: number;
-  /** Smart багц-1: Fitness 1 жил + Бассейн 3 сар + Инбоди + Амар даатгал + Nova 10 хоног */
+  /** Premium 1 (хуучин Smart-1): Fitness 1 жил + Бассейн 3 сар */
   smart1_price_mnt: number;
-  /** Standard багц-3: Fitness 6 сар */
+  /** Standard: Fitness 6 сар */
   standard3_price_mnt: number;
-  /** Premium багц-4: Fitness 1 жил + Бассейн 3 сар + Иога 3 сар + Инбоди + Амар даатгал + Nova 10 хоног */
+  /** GymCore (хуучин Premium-4): Fitness + Бассейн + Иога */
   premium4_price_mnt: number;
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;

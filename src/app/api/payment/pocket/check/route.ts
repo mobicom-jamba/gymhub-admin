@@ -77,6 +77,7 @@ export async function POST(request: Request) {
             payment_status: "paid",
             payment_channel: "pocket",
             paid_at: new Date().toISOString(),
+            ...(user_id ? { user_id } : {}),
           });
         }
 

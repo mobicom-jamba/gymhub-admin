@@ -131,6 +131,7 @@ export async function POST(request: Request) {
         payment_channel: "pocket",
         payment_status: "pending",
         amount: amountMnt,
+        ...(user_id ? { user_id } : {}),
       });
     }
 

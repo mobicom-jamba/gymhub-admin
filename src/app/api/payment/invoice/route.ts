@@ -49,6 +49,7 @@ export async function POST(request: Request) {
         payment_status: "pending",
         payment_channel: "qpay",
         amount,
+        ...(user_id ? { user_id } : {}),
       });
       if (updateError) {
         return NextResponse.json(

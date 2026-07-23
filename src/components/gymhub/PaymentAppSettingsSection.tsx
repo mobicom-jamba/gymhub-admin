@@ -137,7 +137,7 @@ export default function PaymentAppSettingsSection() {
   return (
     <ComponentCard
       title="Төлбөр ба гишүүнчлэлийн үнэ"
-      subtitle="Early (эхний сар + үлдсэн 11 сар), legacy нэг дор, Premium — QPay · Sono · Pocket · Carepay · MonPay"
+      subtitle="Standard (хуучин Early), Premium 1/2, GymCore — QPay · Sono · Pocket · Carepay · MonPay · Flexy"
       desc="Өөрчлөлт нь шууд /api/payment/health болон төлбөрийн API-д тусгагдана. Supabase дээр хүснэгт байхгүй бол эхлээд sql/payment_app_settings.sql ажиллуулна уу."
     >
       {loading ? (
@@ -147,7 +147,7 @@ export default function PaymentAppSettingsSection() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="sm:col-span-2 lg:col-span-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Early — хуваагдсан төлбөр (аппын үндсэн горим)
+                Standard — хуваагдсан төлбөр (хуучин Early)
               </p>
             </div>
             <div>
@@ -180,7 +180,7 @@ export default function PaymentAppSettingsSection() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Нэг дор Early (legacy, ₮)
+                Нэг дор Standard (legacy Early, ₮)
               </label>
               <input
                 type="number"
@@ -196,7 +196,7 @@ export default function PaymentAppSettingsSection() {
             </div>
             <div className="sm:col-span-2 lg:col-span-1">
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Premium (₮)
+                Premium 2 (₮)
               </label>
               <input
                 type="number"
@@ -207,19 +207,19 @@ export default function PaymentAppSettingsSection() {
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
               <p className="mt-1 text-xs text-gray-400">{formatMnt(premium)}</p>
-              <p className="mt-0.5 text-xs text-gray-400">Smart багц-2-т ашиглагдана (Fitness + Иога)</p>
+              <p className="mt-0.5 text-xs text-gray-400">Хуучин Smart-2 — Fitness + Иога</p>
             </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="sm:col-span-2 lg:col-span-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                5 багцын систем (төлбөрийн хуудсанд харагдах сонголтууд)
+                Багцын үнэ (төлбөрийн хуудсанд харагдах)
               </p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Smart багц-1 (₮)
+                Premium 1 (₮)
               </label>
               <input
                 type="number"
@@ -229,11 +229,11 @@ export default function PaymentAppSettingsSection() {
                 onChange={(e) => setSmart1(Number(e.target.value) || 0)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(smart1)} — Fitness 1 жил + Бассейн 3 сар</p>
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(smart1)} — Fitness 1 жил + Бассейн 3 сар (хуучин Smart-1)</p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Standard багц-3 (₮)
+                Standard (₮)
               </label>
               <input
                 type="number"
@@ -247,7 +247,7 @@ export default function PaymentAppSettingsSection() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Premium багц-4 (₮)
+                GymCore (₮)
               </label>
               <input
                 type="number"
@@ -257,7 +257,7 @@ export default function PaymentAppSettingsSection() {
                 onChange={(e) => setPremium4(Number(e.target.value) || 0)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium4)} — Бүгд (Fitness+Бассейн+Иога)</p>
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium4)} — Бүгд (Fitness+Бассейн+Иога, хуучин Premium-4)</p>
             </div>
           </div>
 

@@ -47,27 +47,35 @@ export async function GET(request: Request) {
 
     if (!staff) return NextResponse.json({ owner: null });
 
+    // profiles has no email column — name/phone live on profiles, email on auth.users
     const { data: profile } = await supabase
       .from("profiles")
-      .select("id, full_name, phone, email")
+      .select("id, full_name, phone")
       .eq("id", staff.user_id)
       .maybeSingle();
 
     let name = profile?.full_name || null;
     let phone = profile?.phone || null;
-    let email = profile?.email || null;
+    let email: string | null = null;
 
-    // Fallback to auth.users if profiles data is incomplete
-    if (!name || !phone) {
-      try {
-        const { data: { user: authUser } } = await supabase.auth.admin.getUserById(staff.user_id);
-        if (authUser) {
-          if (!name) name = (authUser.user_metadata?.full_name as string) || null;
-          if (!phone) phone = authUser.phone || (authUser.email?.endsWith("@gymhub.mn") ? authUser.email.replace("@gymhub.mn", "") : null) || null;
-          if (!email) email = authUser.email && !authUser.email.endsWith("@gymhub.mn") ? authUser.email : null;
+    try {
+      const { data: { user: authUser } } = await supabase.auth.admin.getUserById(staff.user_id);
+      if (authUser) {
+        if (!name) name = (authUser.user_metadata?.full_name as string) || null;
+        if (!phone) {
+          phone =
+            authUser.phone ||
+            (authUser.email?.endsWith("@gymhub.mn")
+              ? authUser.email.replace("@gymhub.mn", "")
+              : null) ||
+            null;
         }
-      } catch { /* ignore */ }
-    }
+        email =
+          authUser.email && !authUser.email.endsWith("@gymhub.mn")
+            ? authUser.email
+            : null;
+      }
+    } catch { /* ignore */ }
 
     return NextResponse.json({
       owner: {

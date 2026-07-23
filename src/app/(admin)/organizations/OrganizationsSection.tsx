@@ -12,6 +12,11 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 import { useAuth } from "@/context/AuthContext";
+import {
+  canonicalPlanKey,
+  getMembershipPlanVisual,
+  membershipPlanBadgeClass,
+} from "@/lib/membership-plan-label";
 
 type Member = {
   id: string;
@@ -31,8 +36,10 @@ type Member = {
 type OrgGroup = {
   name: string;
   members: Member[];
-  premiumCount: number;
-  earlyCount: number;
+  premium1Count: number;
+  premium2Count: number;
+  gymcoreCount: number;
+  standardCount: number;
 };
 
 const avatarColors = [
@@ -205,8 +212,10 @@ export default function OrganizationsSection() {
       .map(([name, mems]) => ({
         name,
         members: mems,
-        premiumCount: mems.filter(m => m.membership_tier === "premium").length,
-        earlyCount: mems.filter(m => m.membership_tier === "early").length,
+        premium1Count: mems.filter(m => canonicalPlanKey(m.membership_tier) === "premium1").length,
+        premium2Count: mems.filter(m => canonicalPlanKey(m.membership_tier) === "premium2").length,
+        gymcoreCount: mems.filter(m => canonicalPlanKey(m.membership_tier) === "gymcore").length,
+        standardCount: mems.filter(m => canonicalPlanKey(m.membership_tier) === "standard").length,
       }))
       .sort((a, b) => {
         if (b.members.length !== a.members.length) return b.members.length - a.members.length;
@@ -576,7 +585,7 @@ function OrgDetailPanel({
   avatarColors: string[];
 }) {
   const [memberSearch, setMemberSearch] = useState("");
-  const [tierFilter, setTierFilter]     = useState<"" | "early" | "premium">("" );
+  const [tierFilter, setTierFilter]     = useState<"" | "standard" | "premium1" | "premium2" | "gymcore">("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
   const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("organizations.members.visibleColumns", {
@@ -590,7 +599,7 @@ function OrgDetailPanel({
         m.full_name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
         m.phone?.includes(memberSearch));
     if (tierFilter)
-      list = list.filter(m => m.membership_tier === tierFilter);
+      list = list.filter(m => canonicalPlanKey(m.membership_tier) === tierFilter);
     if (statusFilter === "active")
       list = list.filter(m => m.membership_expires_at && new Date(m.membership_expires_at) >= new Date());
     if (statusFilter === "expired")
@@ -631,14 +640,24 @@ function OrgDetailPanel({
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <span className="text-sm text-gray-500">{org.members.length} гишүүн</span>
-              {org.premiumCount > 0 && (
-                <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
-                  Premium {org.premiumCount}
+              {org.standardCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
+                  Standard {org.standardCount}
                 </span>
               )}
-              {org.earlyCount > 0 && (
-                <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">
-                  Early {org.earlyCount}
+              {org.premium1Count > 0 && (
+                <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">
+                  Premium 1 · {org.premium1Count}
+                </span>
+              )}
+              {org.premium2Count > 0 && (
+                <span className="inline-flex items-center rounded-full bg-fuchsia-50 px-2.5 py-0.5 text-xs font-semibold text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400">
+                  Premium 2 · {org.premium2Count}
+                </span>
+              )}
+              {org.gymcoreCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                  GymCore {org.gymcoreCount}
                 </span>
               )}
             </div>
@@ -787,12 +806,13 @@ function OrgDetailPanel({
 
         {/* Tier filter */}
         <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
-          {([["", "Бүгд"], ["early", "Early"], ["premium", "Premium"]] as const).map(([v, label]) => (
+          {([["", "Бүгд"], ["standard", "Standard"], ["premium1", "Premium 1"], ["premium2", "Premium 2"], ["gymcore", "GymCore"]] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => setTierFilter(v)}
               className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-all ${
                 tierFilter === v
-                  ? v === "premium" ? "bg-violet-500 text-white shadow-sm"
-                    : v === "early" ? "bg-blue-500 text-white shadow-sm"
+                  ? v === "gymcore" ? "bg-amber-500 text-white shadow-sm"
+                    : v.startsWith("premium") ? "bg-violet-500 text-white shadow-sm"
+                    : v === "standard" ? "bg-blue-500 text-white shadow-sm"
                     : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
                   : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
               }`}>{label}</button>
@@ -884,11 +904,24 @@ function OrgDetailPanel({
                       </span>
                     </td>}
                     {(visibleColumns.tier ?? true) && <td className="px-4 py-3">
-                      {m.membership_tier === "premium" ? (
-                        <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-bold text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">Premium</span>
-                      ) : m.membership_tier === "early" ? (
-                        <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-900/20 dark:text-blue-400">Early</span>
-                      ) : <span className="text-gray-400 text-xs">—</span>}
+                      {(() => {
+                        const plan = getMembershipPlanVisual({
+                          membership_tier: m.membership_tier,
+                          membership_started_at: m.membership_started_at,
+                          membership_expires_at: m.membership_expires_at,
+                        });
+                        if (plan.shortLabel === "—") {
+                          return <span className="text-gray-400 text-xs">—</span>;
+                        }
+                        return (
+                          <span
+                            title={plan.title}
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${membershipPlanBadgeClass(plan.variant)}`}
+                          >
+                            {plan.shortLabel}
+                          </span>
+                        );
+                      })()}
                     </td>}
                     {(visibleColumns.expires ?? true) && <td className="px-4 py-3">
                       {m.membership_expires_at ? (

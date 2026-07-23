@@ -13,6 +13,32 @@ export type ParsedMembershipBooking =
   | { kind: "early_rest" }
   | { kind: "annual_from_payment"; tier: string };
 
+/** Booking slug → profiles.membership_tier (шинэ нэршил) */
+export function canonicalStoredTier(bookingTier: string): string {
+  switch (bookingTier) {
+    case "smart1":
+    case "premium1":
+    case "plus":
+      return "premium1";
+    case "premium":
+    case "premium2":
+    case "smart2":
+      return "premium2";
+    case "premium4":
+    case "gymcore":
+    case "prime":
+      return "gymcore";
+    case "standard3":
+    case "standard":
+    case "early":
+    case "early_year":
+    case "early_month":
+      return "standard";
+    default:
+      return bookingTier || "standard";
+  }
+}
+
 export function parseMembershipBookingId(bookingId: string): ParsedMembershipBooking | null {
   if (!bookingId.startsWith("membership-")) return null;
   const parts = bookingId.split("-");
@@ -105,7 +131,8 @@ export function computeMembershipDatesAfterPayment(args: {
       ? new Date(profile.membership_started_at)
       : now;
     return {
-      membership_tier: "early",
+      // Үлдсэн 11 сар төлөгдсөний дараа Standard жилийн эрх
+      membership_tier: "standard",
       membership_status: "active",
       membership_started_at: anchor.toISOString(),
       membership_expires_at: addCalendarYears(anchor, 1).toISOString(),
@@ -120,13 +147,16 @@ export function computeMembershipDatesAfterPayment(args: {
     }
   }
 
-  // Standard багц-3 (membership-standard3-<ts>) нь зөвхөн 6 сарын эрхтэй — бусад бүх багц (early,
-  // premium, smart1, premium4 гэх мэт) урьдын адил 1 жилийн хугацаатай.
+  // Standard / standard3 / хуучин Early нэг дор — 6 сарын эрх; Premium 1/2 + GymCore — 1 жил.
   const expiresAt =
-    parsed.tier === "standard3" ? addCalendarMonths(baseDate, 6) : addCalendarYears(baseDate, 1);
+    parsed.tier === "standard3" ||
+    parsed.tier === "standard" ||
+    parsed.tier === "early"
+      ? addCalendarMonths(baseDate, 6)
+      : addCalendarYears(baseDate, 1);
 
   return {
-    membership_tier: parsed.tier,
+    membership_tier: canonicalStoredTier(parsed.tier),
     membership_status: "active",
     membership_started_at: now.toISOString(),
     membership_expires_at: expiresAt.toISOString(),

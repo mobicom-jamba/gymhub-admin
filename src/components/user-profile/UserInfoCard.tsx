@@ -22,8 +22,16 @@ type Props = {
 };
 
 const tierLabels: Record<string, string> = {
-  early: "Early ®",
-  premium: "Premium ®",
+  early: "Standard",
+  standard: "Standard",
+  standard3: "Standard",
+  smart1: "Premium 1",
+  premium1: "Premium 1",
+  premium: "Premium 2",
+  premium2: "Premium 2",
+  smart2: "Premium 2",
+  premium4: "GymCore",
+  gymcore: "GymCore",
 };
 
 export default function UserInfoCard({ profile, email, onUpdate }: Props) {

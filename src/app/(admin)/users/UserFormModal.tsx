@@ -8,7 +8,11 @@ import { parseApiError } from "@/lib/api-response";
 import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import OrgFormModal from "../organizations/OrgFormModal";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
-import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
+import {
+  canonicalPlanKey,
+  getMembershipPlanVisual,
+  membershipPlanBadgeClass,
+} from "@/lib/membership-plan-label";
 import { useAuth } from "@/context/AuthContext";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -329,7 +333,16 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setRole(profile.role ?? "user");
       setOrganizationId(profile.organization_id ?? "");
       setOrganization(profile.organization ?? "");
-      setTier(profile.membership_tier ?? "early");
+      {
+        const raw = profile.membership_tier ?? "standard";
+        const key = canonicalPlanKey(raw);
+        // early_first сегмент — DB-д early үлдээнэ (11 сар төлөх логик)
+        setTier(
+          raw === "early" && key === "standard"
+            ? "early"
+            : key || "standard",
+        );
+      }
       setMembershipStatus(profile.membership_status ?? "active");
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
       setExpiresAt(profile.membership_expires_at?.slice(0, 10) ?? "");
@@ -338,7 +351,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setPassword("123456");
       setOvog(""); setNer(""); setPhone(""); setRole("user");
       setOrganizationId("");
-      setOrganization(""); setTier("early"); setMembershipStatus("active"); setStartedAt(""); setExpiresAt("");
+      setOrganization(""); setTier("standard"); setMembershipStatus("active"); setStartedAt(""); setExpiresAt("");
     }
     setOrgSearch(""); setOrgOpen(false); setFormError("");
   }, [isOpen, profile]);
@@ -491,7 +504,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             title={planVisual.title}
             className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${membershipPlanBadgeClass(planVisual.variant)}`}
           >
-            {planVisual.shortLabel === "—" ? (tier === "premium" ? "Premium" : "Early") : planVisual.shortLabel}
+            {planVisual.shortLabel === "—" ? "Standard" : planVisual.shortLabel}
           </div>
           {/* Close */}
           <button
@@ -720,31 +733,46 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Гишүүнчлэл</span>
               </div>
 
-              {/* Tier toggle */}
+              {/* Tier toggle — шинэ 4 багц (+ хуучин early сегмент) */}
               <div className="mb-3 grid grid-cols-2 gap-2">
-                {(["early", "premium"] as const).map(t => (
+                {(
+                  [
+                    { id: "standard", label: "Standard", price: "480,000₮", selected: canonicalPlanKey(tier) === "standard" },
+                    { id: "premium1", label: "Premium 1", price: "780,000₮", selected: canonicalPlanKey(tier) === "premium1" },
+                    { id: "premium2", label: "Premium 2", price: "780,000₮", selected: canonicalPlanKey(tier) === "premium2" },
+                    { id: "gymcore", label: "GymCore", price: "980,000₮", selected: canonicalPlanKey(tier) === "gymcore" },
+                  ] as const
+                ).map((opt) => (
                   <button
-                    key={t}
+                    key={opt.id}
                     type="button"
-                    onClick={() => setTier(t)}
+                    onClick={() => setTier(opt.id)}
                     className={`relative flex flex-col items-start rounded-xl border-2 px-4 py-3 transition ${
-                      tier === t
-                        ? t === "premium"
-                          ? "border-violet-400 bg-violet-50 dark:border-violet-600 dark:bg-violet-900/20"
-                          : "border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20"
+                      opt.selected
+                        ? opt.id === "gymcore"
+                          ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20"
+                          : opt.id.startsWith("premium")
+                            ? "border-violet-400 bg-violet-50 dark:border-violet-600 dark:bg-violet-900/20"
+                            : "border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20"
                         : "border-gray-100 bg-white hover:border-gray-200 dark:border-gray-700 dark:bg-gray-800/60"
                     }`}
                   >
                     <span className={`text-sm font-bold ${
-                      tier === t
-                        ? t === "premium" ? "text-violet-700 dark:text-violet-300" : "text-blue-700 dark:text-blue-300"
+                      opt.selected
+                        ? opt.id === "gymcore"
+                          ? "text-amber-700 dark:text-amber-300"
+                          : opt.id.startsWith("premium")
+                            ? "text-violet-700 dark:text-violet-300"
+                            : "text-blue-700 dark:text-blue-300"
                         : "text-gray-600 dark:text-gray-400"
                     }`}>
-                      {t === "premium" ? "Premium" : "Early"}
+                      {opt.label}
                     </span>
-                    <span className="text-[11px] text-gray-400">{t === "premium" ? "780,000₮" : "480,000₮"}</span>
-                    {tier === t && (
-                      <span className={`absolute right-2.5 top-2.5 flex h-4 w-4 items-center justify-center rounded-full ${t === "premium" ? "bg-violet-500" : "bg-blue-500"}`}>
+                    <span className="text-[11px] text-gray-400">{opt.price}</span>
+                    {opt.selected && (
+                      <span className={`absolute right-2.5 top-2.5 flex h-4 w-4 items-center justify-center rounded-full ${
+                        opt.id === "gymcore" ? "bg-amber-500" : opt.id.startsWith("premium") ? "bg-violet-500" : "bg-blue-500"
+                      }`}>
                         <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
@@ -754,11 +782,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 ))}
               </div>
               <p className="mb-3 text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
-                Жагсаалт дээр ялгах:{" "}
-                <span className="font-semibold text-amber-600 dark:text-amber-400">Early · 11 сар төлөх</span> — эхний сар төлсөн, үлдсэн 11 сар;{" "}
-                <span className="font-semibold text-teal-600 dark:text-teal-400">Early · 1 сар</span> — эхний сарын төлбөр (хуучин шошго);{" "}
-                <span className="font-semibold text-blue-600 dark:text-blue-400">Early · 1 жил</span> — бүтэн жилийн early;{" "}
-                <span className="font-semibold text-violet-600 dark:text-violet-400">Premium · 1 жил</span> — premium жилийн багц. Эхлэх/дуусах огноогоор автоматаар тооцогдоно.
+                Хуучин нэршил: Smart-1→Premium 1, Smart-2→Premium 2, Early/Standard-3→Standard, Premium-4→GymCore.
+                Жагсаалт дээр хугацаагаар автоматаар ялгагдана (жнь.{" "}
+                <span className="font-semibold text-blue-600 dark:text-blue-400">Standard · 1 жил</span>,{" "}
+                <span className="font-semibold text-violet-600 dark:text-violet-400">Premium 1 · 1 жил</span>,{" "}
+                <span className="font-semibold text-amber-600 dark:text-amber-400">GymCore · 1 жил</span>).
               </p>
 
               <div className="grid grid-cols-2 gap-3">

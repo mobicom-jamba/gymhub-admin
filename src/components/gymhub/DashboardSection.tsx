@@ -12,8 +12,6 @@ import FitnessCountsChart from "./FitnessCountsChart";
 import ComponentCard from "../common/ComponentCard";
 import { Modal } from "@/components/ui/modal";
 import { t } from "@/lib/i18n";
-import UserFormModal from "@/app/(admin)/users/UserFormModal";
-import type { OrganizationOption, Profile } from "@/app/(admin)/users/UsersSection";
 import { featureFlags } from "@/lib/feature-flags";
 
 type MonthPoint = { month: string; count: number };
@@ -47,9 +45,7 @@ export default function DashboardSection() {
   const [paymentsMonthsSource, setPaymentsMonthsSource] = useState<PaymentsMonthsSource>("bookings");
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
-  const [orgs, setOrgs] = useState<OrganizationOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editProfile, setEditProfile] = useState<Profile | null>(null);
   const [fitnessModalOpen, setFitnessModalOpen] = useState(false);
   const [fitnessModalAnimateIn, setFitnessModalAnimateIn] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,7 +57,7 @@ export default function DashboardSection() {
 
     const [
       usersRes, activeRes, gymsRes, orgsCountRes,
-      recentUsersRes, recentGymsRes, orgsListRes,
+      recentUsersRes, recentGymsRes,
     ] = await Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "user"),
       supabase
@@ -79,7 +75,6 @@ export default function DashboardSection() {
         .order("created_at", { ascending: false })
         .limit(10),
       supabase.from("gyms").select("id, name, address, image_url, created_at").order("created_at", { ascending: false }).limit(10),
-      supabase.from("organizations").select("id,name").order("name", { ascending: true }),
     ]);
 
     setUserCount(usersRes.count ?? 0);
@@ -132,7 +127,6 @@ export default function DashboardSection() {
       ),
     );
     setNewGyms((recentGymsRes.data ?? []) as GymRow[]);
-    setOrgs((orgsListRes.data ?? []) as OrganizationOption[]);
     setLoading(false);
   }, []);
 
@@ -229,16 +223,6 @@ export default function DashboardSection() {
     const t = setTimeout(() => setFitnessModalAnimateIn(true), 10);
     return () => clearTimeout(t);
   }, [fitnessModalOpen]);
-
-  const handleEditUser = useCallback(async (id: string) => {
-    const supabase = createBrowserSupabaseClient();
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, surname, given_name, phone, role, organization, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at")
-      .eq("id", id)
-      .single();
-    if (data) setEditProfile(data as Profile);
-  }, []);
 
   if (loading) {
     return (
@@ -356,7 +340,7 @@ export default function DashboardSection() {
       {/* ── Bottom: New Users | New Fitness ──────────────────── */}
       <div className="col-span-12 xl:col-span-6">
         <ComponentCard title="Шинэ хэрэглэгчид" subtitle="Хамгийн сүүлд бүртгүүлсэн 10 хэрэглэгч">
-          <NewUsersCard users={newUsers} onEdit={handleEditUser} />
+          <NewUsersCard users={newUsers} />
         </ComponentCard>
       </div>
 
@@ -386,15 +370,6 @@ export default function DashboardSection() {
         <SalesPromosAdminCard />
       </div>
     </div>
-
-    <UserFormModal
-      isOpen={editProfile !== null}
-      onClose={() => setEditProfile(null)}
-      profile={editProfile}
-      organizations={orgs}
-      onOrganizationsRefresh={fetchFast}
-      onSuccess={() => { setEditProfile(null); fetchFast(); }}
-    />
 
     <Modal
       isOpen={fitnessModalOpen}

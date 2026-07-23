@@ -161,9 +161,11 @@ function compareNullableDates(a: string | null, b: string | null, ascending: boo
 
 function tierRank(t: string | null): number {
   const x = (t ?? "").toLowerCase();
-  if (x === "early") return 0;
-  if (x === "premium") return 1;
-  return 2;
+  if (x === "early" || x === "standard" || x === "standard3") return 0;
+  if (x === "smart1" || x === "premium1") return 1;
+  if (x === "premium" || x === "premium2" || x === "smart2") return 2;
+  if (x === "premium4" || x === "gymcore") return 3;
+  return 4;
 }
 
 const PAGE_SIZES = [25, 50, 100, 500];
