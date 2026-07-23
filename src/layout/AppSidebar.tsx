@@ -80,6 +80,11 @@ const navItems: NavItem[] = [
     path: "/news",
   },
   {
+    icon: <PlugInIcon />,
+    name: "Push мэдэгдэл",
+    path: "/notifications",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Профайл",
     path: "/profile",
@@ -99,6 +104,7 @@ const AppSidebar: React.FC = () => {
     if (item.path === "/gyms") return can("gyms.view");
     if (item.path === "/yoga") return can("gyms.view");
     if (item.path === "/coupons") return can("coupons.manage");
+    if (item.path === "/notifications") return can("users.manage");
     return true;
   });
 

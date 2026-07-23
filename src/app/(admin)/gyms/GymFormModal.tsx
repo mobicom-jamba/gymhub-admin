@@ -11,7 +11,7 @@ import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 
-import type { Gym } from "./types";
+import type { Gym, GymBillingMode } from "./types";
 
 type Props = {
   isOpen: boolean;
@@ -105,6 +105,12 @@ export default function GymFormModal({
   const [sortOrder, setSortOrder] = useState(
     () => (gym?.sort_order != null ? String(gym.sort_order) : "")
   );
+  const [billingMode, setBillingMode] = useState<GymBillingMode | "">(
+    () => gym?.billing_mode ?? ""
+  );
+  const [billingAmountMnt, setBillingAmountMnt] = useState(
+    () => (gym?.billing_amount_mnt != null ? String(gym.billing_amount_mnt) : "")
+  );
   const [daySchedules, setDaySchedules] = useState<DaySchedules>(() =>
     parseRaw(gym?.opening_hours)
   );
@@ -146,6 +152,10 @@ export default function GymFormModal({
         gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : ""
       );
       setSortOrder(gym?.sort_order != null ? String(gym.sort_order) : "");
+      setBillingMode(gym?.billing_mode ?? "");
+      setBillingAmountMnt(
+        gym?.billing_amount_mnt != null ? String(gym.billing_amount_mnt) : ""
+      );
       setDaySchedules(parseRaw(gym?.opening_hours));
       setError("");
       setOwnerName("");
@@ -270,6 +280,23 @@ export default function GymFormModal({
       sort_order = gym.sort_order;
     }
 
+    let billing_mode: GymBillingMode | null = null;
+    let billing_amount_mnt: number | null = null;
+    if (billingMode) {
+      const amountTrim = billingAmountMnt.trim();
+      if (amountTrim === "") {
+        setError("Төлбөрийн дүнг оруулна уу (₮)");
+        return;
+      }
+      const n = parseInt(amountTrim.replace(/[,\s]/g, ""), 10);
+      if (!Number.isFinite(n) || n < 0) {
+        setError("Төлбөрийн дүн нь 0-ээс их бүхэл тоо байна (жишээ нь 15000)");
+        return;
+      }
+      billing_mode = billingMode;
+      billing_amount_mnt = n;
+    }
+
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
@@ -282,6 +309,8 @@ export default function GymFormModal({
       is_active: isActive,
       daily_visitor_limit,
       sort_order,
+      billing_mode,
+      billing_amount_mnt,
       opening_hours: buildSchedule(daySchedules),
       type: type,
     };
@@ -554,6 +583,51 @@ export default function GymFormModal({
               Хоосон бол хязгааргүй. Тоо оруулбал өдөрт тийм олон хүн &quot;Одоо
               очих&quot; бүртгүүлнэ (хүлээгдэж буй + зөвшөөрөгдсөн).
             </p>
+          </div>
+
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2 space-y-3">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+              Түншийн төлбөр (сар бүр)
+            </p>
+            <div>
+              <Label>Төлбөрийн төрөл</Label>
+              <select
+                value={billingMode}
+                onChange={(e) =>
+                  setBillingMode(e.target.value as GymBillingMode | "")
+                }
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+              >
+                <option value="">Тохируулаагүй</option>
+                <option value="per_entry">Оролт бүрийн үнэ</option>
+                <option value="monthly_fixed">Сарын тогтмол төлбөр</option>
+              </select>
+            </div>
+            {billingMode && (
+              <div>
+                <Label>
+                  {billingMode === "per_entry"
+                    ? "Оролт бүрийн үнэ (₮)"
+                    : "Сарын тогтмол дүн (₮)"}
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={billingAmountMnt}
+                  onChange={(e) => setBillingAmountMnt(e.target.value)}
+                  placeholder={
+                    billingMode === "per_entry"
+                      ? "Жишээ: 15000"
+                      : "Жишээ: 300000"
+                  }
+                />
+                <p className="mt-1 text-[11px] text-gray-500">
+                  {billingMode === "per_entry"
+                    ? "Жишээ: 1 оролт = 15,000₮ → 20 оролт = 300,000₮. Сараар оролтын тоогоор үржүүлнэ."
+                    : "Сар бүрт оролтын тооноос үл хамааран энэ дүнг тооцно."}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Owner Section */}

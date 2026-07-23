@@ -14,6 +14,7 @@ import Button from "@/components/ui/button/Button";
 import { t } from "@/lib/i18n";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import type { Gym, VisitPeriod } from "./types";
+import { formatMnt, gymMonthAmountMnt } from "./types";
 
 export default function GymsTable({
   gyms,
@@ -99,7 +100,7 @@ export default function GymsTable({
                   isHeader
                   className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                 >
-                  Оролт{" "}
+                  Оролт / Төлбөр{" "}
                   <span className="text-gray-400 font-normal">
                     ({visitPeriod === "today" ? "өнөөдөр" : visitPeriod === "7d" ? "7 хоног" : "сар"})
                   </span>
@@ -163,28 +164,67 @@ export default function GymsTable({
                   <TableCell className="px-5 py-4">
                     {visitLoading ? (
                       <div className="h-5 w-10 animate-pulse rounded-md bg-gray-200 dark:bg-white/10" />
-                    ) : onVisitCountClick ? (
-                      <button
-                        type="button"
-                        onClick={() => onVisitCountClick(gym)}
-                        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold text-brand-600 tabular-nums transition hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
-                        title="Сараар харах"
-                      >
-                        {visitCounts[gym.id] ?? 0}
-                        <svg
-                          className="size-3.5 text-brand-400 dark:text-brand-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2.5}
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
                     ) : (
-                      <span className="text-sm font-bold text-brand-600 tabular-nums dark:text-brand-400">
-                        {visitCounts[gym.id] ?? 0}
-                      </span>
+                      (() => {
+                        const count = visitCounts[gym.id] ?? 0;
+                        const showAmount =
+                          gym.billing_mode === "monthly_fixed" ||
+                          (gym.billing_mode === "per_entry" && visitPeriod === "month");
+                        const amount = showAmount
+                          ? gymMonthAmountMnt(gym, count)
+                          : null;
+                        const rateHint =
+                          gym.billing_mode === "per_entry" && gym.billing_amount_mnt != null
+                            ? `${formatMnt(gym.billing_amount_mnt)}/оролт`
+                            : gym.billing_mode === "monthly_fixed" && gym.billing_amount_mnt != null
+                              ? `тогтмол ${formatMnt(gym.billing_amount_mnt)}`
+                              : null;
+
+                        const content = (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="flex flex-col items-start gap-0.5">
+                              <span className="text-sm font-bold text-brand-600 tabular-nums dark:text-brand-400">
+                                {count}
+                              </span>
+                              {amount != null ? (
+                                <span className="text-[11px] font-semibold text-gray-700 tabular-nums dark:text-gray-200">
+                                  {formatMnt(amount)}
+                                </span>
+                              ) : rateHint ? (
+                                <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                                  {rateHint}
+                                </span>
+                              ) : null}
+                            </span>
+                            {onVisitCountClick && (
+                              <svg
+                                className="size-3.5 shrink-0 text-brand-400 dark:text-brand-500"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2.5}
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                              </svg>
+                            )}
+                          </span>
+                        );
+
+                        if (onVisitCountClick) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => onVisitCountClick(gym)}
+                              className="rounded-lg px-2.5 py-1 text-left transition hover:bg-brand-50 dark:hover:bg-brand-500/10"
+                              title="Сараар харах"
+                            >
+                              {content}
+                            </button>
+                          );
+                        }
+
+                        return content;
+                      })()
                     )}
                   </TableCell>
                 )}

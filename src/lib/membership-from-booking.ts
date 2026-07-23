@@ -1,12 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  earlyFirstSegmentDaySpan,
+  isApproximatelyEarlyFirstSegmentOnly,
+  type ProfileMembershipSnap,
+} from "@/lib/membership-duration";
+
+export type { ProfileMembershipSnap };
+export { earlyFirstSegmentDaySpan, isApproximatelyEarlyFirstSegmentOnly };
 
 /** membership төлбөрийн booking_id-аас эхлэл/дуусах огноо тооцох (Early хуваагдсан + legacy нэг дор) */
-
-export type ProfileMembershipSnap = {
-  membership_started_at: string | null;
-  membership_expires_at: string | null;
-  membership_status: string | null;
-};
 
 export type ParsedMembershipBooking =
   | { kind: "early_first" }
@@ -70,21 +72,6 @@ function addCalendarYears(from: Date, years: number): Date {
   const d = new Date(from.getTime());
   d.setFullYear(d.getFullYear() + years);
   return d;
-}
-
-/** Early зөвхөн эхний сарын төлбөрт ойролцоо хугацаа (өдөр) */
-export function earlyFirstSegmentDaySpan(profile: ProfileMembershipSnap): number | null {
-  if (!profile.membership_started_at || !profile.membership_expires_at) return null;
-  const ms =
-    new Date(profile.membership_expires_at).getTime() - new Date(profile.membership_started_at).getTime();
-  if (!Number.isFinite(ms)) return null;
-  return ms / 86400000;
-}
-
-export function isApproximatelyEarlyFirstSegmentOnly(profile: ProfileMembershipSnap): boolean {
-  const days = earlyFirstSegmentDaySpan(profile);
-  if (days == null) return false;
-  return days >= 20 && days <= 45;
 }
 
 /**
@@ -248,5 +235,24 @@ export async function applyMembershipActivationForPaidBooking(
     if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
     return false;
   }
+
+  // Fire-and-forget push — never block payment activation on FCM failures.
+  void (async () => {
+    try {
+      const { isFcmConfigured, sendPushToUserId } = await import("@/lib/fcm");
+      if (!isFcmConfigured()) return;
+      await sendPushToUserId(supabase, userId, {
+        title: "Гишүүнчлэл идэвхжлээ",
+        body: "Төлбөр амжилттай. Таны гишүүнчлэл шинэчлэгдлээ.",
+        data: { type: "membership_activated", booking_id: bookingId },
+      });
+    } catch (e) {
+      console.warn(
+        "[membership-from-booking] push failed:",
+        e instanceof Error ? e.message : e,
+      );
+    }
+  })();
+
   return true;
 }

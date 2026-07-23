@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import type { Gym } from "./types";
+import { formatMnt, gymMonthAmountMnt, type Gym } from "./types";
 
 type MonthEntry = { month: string; label: string; count: number };
 
@@ -61,6 +61,12 @@ export default function GymVisitMonthlyPanel({
   if (!gym) return null;
 
   const maxCount = months.length > 0 ? Math.max(...months.map((m) => m.count)) : 1;
+  const hasBilling =
+    !!gym.billing_mode && gym.billing_amount_mnt != null && gym.billing_amount_mnt >= 0;
+  const totalVisits = months.reduce((s, m) => s + m.count, 0);
+  const totalAmount = hasBilling
+    ? months.reduce((s, m) => s + (gymMonthAmountMnt(gym, m.count) ?? 0), 0)
+    : null;
 
   return createPortal(
     <div className="fixed inset-0 z-99999">
@@ -74,11 +80,18 @@ export default function GymVisitMonthlyPanel({
         <div className="flex items-start justify-between border-b border-gray-100 px-6 py-5 dark:border-white/6">
           <div>
             <h3 className="text-base font-bold text-gray-900 dark:text-white">
-              Сараар оролтын тоо
+              Сараар оролт / төлбөр
             </h3>
             <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
               {gym.name ?? "—"}
             </p>
+            {hasBilling && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {gym.billing_mode === "per_entry"
+                  ? `Оролт бүрт ${formatMnt(gym.billing_amount_mnt!)}`
+                  : `Сарын тогтмол ${formatMnt(gym.billing_amount_mnt!)}`}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -100,7 +113,7 @@ export default function GymVisitMonthlyPanel({
               Сар
             </span>
             <span className="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
-              Оролт
+              {hasBilling ? "Оролт / Дүн" : "Оролт"}
             </span>
           </div>
 
@@ -120,18 +133,26 @@ export default function GymVisitMonthlyPanel({
             <div className="space-y-1 pt-1">
               {months.map((row) => {
                 const pct = maxCount > 0 ? Math.round((row.count / maxCount) * 100) : 0;
+                const amount = hasBilling ? gymMonthAmountMnt(gym, row.count) : null;
                 return (
                   <div
                     key={row.month}
                     className="group rounded-xl px-4 py-3 transition hover:bg-gray-50 dark:hover:bg-white/4"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <span className="text-sm text-gray-700 dark:text-gray-200">
                         {row.label}
                       </span>
-                      <span className="text-sm font-bold text-brand-600 dark:text-brand-400 tabular-nums">
-                        {row.count.toLocaleString()}
-                      </span>
+                      <div className="text-right">
+                        <span className="text-sm font-bold text-brand-600 dark:text-brand-400 tabular-nums">
+                          {row.count.toLocaleString()}
+                        </span>
+                        {amount != null && (
+                          <div className="text-xs font-semibold text-gray-700 dark:text-gray-200 tabular-nums">
+                            {formatMnt(amount)}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-white/8">
                       <div
@@ -147,7 +168,27 @@ export default function GymVisitMonthlyPanel({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-100 px-6 py-4 dark:border-white/6">
+        <div className="border-t border-gray-100 px-6 py-4 dark:border-white/6 space-y-2">
+          {!loading && months.length > 0 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500 dark:text-gray-400">Нийт ({months.length} сар)</span>
+              <div className="text-right">
+                <span className="font-bold text-gray-900 dark:text-white tabular-nums">
+                  {totalVisits.toLocaleString()} оролт
+                </span>
+                {totalAmount != null && (
+                  <div className="text-sm font-bold text-brand-600 dark:text-brand-400 tabular-nums">
+                    {formatMnt(totalAmount)}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {!hasBilling && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Төлбөр тохируулаагүй. Засах дээрээс оролт бүрийн үнэ эсвэл сарын тогтмол төлбөр оруулна уу.
+            </p>
+          )}
           <p className="text-xs text-gray-400 dark:text-gray-500">
             Татгалзсан хүсэлт тоолохгүй. Сар нь Улаанбаатар цагийн бүсээр.
           </p>

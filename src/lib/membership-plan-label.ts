@@ -1,4 +1,4 @@
-import { earlyFirstSegmentDaySpan, isApproximatelyEarlyFirstSegmentOnly } from "@/lib/membership-from-booking";
+import { earlyFirstSegmentDaySpan, isApproximatelyEarlyFirstSegmentOnly } from "@/lib/membership-duration";
 
 export type MembershipPlanVariant =
   | "premium1"

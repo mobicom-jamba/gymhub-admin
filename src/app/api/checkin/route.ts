@@ -159,6 +159,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertErr.message }, { status: 500 });
     }
 
+    void (async () => {
+      try {
+        const { isFcmConfigured, sendPushToUserId } = await import("@/lib/fcm");
+        if (!isFcmConfigured()) return;
+        const gymLabel = (gym_name as string | undefined)?.trim() || "Фитнес";
+        await sendPushToUserId(supabase, user_id as string, {
+          title: "Ирц бүртгэгдлээ",
+          body: `${gymLabel} дээр амжилттай бүртгэгдлээ.`,
+          data: { type: "checkin", gym_id: String(gym_id) },
+        });
+      } catch (e) {
+        console.warn("[checkin] push failed:", e instanceof Error ? e.message : e);
+      }
+    })();
+
     return NextResponse.json({
       success: true,
       visit,
