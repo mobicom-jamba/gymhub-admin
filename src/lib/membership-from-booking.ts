@@ -150,11 +150,9 @@ export function computeMembershipDatesAfterPayment(args: {
     }
   }
 
-  // Standard / standard3 / хуучин Early нэг дор — 6 сарын эрх; Premium 1/2 + GymCore — 1 жил.
+  // Standard / standard3 — 6 сарын эрх; Early (legacy) + Premium 1/2 + GymCore — 1 жил.
   const expiresAt =
-    parsed.tier === "standard3" ||
-    parsed.tier === "standard" ||
-    parsed.tier === "early"
+    parsed.tier === "standard3" || parsed.tier === "standard"
       ? addCalendarMonths(baseDate, 6)
       : addCalendarYears(baseDate, 1);
 
