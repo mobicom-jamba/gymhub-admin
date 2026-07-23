@@ -22,6 +22,7 @@ import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import flatpickr from "flatpickr";
 import { Mongolian } from "flatpickr/dist/l10n/mn.js";
+import { useAuth } from "@/context/AuthContext";
 
 export type Profile = {
   id: string;
@@ -181,6 +182,8 @@ function usersTabLabel(tab: UsersRoleTab): string {
 }
 
 export default function UsersSection() {
+  const { can } = useAuth();
+  const canManageUsers = can("users.manage");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1000,7 +1003,7 @@ export default function UsersSection() {
 
             <div className="flex-1" />
 
-            {selectedIds.size > 0 && (
+            {canManageUsers && selectedIds.size > 0 && (
               <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 dark:border-amber-800 dark:bg-amber-900/20">
                 <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">{selectedIds.size} сонгосон</span>
                 <button
@@ -1041,11 +1044,13 @@ export default function UsersSection() {
               onChange={setVisibleColumns}
             />
 
-            <button onClick={() => setFormProfile("new")}
-              className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors">
-              <PlusIcon className="size-4" />
-              Нэмэх
-            </button>
+            {canManageUsers && (
+              <button onClick={() => setFormProfile("new")}
+                className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors">
+                <PlusIcon className="size-4" />
+                Нэмэх
+              </button>
+            )}
             <button
               onClick={() => exportToCsv("users", filteredProfiles, [
                 { key: "full_name", label: "Нэр" },
@@ -1101,15 +1106,17 @@ export default function UsersSection() {
           error={error ?? undefined}
           loading={loading}
           density={density}
-          onRoleChange={handleRoleChange}
-          onEdit={(p) => setFormProfile(p)}
-          onDelete={handleDelete}
+          onRoleChange={canManageUsers ? handleRoleChange : undefined}
+          onEdit={canManageUsers ? (p) => setFormProfile(p) : undefined}
+          onDelete={canManageUsers ? handleDelete : undefined}
           onResetDailyCheckin={
-            tab === "user" ? (p) => setConfirmResetCheckin({ id: p.id, name: profileDisplayName(p) }) : undefined
+            canManageUsers && tab === "user"
+              ? (p) => setConfirmResetCheckin({ id: p.id, name: profileDisplayName(p) })
+              : undefined
           }
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelect}
-          onToggleSelectAll={toggleSelectAll}
+          selectedIds={canManageUsers ? selectedIds : undefined}
+          onToggleSelect={canManageUsers ? toggleSelect : undefined}
+          onToggleSelectAll={canManageUsers ? toggleSelectAll : undefined}
           visibleColumns={visibleColumns}
           sortColumn={sortColumn}
           sortDir={sortDir}

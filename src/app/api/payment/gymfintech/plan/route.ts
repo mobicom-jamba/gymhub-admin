@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     if (planErr || !plan) {
       return NextResponse.json(
-        { error: `Хуваан төлөлтийн багц үүсгэхэд алдаа гарлаа: ${planErr?.message ?? "unknown"}` },
+        { error: `Flexy багц үүсгэхэд алдаа гарлаа: ${planErr?.message ?? "unknown"}` },
         { status: 500 },
       );
     }

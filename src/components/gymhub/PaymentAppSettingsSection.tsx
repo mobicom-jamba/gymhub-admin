@@ -303,8 +303,8 @@ export default function PaymentAppSettingsSection() {
               },
               {
                 id: "gymfintech",
-                label: "GymFinTech хуваан төлөлт",
-                logo: "/images/logo/logo-icon.svg",
+                label: "Flexy хуваан төлөлт",
+                logo: "/logos/flexy.png",
                 checked: gymfintech,
                 set: setGymfintech,
               },

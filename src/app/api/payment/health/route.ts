@@ -194,10 +194,10 @@ export async function GET() {
 
   const gymfintechTech: ProviderPayload = {
     enabled: true,
-    message: "GymFinTech бэлэн",
+    message: "Flexy бэлэн",
     configured: true,
   };
-  const gymfintech = applyAdminSwitch(gymfintechTech, settings.payment_gymfintech_enabled, "GymFinTech");
+  const gymfintech = applyAdminSwitch(gymfintechTech, settings.payment_gymfintech_enabled, "Flexy");
 
   return NextResponse.json({
     ok: true,

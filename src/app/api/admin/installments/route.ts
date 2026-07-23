@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/verify-gym-access";
 
 export async function GET(request: Request) {
   try {
-    const auth = await requirePermission(request, "payments.installments.view", "Хуваан төлөлт харах эрхгүй.");
+    const auth = await requirePermission(request, "payments.installments.view", "Flexy хуваан төлөлт харах эрхгүй.");
     if (!auth.ok) return auth.response;
 
     const admin = createAdminClient();

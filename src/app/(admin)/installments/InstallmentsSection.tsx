@@ -139,7 +139,7 @@ export default function InstallmentsSection() {
     );
   }
   if (plans.length === 0) {
-    return <EmptyState title="Хуваан төлөлт олдсонгүй" description="Одоогоор идэвхтэй GymFinTech багц алга." icon="search" />;
+    return <EmptyState title="Flexy багц олдсонгүй" description="Одоогоор идэвхтэй Flexy хуваан төлөлтийн багц алга." icon="search" />;
   }
 
   return (

@@ -73,7 +73,7 @@ export async function POST(request: Request) {
               grossAmountFallback: paidAmt,
             });
           } catch (e) {
-            console.error("GymFinTech membership activation failed:", e);
+            console.error("Flexy membership activation failed:", e);
           }
         }
 

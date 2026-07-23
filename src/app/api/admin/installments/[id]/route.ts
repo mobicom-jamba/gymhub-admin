@@ -7,7 +7,7 @@ import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 /** id = installment_payments.id. Админы гар аргаар «төлөгдсөнд тэмдэглэх» / багц цуцлах. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requirePermission(request, "users.manage", "Хуваан төлөлт удирдах эрхгүй.");
+    const auth = await requirePermission(request, "users.manage", "Flexy хуваан төлөлт удирдах эрхгүй.");
     if (!auth.ok) return auth.response;
 
     const { id } = await params;

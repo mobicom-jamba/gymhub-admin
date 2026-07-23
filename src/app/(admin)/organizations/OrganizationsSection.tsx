@@ -11,6 +11,7 @@ import ColumnToggle from "@/components/ui/ColumnToggle";
 import EmptyState from "@/components/ui/EmptyState";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
+import { useAuth } from "@/context/AuthContext";
 
 type Member = {
   id: string;
@@ -123,6 +124,9 @@ function highlightOrgName(name: string, query: string): React.ReactNode {
 }
 
 export default function OrganizationsSection() {
+  const { can } = useAuth();
+  const canManageOrgs = can("organizations.create");
+  const canManageUsers = can("users.manage");
   const [members, setMembers] = useState<Member[]>([]);
   const [orgRecords, setOrgRecords] = useState<OrgRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -319,15 +323,17 @@ export default function OrganizationsSection() {
               <h2 className="text-sm font-semibold text-gray-800 dark:text-white">Байгууллагууд</h2>
               <p className="text-xs text-gray-400">{orgs.length} байгууллага · {members.length} гишүүн</p>
             </div>
-            <button
-              onClick={() => setFormOrg("new")}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors"
-              title="Байгууллага нэмэх"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-            </button>
+            {canManageOrgs && (
+              <button
+                onClick={() => setFormOrg("new")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+                title="Байгууллага нэмэх"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+            )}
           </div>
 
           <label htmlFor="org-list-search" className="sr-only">
@@ -482,20 +488,27 @@ export default function OrganizationsSection() {
             <p className="text-sm">Байгууллага сонгоно уу</p>
           </div>
         ) : selected === "__unassigned__" ? (
-          <UnassignedPanel members={unassigned} orgs={orgs.map(o => o.name)} onAssign={async (memberId, orgName) => { await handleAdd(memberId, orgName); }} />
+          <UnassignedPanel
+            members={unassigned}
+            orgs={orgs.map(o => o.name)}
+            canAssign={canManageOrgs}
+            onAssign={async (memberId, orgName) => { await handleAdd(memberId, orgName); }}
+          />
         ) : selectedOrg ? (
           <OrgDetailPanel
             org={selectedOrg}
             record={selectedRecord}
             removeLoading={removeLoading}
-            addOpen={addOpen && addOrgTarget === selectedOrg.name}
+            canManageOrgs={canManageOrgs}
+            canManageUsers={canManageUsers}
+            addOpen={canManageOrgs && addOpen && addOrgTarget === selectedOrg.name}
             addSearch={addSearch}
             addCandidates={addCandidates}
-            onEdit={() => setFormOrg(selectedRecord ?? { id: "", name: selectedOrg.name, logo_url: null, description: null, phone: null, facebook_url: null, website_url: null, partner_url: null, created_at: "" })}
-            onDelete={() => handleDeleteOrg(selectedOrg.name, selectedRecord?.id ?? null)}
-            onRemove={handleRemove}
-            onEditMember={(m) => setEditProfile(m as unknown as Profile)}
-            onOpenAdd={() => { setAddOrgTarget(selectedOrg.name); setAddOpen(true); setAddSearch(""); }}
+            onEdit={canManageOrgs ? () => setFormOrg(selectedRecord ?? { id: "", name: selectedOrg.name, logo_url: null, description: null, phone: null, facebook_url: null, website_url: null, partner_url: null, created_at: "" }) : undefined}
+            onDelete={canManageOrgs ? () => handleDeleteOrg(selectedOrg.name, selectedRecord?.id ?? null) : undefined}
+            onRemove={canManageOrgs ? handleRemove : undefined}
+            onEditMember={canManageUsers ? (m) => setEditProfile(m as unknown as Profile) : undefined}
+            onOpenAdd={canManageOrgs ? () => { setAddOrgTarget(selectedOrg.name); setAddOpen(true); setAddSearch(""); } : undefined}
             onCloseAdd={() => { setAddOpen(false); setAddSearch(""); }}
             onAddSearchChange={setAddSearch}
             onAddMember={(id) => handleAdd(id, selectedOrg.name)}
@@ -543,18 +556,21 @@ export default function OrganizationsSection() {
 /* ── Org Detail Panel ── */
 function OrgDetailPanel({
   org, record, removeLoading,
+  canManageOrgs, canManageUsers,
   addOpen, addSearch, addCandidates,
   onEdit, onDelete, onRemove, onEditMember, onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
 }: {
   org: OrgGroup;
   record: OrgRecord | null;
   removeLoading: string | null;
+  canManageOrgs: boolean;
+  canManageUsers: boolean;
   addOpen: boolean; addSearch: string; addCandidates: Member[];
-  onEdit: () => void;
-  onDelete: () => void;
-  onRemove: (id: string) => void;
-  onEditMember: (m: Member) => void;
-  onOpenAdd: () => void; onCloseAdd: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onRemove?: (id: string) => void;
+  onEditMember?: (m: Member) => void;
+  onOpenAdd?: () => void; onCloseAdd: () => void;
   onAddSearchChange: (v: string) => void;
   onAddMember: (id: string) => void;
   avatarColors: string[];
@@ -628,29 +644,37 @@ function OrgDetailPanel({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <button onClick={onDelete}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors dark:border-gray-700 dark:hover:border-red-800 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-              title="Байгууллага устгах">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-            </button>
-            <button onClick={onEdit}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.04]">
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
-              </svg>
-              Засах
-            </button>
-            <button onClick={onOpenAdd}
-              className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Гишүүн нэмэх
-            </button>
-          </div>
+          {canManageOrgs && (
+            <div className="flex shrink-0 items-center gap-2">
+              {onDelete && (
+                <button onClick={onDelete}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors dark:border-gray-700 dark:hover:border-red-800 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                  title="Байгууллага устгах">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                  </svg>
+                </button>
+              )}
+              {onEdit && (
+                <button onClick={onEdit}
+                  className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.04]">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </svg>
+                  Засах
+                </button>
+              )}
+              {onOpenAdd && (
+                <button onClick={onOpenAdd}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-500 px-3 py-2 text-sm font-medium text-white hover:bg-brand-600 transition-colors">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Гишүүн нэмэх
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Contact / social links strip */}
@@ -696,7 +720,11 @@ function OrgDetailPanel({
         )}
         {!record && (
           <div className="border-t border-gray-50 px-5 py-2.5 dark:border-white/[0.04]">
-            <p className="text-xs text-gray-400">Байгууллагын мэдээлэл бүртгэгдээгүй байна — "Засах" товч дарж мэдээлэл нэмнэ үү</p>
+            <p className="text-xs text-gray-400">
+              {canManageOrgs
+                ? 'Байгууллагын мэдээлэл бүртгэгдээгүй байна — "Засах" товч дарж мэдээлэл нэмнэ үү'
+                : "Байгууллагын мэдээлэл бүртгэгдээгүй байна"}
+            </p>
           </div>
         )}
 
@@ -828,7 +856,9 @@ function OrgDetailPanel({
                 {(visibleColumns.phone ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Утас</th>}
                 {(visibleColumns.tier ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Тариф</th>}
                 {(visibleColumns.expires ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Дуусах</th>}
-                <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-400"></th>
+                {(canManageOrgs || canManageUsers) && (
+                  <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-400"></th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-white/[0.04]">
@@ -869,28 +899,34 @@ function OrgDetailPanel({
                             : <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
                       ) : <span className="text-xs text-gray-400">—</span>}
                     </td>}
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => onEditMember(m)}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"
-                          title="Засах"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
-                        </button>
-                        <button
-                          onClick={() => onRemove(m.id)}
-                          disabled={removeLoading === m.id}
-                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-                          title="Хасах"
-                        >
-                          {removeLoading === m.id
-                            ? <span className="text-xs">...</span>
-                            : <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
-                          }
-                        </button>
-                      </div>
-                    </td>
+                    {(canManageOrgs || canManageUsers) && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {onEditMember && (
+                            <button
+                              onClick={() => onEditMember(m)}
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"
+                              title="Засах"
+                            >
+                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+                            </button>
+                          )}
+                          {onRemove && (
+                            <button
+                              onClick={() => onRemove(m.id)}
+                              disabled={removeLoading === m.id}
+                              className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                              title="Хасах"
+                            >
+                              {removeLoading === m.id
+                                ? <span className="text-xs">...</span>
+                                : <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+                              }
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -903,8 +939,9 @@ function OrgDetailPanel({
 }
 
 /* ── Unassigned Panel ── */
-function UnassignedPanel({ members, orgs, onAssign }: {
+function UnassignedPanel({ members, orgs, canAssign, onAssign }: {
   members: Member[]; orgs: string[];
+  canAssign: boolean;
   onAssign: (memberId: string, orgName: string) => Promise<void>;
 }) {
   const [assigningId, setAssigningId] = useState<string | null>(null);
@@ -937,7 +974,7 @@ function UnassignedPanel({ members, orgs, onAssign }: {
               <p className="truncate text-sm font-medium text-gray-800 dark:text-white">{m.full_name ?? "—"}</p>
               <p className="text-xs text-gray-400">{m.phone ?? ""}</p>
             </div>
-            {assigningId === m.id ? (
+            {canAssign && (assigningId === m.id ? (
               <select
                 autoFocus
                 onChange={async e => { if (e.target.value) { await onAssign(m.id, e.target.value); setAssigningId(null); } }}
@@ -955,7 +992,7 @@ function UnassignedPanel({ members, orgs, onAssign }: {
               >
                 Холбох
               </button>
-            )}
+            ))}
           </div>
         ))}
       </div>

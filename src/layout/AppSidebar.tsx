@@ -66,7 +66,7 @@ const navItems: NavItem[] = [
   },
   {
     icon: <ListIcon />,
-    name: "Хуваан төлөлт",
+    name: "Flexy",
     path: "/installments",
   },
   {

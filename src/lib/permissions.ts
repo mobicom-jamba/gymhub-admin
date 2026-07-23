@@ -43,7 +43,14 @@ const ALL_PERMISSIONS: AppPermission[] = [
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
   admin: ALL_PERMISSIONS,
-  moderator: ALL_PERMISSIONS.filter((permission) => permission !== "users.subscription.edit"),
+  // Moderators: view-only for users + organizations (no create/edit/delete).
+  moderator: ALL_PERMISSIONS.filter(
+    (permission) =>
+      permission !== "users.manage" &&
+      permission !== "users.role.assign" &&
+      permission !== "users.subscription.edit" &&
+      permission !== "organizations.create",
+  ),
   sales: [
     "admin.app.access",
     "users.view",
