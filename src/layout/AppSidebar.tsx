@@ -34,6 +34,11 @@ const navItems: NavItem[] = [
     path: "/",
   },
   {
+    icon: <UserCircleIcon />,
+    name: "Хэрэглэгчид",
+    path: "/users",
+  },
+  {
     icon: <TaskIcon />,
     name: "Ирц",
     path: "/visits",
@@ -44,7 +49,7 @@ const navItems: NavItem[] = [
     path: "/gyms",
   },
   {
-    icon: <BoxCubeIcon />,   // ← өөр icon байвал солиорой
+    icon: <BoxCubeIcon />,
     name: "Йога төвүүд",
     path: "/yoga",
   },
@@ -57,11 +62,6 @@ const navItems: NavItem[] = [
     icon: <ListIcon />,
     name: "Flexy",
     path: "/installments",
-  },
-  {
-    icon: <UserCircleIcon />,
-    name: "Хэрэглэгчид",
-    path: "/users",
   },
   {
     icon: <TableIcon />,

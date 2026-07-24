@@ -169,7 +169,7 @@ async function claimMembershipBooking(
   // ON CONFLICT DO NOTHING — no 23505 in Postgres logs on retries.
   const { data, error } = await supabase
     .from("membership_activations")
-    .insert(
+    .upsert(
       { booking_id: bookingId, user_id: userId },
       { onConflict: "booking_id", ignoreDuplicates: true },
     )
