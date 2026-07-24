@@ -53,6 +53,8 @@ type PaidBookingRow = {
   user_id: string | null;
   paid_at: string | null;
   created_at: string | null;
+  payment_channel?: string | null;
+  qpay_invoice_id?: string | null;
 };
 
 function buildOrganizationOptions(
@@ -204,7 +206,7 @@ export default function UsersSection() {
   const [resettingCheckin, setResettingCheckin] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
-    member: true, phone: true, organization: true, tier: true, agreement: true, startDate: true, expireDate: true,
+    member: true, phone: true, organization: true, tier: true, paymentChannel: true, agreement: true, startDate: true, expireDate: true,
     totalVisits: false, lastVisit: false, streak: false,
   });
   const [statsMap, setStatsMap] = useState<UserVisitStatsMap | null>(null);
@@ -219,6 +221,7 @@ export default function UsersSection() {
   const [paidBookings, setPaidBookings] = useState<PaidBookingRow[]>([]);
   const [paidBookingsLoading, setPaidBookingsLoading] = useState(false);
   const [paidBookingsError, setPaidBookingsError] = useState<string | null>(null);
+  const [paymentChannelByUser, setPaymentChannelByUser] = useState<Record<string, string>>({});
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -486,36 +489,59 @@ export default function UsersSection() {
       setPaidBookingsError(null);
 
       const supabase = createBrowserSupabaseClient();
-      let { data, error: bookingsError } = await supabase
-        .from("bookings")
-        .select("id, user_id, paid_at, created_at")
-        .eq("payment_status", "paid")
-        .gte("paid_at", range.startIso)
-        .lt("paid_at", range.endIso)
-        .order("paid_at", { ascending: false });
+      let rows: PaidBookingRow[] | null = null;
+      let bookingsError: { message: string } | null = null;
+
+      {
+        const res = await supabase
+          .from("bookings")
+          .select("id, user_id, paid_at, created_at, payment_channel, qpay_invoice_id")
+          .eq("payment_status", "paid")
+          .gte("paid_at", range.startIso)
+          .lt("paid_at", range.endIso)
+          .order("paid_at", { ascending: false });
+        rows = (res.data as PaidBookingRow[] | null) ?? null;
+        bookingsError = res.error;
+      }
+
+      if (bookingsError && isMissingColumnError(bookingsError.message, "payment_channel")) {
+        const withoutChannel = await supabase
+          .from("bookings")
+          .select("id, user_id, paid_at, created_at")
+          .eq("payment_status", "paid")
+          .gte("paid_at", range.startIso)
+          .lt("paid_at", range.endIso)
+          .order("paid_at", { ascending: false });
+        rows = (withoutChannel.data as PaidBookingRow[] | null) ?? null;
+        bookingsError = withoutChannel.error;
+      }
 
       if (bookingsError && isMissingColumnError(bookingsError.message, "paid_at")) {
         const fallback = await supabase
           .from("bookings")
-          .select("id, user_id, created_at")
+          .select("id, user_id, created_at, payment_channel, qpay_invoice_id")
           .eq("payment_status", "paid")
           .gte("created_at", range.startIso)
           .lt("created_at", range.endIso)
           .order("created_at", { ascending: false });
 
-        data = (fallback.data ?? []).map((row) => ({
-          ...row,
+        rows = (fallback.data ?? []).map((row) => ({
+          ...(row as PaidBookingRow),
           paid_at: row.created_at ?? null,
         }));
         bookingsError = fallback.error;
       }
 
       if (bookingsError && isMissingColumnError(bookingsError.message, "payment_status")) {
-        let legacySelect = "id, user_id, status, paid_at, created_at";
+        let legacySelect = "id, user_id, status, paid_at, created_at, channel";
         let legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
 
         if (legacyProbe.error?.message?.toLowerCase().includes("paid_at")) {
-          legacySelect = "id, user_id, status, created_at";
+          legacySelect = "id, user_id, status, created_at, channel";
+          legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
+        }
+        if (legacyProbe.error?.message?.toLowerCase().includes("channel")) {
+          legacySelect = legacySelect.replace(", channel", "");
           legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
         }
 
@@ -529,7 +555,7 @@ export default function UsersSection() {
 
           if (!legacyRows.error) {
             const legacyData = (legacyRows.data ?? []) as unknown as Record<string, unknown>[];
-            data = legacyData.reduce<PaidBookingRow[]>((acc, row) => {
+            rows = legacyData.reduce<PaidBookingRow[]>((acc, row) => {
               if (!row || typeof row !== "object") return acc;
 
               const status = typeof row.status === "string" ? row.status : null;
@@ -547,6 +573,8 @@ export default function UsersSection() {
                 user_id: userId,
                 paid_at: paidAt ?? createdAt,
                 created_at: createdAt,
+                payment_channel:
+                  typeof row.channel === "string" ? row.channel : "sono",
               });
               return acc;
             }, []);
@@ -564,7 +592,7 @@ export default function UsersSection() {
           isMissingTableError(bookingsError.message, "lending_records")
         )
       ) {
-        data = profiles
+        rows = profiles
           .filter((profile) => {
             if ((profile.role ?? "user") !== "user") return false;
             if (!profile.membership_started_at) return false;
@@ -586,7 +614,7 @@ export default function UsersSection() {
         setPaidBookings([]);
         setPaidBookingsError(bookingsError.message);
       } else {
-        setPaidBookings((data ?? []) as PaidBookingRow[]);
+        setPaidBookings(rows ?? []);
         setPaidBookingsError(null);
       }
 
@@ -606,6 +634,18 @@ export default function UsersSection() {
       if (booking.user_id) ids.add(booking.user_id);
     }
     return ids;
+  }, [paidBookings]);
+
+  /** From date-filter paid bookings: first (latest) channel per user. */
+  const paidFilterChannelByUser = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const booking of paidBookings) {
+      if (!booking.user_id || map[booking.user_id]) continue;
+      const ch = (booking.payment_channel ?? "").trim();
+      if (ch) map[booking.user_id] = ch;
+      else if (booking.qpay_invoice_id) map[booking.user_id] = "qpay";
+    }
+    return map;
   }, [paidBookings]);
 
   const filteredProfiles = useMemo(() => {
@@ -694,6 +734,91 @@ export default function UsersSection() {
 
   const totalPages = Math.max(1, Math.ceil(sortedFilteredProfiles.length / pageSize));
   const pagedProfiles = sortedFilteredProfiles.slice((page - 1) * pageSize, page * pageSize);
+  const pagedProfileIdsKey = pagedProfiles.map((p) => p.id).join(",");
+
+  // Latest paid payment channel for visible users (only after successful payment).
+  useEffect(() => {
+    if (tab !== "user") {
+      setPaymentChannelByUser({});
+      return;
+    }
+
+    if (paidOnDate) {
+      setPaymentChannelByUser(paidFilterChannelByUser);
+      return;
+    }
+
+    const ids = pagedProfileIdsKey ? pagedProfileIdsKey.split(",") : [];
+    if (ids.length === 0) {
+      setPaymentChannelByUser({});
+      return;
+    }
+
+    let cancelled = false;
+    const loadChannels = async () => {
+      const supabase = createBrowserSupabaseClient();
+      type ChannelRow = {
+        user_id: string | null;
+        payment_channel?: string | null;
+        qpay_invoice_id?: string | null;
+        paid_at?: string | null;
+        created_at?: string | null;
+      };
+      let rows: ChannelRow[] | null = null;
+      let error: { message: string } | null = null;
+
+      {
+        const res = await supabase
+          .from("bookings")
+          .select("user_id, payment_channel, qpay_invoice_id, paid_at, created_at")
+          .eq("payment_status", "paid")
+          .in("user_id", ids)
+          .order("paid_at", { ascending: false });
+        rows = (res.data as ChannelRow[] | null) ?? null;
+        error = res.error;
+      }
+
+      if (error && isMissingColumnError(error.message, "paid_at")) {
+        const fb = await supabase
+          .from("bookings")
+          .select("user_id, payment_channel, qpay_invoice_id, created_at")
+          .eq("payment_status", "paid")
+          .in("user_id", ids)
+          .order("created_at", { ascending: false });
+        rows = (fb.data as ChannelRow[] | null) ?? null;
+        error = fb.error;
+      }
+
+      if (error && isMissingColumnError(error.message, "payment_channel")) {
+        const fb = await supabase
+          .from("bookings")
+          .select("user_id, qpay_invoice_id, paid_at, created_at")
+          .eq("payment_status", "paid")
+          .in("user_id", ids)
+          .order("paid_at", { ascending: false });
+        rows = (fb.data as ChannelRow[] | null) ?? null;
+        error = fb.error;
+      }
+
+      if (cancelled || error) return;
+
+      const map: Record<string, string> = {};
+      for (const row of rows ?? []) {
+        const uid = row.user_id;
+        if (!uid || map[uid]) continue;
+        const ch = String(row.payment_channel ?? "").trim();
+        const inv = String(row.qpay_invoice_id ?? "").trim();
+        if (ch) map[uid] = ch;
+        else if (inv) map[uid] = "qpay";
+      }
+      setPaymentChannelByUser(map);
+    };
+
+    loadChannels();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, paidOnDate, paidFilterChannelByUser, pagedProfileIdsKey]);
 
   const resetPage = () => setPage(1);
 
@@ -1035,6 +1160,7 @@ export default function UsersSection() {
                 { key: "phone", label: "Утас" },
                 { key: "organization", label: "Байгууллага" },
                 { key: "tier", label: "Тариф · төрөл" },
+                { key: "paymentChannel", label: "Төлбөрийн хэрэгсэл" },
                 { key: "agreement", label: "Гэрээ" },
                 { key: "startDate", label: "Эхлэх огноо" },
                 { key: "expireDate", label: "Дуусах огноо" },
@@ -1125,6 +1251,7 @@ export default function UsersSection() {
           onSort={handleColumnSort}
           statsMap={statsMap ?? undefined}
           statsLoading={statsLoading}
+          paymentChannelByUser={paymentChannelByUser}
           onRowClick={(p) => setPanelProfile(p)}
           notesMap={notesMap}
           onNoteClick={(p) => setNoteProfile(p)}

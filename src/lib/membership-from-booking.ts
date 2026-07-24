@@ -166,13 +166,20 @@ async function claimMembershipBooking(
   bookingId: string,
   userId: string,
 ): Promise<"claimed" | "already" | "no_table"> {
-  const { error } = await supabase
+  // ON CONFLICT DO NOTHING — no 23505 in Postgres logs on retries.
+  const { data, error } = await supabase
     .from("membership_activations")
-    .insert({ booking_id: bookingId, user_id: userId });
+    .insert(
+      { booking_id: bookingId, user_id: userId },
+      { onConflict: "booking_id", ignoreDuplicates: true },
+    )
+    .select("booking_id");
 
-  if (!error) return "claimed";
+  if (!error) {
+    return data && data.length > 0 ? "claimed" : "already";
+  }
 
-  if (error.code === "23505") return "already"; // unique_violation — өмнө нь claim хийгдсэн
+  if (error.code === "23505") return "already"; // legacy / race fallback
   if (missingTableRegex.test(error.message ?? "") || error.code === "42P01") {
     return "no_table";
   }

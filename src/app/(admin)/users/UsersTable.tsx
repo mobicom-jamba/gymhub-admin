@@ -16,6 +16,10 @@ import TableSkeleton from "@/components/ui/TableSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
 import { getMembershipPlanVisual, membershipPlanBadgeClass } from "@/lib/membership-plan-label";
+import {
+  getPaymentChannelVisual,
+  paymentChannelBadgeClass,
+} from "@/lib/payment-channel-label";
 import { EMPTY_VISIT_STATS, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UserSalesNote } from "./UserNoteModal";
 
@@ -111,6 +115,7 @@ export default function UsersTable({
   onSort,
   statsMap,
   statsLoading,
+  paymentChannelByUser,
   onRowClick,
   notesMap,
   onNoteClick,
@@ -134,6 +139,8 @@ export default function UsersTable({
   /** Per-user gym-visit stats keyed by profile id. */
   statsMap?: UserVisitStatsMap;
   statsLoading?: boolean;
+  /** Latest paid booking payment_channel keyed by profile id. */
+  paymentChannelByUser?: Record<string, string>;
   /** Open the per-user stats detail panel. */
   onRowClick?: (profile: Profile) => void;
   /** Sales call notes map keyed by profile id. */
@@ -220,6 +227,11 @@ export default function UsersTable({
                 <Th col="organization" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[180px]`} label="Байгууллага" />}
               {(visibleColumns?.tier ?? true) &&
                 <Th col="tier" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} min-w-[132px] max-w-[180px]`} label="Тариф · төрөл" />}
+              {(visibleColumns?.paymentChannel ?? true) && (
+                <TableCell isHeader className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrPlain} min-w-[120px]`}>
+                  Төлбөрийн хэрэгсэл
+                </TableCell>
+              )}
               {(visibleColumns?.agreement ?? false) && (
                 <TableCell isHeader className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrPlain} w-[130px]`}>
                   Гэрээ
@@ -308,6 +320,44 @@ export default function UsersTable({
                       );
                     })()}
                   </TableCell>}
+
+                  {(visibleColumns?.paymentChannel ?? true) && (
+                    <TableCell className={`px-4 ${py}`}>
+                      {(() => {
+                        const raw = paymentChannelByUser?.[p.id];
+                        if (!raw) {
+                          return <span className="text-xs text-gray-300 dark:text-gray-600">—</span>;
+                        }
+                        const ch = getPaymentChannelVisual(raw);
+                        return (
+                          <span
+                            title={ch.title}
+                            className={`inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[11px] font-bold leading-tight ${paymentChannelBadgeClass(ch.key)}`}
+                          >
+                            {ch.logo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={ch.logo}
+                                alt=""
+                                width={18}
+                                height={18}
+                                className="size-[18px] shrink-0 rounded-full object-cover ring-1 ring-black/5 dark:ring-white/10"
+                              />
+                            ) : ch.key === "gift" ? (
+                              <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-amber-400/80 text-[10px]" aria-hidden>
+                                🎁
+                              </span>
+                            ) : (
+                              <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] text-white dark:bg-gray-600">
+                                ?
+                              </span>
+                            )}
+                            {ch.label}
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
+                  )}
 
                   {(visibleColumns?.agreement ?? false) && (
                     <TableCell className={`px-4 ${py} text-sm whitespace-nowrap`}>

@@ -60,12 +60,14 @@ async function bookingsColumnExists(
 function classifyPaymentChannel(row: {
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
-}): "qpay" | "sono" | "pocket" | "carepay" | "gift" | "other" {
+}): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "other" {
   const raw = (row.payment_channel ?? "").trim().toLowerCase();
   if (raw === "qpay" || raw === "q_pay" || raw === "q-pay") return "qpay";
   if (raw === "sono") return "sono";
   if (raw === "pocket") return "pocket";
-  if (raw === "carepay") return "carepay";
+  if (raw === "carepay" || raw === "care_pay") return "carepay";
+  if (raw === "monpay" || raw === "mon_pay") return "monpay";
+  if (raw === "gymfintech" || raw === "flexy" || raw === "gym_fintech") return "gymfintech";
   if (raw === "gift") return "gift";
   const inv = String(row.qpay_invoice_id ?? "").trim();
   if (inv.startsWith("GH")) return "sono";
@@ -73,12 +75,14 @@ function classifyPaymentChannel(row: {
   return "other";
 }
 
-function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "carepay" | "gift" | "other" {
+function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "other" {
   const raw = channel.trim().toLowerCase();
   if (raw === "qpay" || raw === "q_pay" || raw === "q-pay") return "qpay";
   if (raw === "sono") return "sono";
   if (raw === "pocket") return "pocket";
-  if (raw === "carepay") return "carepay";
+  if (raw === "carepay" || raw === "care_pay") return "carepay";
+  if (raw === "monpay" || raw === "mon_pay") return "monpay";
+  if (raw === "gymfintech" || raw === "flexy") return "gymfintech";
   if (raw === "gift") return "gift";
   return "other";
 }
@@ -89,7 +93,7 @@ function isLendingPaidStatus(status: string): boolean {
 }
 
 function emptyChannels() {
-  return { qpay: 0, sono: 0, pocket: 0, carepay: 0, gift: 0, other: 0 };
+  return { qpay: 0, sono: 0, pocket: 0, carepay: 0, monpay: 0, gymfintech: 0, gift: 0, other: 0 };
 }
 
 type RecentPayment = {
@@ -222,7 +226,16 @@ async function aggregateBookingsSinglePass(
   createdAtGte: string,
 ): Promise<{
   byMonth: MonthPoint[];
-  channels: { qpay: number; sono: number; pocket: number; carepay: number; gift: number; other: number };
+  channels: {
+    qpay: number;
+    sono: number;
+    pocket: number;
+    carepay: number;
+    monpay: number;
+    gymfintech: number;
+    gift: number;
+    other: number;
+  };
 }> {
   const channels = emptyChannels();
   const monthMap: Record<string, number> = {};
@@ -298,7 +311,16 @@ async function aggregateFromLendingRecords(
   supabase: SupabaseClient,
   createdAtGte: string,
 ): Promise<{
-  channels: { qpay: number; sono: number; pocket: number; carepay: number; gift: number; other: number };
+  channels: {
+    qpay: number;
+    sono: number;
+    pocket: number;
+    carepay: number;
+    monpay: number;
+    gymfintech: number;
+    gift: number;
+    other: number;
+  };
   byMonth: MonthPoint[];
 } | null> {
   let selectCols = "channel, status, paid_at, created_at";
@@ -562,6 +584,8 @@ export async function GET() {
           sono: channelCounts.sono,
           pocket: channelCounts.pocket,
           carepay: channelCounts.carepay,
+          monpay: channelCounts.monpay,
+          gymfintech: channelCounts.gymfintech,
           gift: channelCounts.gift,
           other: channelCounts.other,
         },
