@@ -1,17 +1,25 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
-import { requirePermission } from "@/lib/verify-gym-access";
+import { verifyBearerUser } from "@/lib/verify-gym-access";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 
-/** id = installment_payments.id. Админы гар аргаар «төлөгдсөнд тэмдэглэх» / багц цуцлах. */
+/** id = installment_payments.id. Зөвхөн админ: төлөгдсөнд тэмдэглэх / цуцлах / устгах. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const auth = await requirePermission(request, "users.manage", "Flexy хуваан төлөлт удирдах эрхгүй.");
+    const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
+    if (!auth.isAdmin) {
+      return NextResponse.json(
+        { ok: false, error: "Зөвхөн админ Flexy багц засах/устгах эрхтэй." },
+        { status: 403 },
+      );
+    }
 
     const { id } = await params;
-    const body = (await request.json()) as { action: "mark_paid" | "cancel_plan" };
+    const body = (await request.json()) as {
+      action: "mark_paid" | "cancel_plan" | "force_delete";
+    };
     const admin = createAdminClient();
 
     if (body.action === "mark_paid") {
@@ -80,6 +88,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
       await admin.from("installment_plans").update({ status: "cancelled" }).eq("id", installment.plan_id);
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "force_delete") {
+      const { data: installment } = await admin
+        .from("installment_payments")
+        .select("plan_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      // Allow deleting by plan id directly if payment id lookup fails
+      let planId = installment?.plan_id ?? null;
+      if (!planId) {
+        const { data: plan } = await admin
+          .from("installment_plans")
+          .select("id")
+          .eq("id", id)
+          .maybeSingle();
+        planId = plan?.id ?? null;
+      }
+      if (!planId) {
+        return NextResponse.json({ ok: false, error: "Багц олдсонгүй." }, { status: 404 });
+      }
+
+      const { error: delErr } = await admin
+        .from("installment_plans")
+        .delete()
+        .eq("id", planId);
+
+      if (delErr) {
+        return NextResponse.json({ ok: false, error: delErr.message }, { status: 500 });
+      }
+      return NextResponse.json({ ok: true, deleted: planId });
     }
 
     return NextResponse.json({ ok: false, error: "Тодорхойгүй үйлдэл." }, { status: 400 });

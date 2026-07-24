@@ -82,6 +82,32 @@ export function canonicalPlanKey(tier: string | null | undefined): string {
   return t;
 }
 
+/** Flexy / admin дээр харуулах богино нэр (SMART1 → Premium 1, EARLY_YEAR → Early). */
+export function planTierDisplayLabel(tier: string | null | undefined): string {
+  const key = canonicalPlanKey(tier);
+  switch (key) {
+    case "premium1":
+      return "Premium 1";
+    case "premium2":
+      return "Premium 2";
+    case "gymcore":
+      return "GymCore";
+    case "early":
+      return "Early";
+    case "standard":
+      return "Standard";
+    default: {
+      const raw = (tier ?? "").trim();
+      if (!raw) return "—";
+      return raw
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+    }
+  }
+}
+
 /**
  * Гишүүнчлэлийн төрлийг нэршил + хугацаагаар ялгана.
  * Төлөөгүй (inactive) үед багцын нэр биш "Төлөөгүй" буцаана.

@@ -7,7 +7,6 @@ import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
 import {
   BoxCubeIcon,
-  CalenderIcon,
   ChevronDownIcon,
   GridIcon,
   HorizontaLDots,
@@ -55,6 +54,11 @@ const navItems: NavItem[] = [
     path: "/settlements",
   },
   {
+    icon: <ListIcon />,
+    name: "Flexy",
+    path: "/installments",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Хэрэглэгчид",
     path: "/users",
@@ -63,16 +67,6 @@ const navItems: NavItem[] = [
     icon: <TableIcon />,
     name: "Байгууллагууд",
     path: "/organizations",
-  },
-  {
-    icon: <CalenderIcon />,
-    name: "Захиалгууд",
-    path: "/bookings",
-  },
-  {
-    icon: <ListIcon />,
-    name: "Flexy",
-    path: "/installments",
   },
   {
     icon: <PlugInIcon />,
@@ -100,7 +94,7 @@ const othersItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { can, isAdmin } = useAuth();
+  const { can, role } = useAuth();
   const pathname = usePathname();
   const allowedNavItems = navItems.filter((item) => {
     if (!item.path) return true;
@@ -108,7 +102,7 @@ const AppSidebar: React.FC = () => {
     if (item.path === "/organizations") return can("organizations.view");
     if (item.path === "/gyms") return can("gyms.view");
     if (item.path === "/yoga") return can("gyms.view");
-    if (item.path === "/settlements") return isAdmin;
+    if (item.path === "/settlements") return role === "admin";
     if (item.path === "/coupons") return can("coupons.manage");
     if (item.path === "/notifications") return can("users.manage");
     return true;

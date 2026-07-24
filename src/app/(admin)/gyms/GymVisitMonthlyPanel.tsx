@@ -16,9 +16,11 @@ async function getAuthHeader(): Promise<string> {
 export default function GymVisitMonthlyPanel({
   gym,
   onClose,
+  showBilling = false,
 }: {
   gym: Gym | null;
   onClose: () => void;
+  showBilling?: boolean;
 }) {
   const [months, setMonths] = useState<MonthEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -62,7 +64,10 @@ export default function GymVisitMonthlyPanel({
 
   const maxCount = months.length > 0 ? Math.max(...months.map((m) => m.count)) : 1;
   const hasBilling =
-    !!gym.billing_mode && gym.billing_amount_mnt != null && gym.billing_amount_mnt >= 0;
+    showBilling &&
+    !!gym.billing_mode &&
+    gym.billing_amount_mnt != null &&
+    gym.billing_amount_mnt >= 0;
   const totalVisits = months.reduce((s, m) => s + m.count, 0);
   const totalAmount = hasBilling
     ? months.reduce((s, m) => s + (gymMonthAmountMnt(gym, m.count) ?? 0), 0)
@@ -80,7 +85,7 @@ export default function GymVisitMonthlyPanel({
         <div className="flex items-start justify-between border-b border-gray-100 px-6 py-5 dark:border-white/6">
           <div>
             <h3 className="text-base font-bold text-gray-900 dark:text-white">
-              Сараар оролт / төлбөр
+              {showBilling ? "Сараар оролт / төлбөр" : "Сараар оролт"}
             </h3>
             <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
               {gym.name ?? "—"}
@@ -184,7 +189,7 @@ export default function GymVisitMonthlyPanel({
               </div>
             </div>
           )}
-          {!hasBilling && (
+          {!hasBilling && showBilling && (
             <p className="text-xs text-amber-600 dark:text-amber-400">
               Төлбөр тохируулаагүй. Засах дээрээс оролт бүрийн үнэ эсвэл сарын тогтмол төлбөр оруулна уу.
             </p>

@@ -19,6 +19,7 @@ type Props = {
   gym?: Gym | null;
   onSuccess: () => void;
   defaultType?: string;
+  showBilling?: boolean;
 };
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -91,6 +92,7 @@ export default function GymFormModal({
   gym,
   onSuccess,
   defaultType,
+  showBilling = false,
 }: Props) {
   const [name, setName] = useState(gym?.name ?? "");
   const [description, setDescription] = useState(gym?.description ?? "");
@@ -282,7 +284,7 @@ export default function GymFormModal({
 
     let billing_mode: GymBillingMode | null = null;
     let billing_amount_mnt: number | null = null;
-    if (billingMode) {
+    if (showBilling && billingMode) {
       const amountTrim = billingAmountMnt.trim();
       if (amountTrim === "") {
         setError("Төлбөрийн дүнг оруулна уу (₮)");
@@ -300,7 +302,7 @@ export default function GymFormModal({
     setError("");
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: name || null,
       description: description || null,
       address: address || null,
@@ -309,11 +311,13 @@ export default function GymFormModal({
       is_active: isActive,
       daily_visitor_limit,
       sort_order,
-      billing_mode,
-      billing_amount_mnt,
       opening_hours: buildSchedule(daySchedules),
       type: type,
     };
+    if (showBilling) {
+      payload.billing_mode = billing_mode;
+      payload.billing_amount_mnt = billing_amount_mnt;
+    }
     let savedGymId = gym?.id ?? null;
 
     if (gym) {
@@ -406,7 +410,7 @@ export default function GymFormModal({
               className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
             >
               <option value="ulaanbaatar">Улаанбаатар</option>
-              <option value="darkhan">Дархан</option>
+              <option value="darkhan">Орон нутаг (Бүсчлэл)</option>
             </select>
           </div>
           <div>
@@ -585,50 +589,52 @@ export default function GymFormModal({
             </p>
           </div>
 
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2 space-y-3">
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              Түншийн төлбөр (сар бүр)
-            </p>
-            <div>
-              <Label>Төлбөрийн төрөл</Label>
-              <select
-                value={billingMode}
-                onChange={(e) =>
-                  setBillingMode(e.target.value as GymBillingMode | "")
-                }
-                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-              >
-                <option value="">Тохируулаагүй</option>
-                <option value="per_entry">Оролт бүрийн үнэ</option>
-                <option value="monthly_fixed">Сарын тогтмол төлбөр</option>
-              </select>
-            </div>
-            {billingMode && (
+          {showBilling && (
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2 space-y-3">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Түншийн төлбөр (сар бүр)
+              </p>
               <div>
-                <Label>
-                  {billingMode === "per_entry"
-                    ? "Оролт бүрийн үнэ (₮)"
-                    : "Сарын тогтмол дүн (₮)"}
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={billingAmountMnt}
-                  onChange={(e) => setBillingAmountMnt(e.target.value)}
-                  placeholder={
-                    billingMode === "per_entry"
-                      ? "Жишээ: 15000"
-                      : "Жишээ: 300000"
+                <Label>Төлбөрийн төрөл</Label>
+                <select
+                  value={billingMode}
+                  onChange={(e) =>
+                    setBillingMode(e.target.value as GymBillingMode | "")
                   }
-                />
-                <p className="mt-1 text-[11px] text-gray-500">
-                  {billingMode === "per_entry"
-                    ? "Жишээ: 1 оролт = 15,000₮ → 20 оролт = 300,000₮. Сараар оролтын тоогоор үржүүлнэ."
-                    : "Сар бүрт оролтын тооноос үл хамааран энэ дүнг тооцно."}
-                </p>
+                  className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+                >
+                  <option value="">Тохируулаагүй</option>
+                  <option value="per_entry">Оролт бүрийн үнэ</option>
+                  <option value="monthly_fixed">Сарын тогтмол төлбөр</option>
+                </select>
               </div>
-            )}
-          </div>
+              {billingMode && (
+                <div>
+                  <Label>
+                    {billingMode === "per_entry"
+                      ? "Оролт бүрийн үнэ (₮)"
+                      : "Сарын тогтмол дүн (₮)"}
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={billingAmountMnt}
+                    onChange={(e) => setBillingAmountMnt(e.target.value)}
+                    placeholder={
+                      billingMode === "per_entry"
+                        ? "Жишээ: 15000"
+                        : "Жишээ: 300000"
+                    }
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    {billingMode === "per_entry"
+                      ? "Жишээ: 1 оролт = 15,000₮ → 20 оролт = 300,000₮. Сараар оролтын тоогоор үржүүлнэ."
+                      : "Сар бүрт оролтын тооноос үл хамааран энэ дүнг тооцно."}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Owner Section */}
           <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">

@@ -12,6 +12,7 @@ import type { Gym } from "./types";
 import { useToast } from "@/components/ui/Toast";
 import { toMnErrorMessage } from "@/lib/error-message";
 import TablePagination from "@/components/ui/TablePagination";
+import { useAuth } from "@/context/AuthContext";
 
 export default function YogaSection() {
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -24,6 +25,8 @@ export default function YogaSection() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const toast = useToast();
+  const { role } = useAuth();
+  const showBilling = role === "admin";
 
   const fetchGyms = async () => {
     setLoading(true);
@@ -107,7 +110,11 @@ export default function YogaSection() {
                       : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
                   }`}
                 >
-                  {c === "ulaanbaatar" ? "Улаанбаатар" : c === "darkhan" ? "Дархан" : "Бүгд"}
+                  {c === "ulaanbaatar"
+                    ? "Улаанбаатар"
+                    : c === "darkhan"
+                      ? "Орон нутаг (Бүсчлэл)"
+                      : "Бүгд"}
                 </button>
               ))}
             </div>
@@ -136,7 +143,8 @@ export default function YogaSection() {
         onClose={() => { setModalOpen(false); setEditingGym(null); }}
         gym={editingGym}
         onSuccess={fetchGyms}
-        defaultType="yoga"   // ← шинэ prop
+        defaultType="yoga"
+        showBilling={showBilling}
       />
     </>
   );

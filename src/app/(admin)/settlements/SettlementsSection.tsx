@@ -99,7 +99,7 @@ const MONTH_OPTIONS = [
 ] as const;
 
 function cityLabel(city: string | null): string {
-  if (city === "darkhan") return "Дархан";
+  if (city === "darkhan") return "Орон нутаг (Бүсчлэл)";
   if (city === "ulaanbaatar" || !city) return "Улаанбаатар";
   return city;
 }

@@ -6,6 +6,7 @@ import Button from "../ui/button/Button";
 import Label from "../form/Label";
 import { t } from "@/lib/i18n";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { planTierDisplayLabel } from "@/lib/membership-plan-label";
 
 type ProfileData = {
   id: string;
@@ -19,21 +20,6 @@ type Props = {
   profile: ProfileData;
   email: string;
   onUpdate: () => Promise<void>;
-};
-
-const tierLabels: Record<string, string> = {
-  early: "Early",
-  early_year: "Early",
-  early_month: "Early",
-  standard: "Standard",
-  standard3: "Standard",
-  smart1: "Premium 1",
-  premium1: "Premium 1",
-  premium: "Premium 2",
-  premium2: "Premium 2",
-  smart2: "Premium 2",
-  premium4: "GymCore",
-  gymcore: "GymCore",
 };
 
 export default function UserInfoCard({ profile, email, onUpdate }: Props) {
@@ -104,7 +90,7 @@ export default function UserInfoCard({ profile, email, onUpdate }: Props) {
                 {t("membershipTier")}
               </p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {tierLabels[profile.membership_tier ?? ""] ?? "—"}
+                {planTierDisplayLabel(profile.membership_tier)}
               </p>
             </div>
           </div>

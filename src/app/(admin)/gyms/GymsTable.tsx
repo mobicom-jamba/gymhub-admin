@@ -26,6 +26,7 @@ export default function GymsTable({
   visitPeriod,
   visitLoading,
   onVisitCountClick,
+  showBilling = false,
 }: {
   gyms: Gym[];
   error?: string;
@@ -36,6 +37,8 @@ export default function GymsTable({
   visitPeriod?: VisitPeriod;
   visitLoading?: boolean;
   onVisitCountClick?: (gym: Gym) => void;
+  /** Partner settlement amounts — admin only */
+  showBilling?: boolean;
 }) {
   if (error) {
     return (
@@ -100,7 +103,7 @@ export default function GymsTable({
                   isHeader
                   className="px-5 py-3 font-medium text-gray-500 text-start text-theme-xs dark:text-gray-400"
                 >
-                  Оролт / Төлбөр{" "}
+                  {showBilling ? "Оролт / Төлбөр" : "Оролт"}{" "}
                   <span className="text-gray-400 font-normal">
                     ({visitPeriod === "today" ? "өнөөдөр" : visitPeriod === "7d" ? "7 хоног" : "сар"})
                   </span>
@@ -147,7 +150,7 @@ export default function GymsTable({
                 </TableCell>
                 <TableCell className="px-5 py-4 text-gray-500 text-theme-sm dark:text-gray-400">
                   {gym.city === "darkhan"
-                    ? "Дархан"
+                    ? "Орон нутаг (Бүсчлэл)"
                     : gym.city === "ulaanbaatar" || !gym.city
                       ? "Улаанбаатар"
                       : gym.city}
@@ -168,15 +171,20 @@ export default function GymsTable({
                       (() => {
                         const count = visitCounts[gym.id] ?? 0;
                         const showAmount =
-                          gym.billing_mode === "monthly_fixed" ||
-                          (gym.billing_mode === "per_entry" && visitPeriod === "month");
+                          showBilling &&
+                          (gym.billing_mode === "monthly_fixed" ||
+                            (gym.billing_mode === "per_entry" && visitPeriod === "month"));
                         const amount = showAmount
                           ? gymMonthAmountMnt(gym, count)
                           : null;
                         const rateHint =
-                          gym.billing_mode === "per_entry" && gym.billing_amount_mnt != null
+                          showBilling &&
+                          gym.billing_mode === "per_entry" &&
+                          gym.billing_amount_mnt != null
                             ? `${formatMnt(gym.billing_amount_mnt)}/оролт`
-                            : gym.billing_mode === "monthly_fixed" && gym.billing_amount_mnt != null
+                            : showBilling &&
+                                gym.billing_mode === "monthly_fixed" &&
+                                gym.billing_amount_mnt != null
                               ? `тогтмол ${formatMnt(gym.billing_amount_mnt)}`
                               : null;
 

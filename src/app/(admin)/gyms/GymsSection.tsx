@@ -15,6 +15,7 @@ import type { Gym, VisitPeriod } from "./types";
 import { useToast } from "@/components/ui/Toast";
 import { toMnErrorMessage } from "@/lib/error-message";
 import TablePagination from "@/components/ui/TablePagination";
+import { useAuth } from "@/context/AuthContext";
 
 function sinceForPeriod(period: VisitPeriod): string {
   const now = new Date();
@@ -56,6 +57,8 @@ export default function GymsSection() {
   const [visitLoading, setVisitLoading] = useState(false);
   const [monthlyGym, setMonthlyGym] = useState<Gym | null>(null);
   const toast = useToast();
+  const { role } = useAuth();
+  const showBilling = role === "admin";
 
   const fetchGyms = async () => {
     setLoading(true);
@@ -181,7 +184,7 @@ export default function GymsSection() {
                     : "text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-white/5"
                 }`}
               >
-                Дархан
+                Орон нутаг (Бүсчлэл)
               </button>
               <button
                 type="button"
@@ -231,6 +234,7 @@ export default function GymsSection() {
           visitPeriod={visitPeriod}
           visitLoading={visitLoading}
           onVisitCountClick={setMonthlyGym}
+          showBilling={showBilling}
         />
         <TablePagination
           page={page}
@@ -253,9 +257,14 @@ export default function GymsSection() {
         }}
         gym={editingGym}
         onSuccess={fetchGyms}
+        showBilling={showBilling}
       />
       <GymQRModal gym={qrGym} onClose={() => setQrGym(null)} />
-      <GymVisitMonthlyPanel gym={monthlyGym} onClose={() => setMonthlyGym(null)} />
+      <GymVisitMonthlyPanel
+        gym={monthlyGym}
+        onClose={() => setMonthlyGym(null)}
+        showBilling={showBilling}
+      />
     </>
   );
 }
