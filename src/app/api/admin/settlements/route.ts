@@ -91,9 +91,125 @@ async function countVisitsByGym(
   return counts;
 }
 
+/** Mongolia calendar month YYYY-MM for an ISO timestamp. */
+function monthKeyMn(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 8 * 3600 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function shiftMonthKey(month: string, delta: number): string {
+  const [y, m] = month.split("-").map((x) => parseInt(x, 10));
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthsInclusive(from: string, to: string): string[] {
+  const out: string[] = [];
+  let cur = from;
+  while (cur <= to) {
+    out.push(cur);
+    cur = shiftMonthKey(cur, 1);
+  }
+  return out;
+}
+
+type ExportRow = {
+  gym_id: string;
+  name: string | null;
+  city: string | null;
+  type: string | null;
+  is_active: boolean | null;
+  image_url: string | null;
+  billing_mode: BillingMode | null;
+  unit_amount_mnt: number | null;
+  visit_count: number;
+  computed_amount_mnt: number;
+  amount_mnt: number;
+  notes: string | null;
+  status: "draft" | "confirmed";
+  settlement_id: string | null;
+  is_edited: boolean;
+  has_billing: boolean;
+};
+
+function buildMonthRows(
+  gyms: GymRow[],
+  visitCounts: Record<string, number>,
+  savedByGym: Map<string, SettlementRow>,
+): ExportRow[] {
+  const rows = gyms.map((gym) => {
+    const visits = visitCounts[gym.id] ?? 0;
+    const computed = computeAmount(gym.billing_mode, gym.billing_amount_mnt, visits);
+    const settlement = savedByGym.get(gym.id) ?? null;
+    const amount = settlement?.amount_mnt ?? computed;
+    const isEdited =
+      !!settlement &&
+      (settlement.amount_mnt !== settlement.computed_amount_mnt ||
+        !!settlement.notes ||
+        settlement.status === "confirmed");
+    return {
+      gym_id: gym.id,
+      name: gym.name,
+      city: gym.city,
+      type: gym.type,
+      is_active: gym.is_active,
+      image_url: gym.image_url,
+      billing_mode: gym.billing_mode,
+      unit_amount_mnt: gym.billing_amount_mnt,
+      visit_count: visits,
+      computed_amount_mnt: computed,
+      amount_mnt: amount,
+      notes: settlement?.notes ?? null,
+      status: (settlement?.status ?? "draft") as "draft" | "confirmed",
+      settlement_id: settlement?.id ?? null,
+      is_edited: isEdited,
+      has_billing: !!gym.billing_mode && gym.billing_amount_mnt != null,
+    };
+  });
+
+  rows.sort((a, b) => {
+    const score = (r: ExportRow) =>
+      (r.has_billing ? 4 : 0) + (r.visit_count > 0 ? 2 : 0) + (r.is_active ? 1 : 0);
+    const d = score(b) - score(a);
+    if (d !== 0) return d;
+    return (a.name ?? "").localeCompare(b.name ?? "", "mn");
+  });
+  return rows;
+}
+
+async function loadAllVisitsByMonth(
+  supabase: ReturnType<typeof createAdminClient>,
+  startIso: string,
+  endIso: string,
+): Promise<Record<string, Record<string, number>>> {
+  const byMonth: Record<string, Record<string, number>> = {};
+  const PAGE = 1000;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("gym_visits")
+      .select("gym_id, checked_in_at")
+      .neq("status", "rejected")
+      .gte("checked_in_at", startIso)
+      .lt("checked_in_at", endIso)
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      const r = row as { gym_id?: string | null; checked_in_at?: string | null };
+      if (!r.gym_id || !r.checked_in_at) continue;
+      const mk = monthKeyMn(r.checked_in_at);
+      if (!byMonth[mk]) byMonth[mk] = {};
+      byMonth[mk][r.gym_id] = (byMonth[mk][r.gym_id] ?? 0) + 1;
+    }
+    if (!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return byMonth;
+}
+
 /**
  * GET /api/admin/settlements?month=YYYY-MM
- * Returns gyms + live visit counts + saved settlement overrides for the month.
+ * GET /api/admin/settlements?all=1  — every month from first activity through current month
  */
 export async function GET(request: Request) {
   try {
@@ -104,13 +220,86 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const month = (searchParams.get("month") ?? previousMonthMn()).trim();
+    const supabase = createAdminClient();
+    const current = currentMonthMn();
+    const previous = previousMonthMn();
+
+    if (searchParams.get("all") === "1") {
+      const [{ data: gyms, error: gymErr }, { data: saved, error: savErr }, { data: firstVisit }] =
+        await Promise.all([
+          supabase
+            .from("gyms")
+            .select(
+              "id, name, city, type, is_active, image_url, billing_mode, billing_amount_mnt, sort_order",
+            )
+            .order("sort_order", { ascending: true }),
+          supabase.from("gym_billing_settlements").select("*"),
+          supabase
+            .from("gym_visits")
+            .select("checked_in_at")
+            .neq("status", "rejected")
+            .order("checked_in_at", { ascending: true })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+
+      if (gymErr) return NextResponse.json({ error: gymErr.message }, { status: 500 });
+      if (savErr) return NextResponse.json({ error: savErr.message }, { status: 500 });
+
+      const settlementMonths = ((saved ?? []) as SettlementRow[])
+        .map((s) => s.month)
+        .filter((m) => /^\d{4}-\d{2}$/.test(m));
+      const visitStart = firstVisit?.checked_in_at
+        ? monthKeyMn(firstVisit.checked_in_at as string)
+        : null;
+      const candidates = [...settlementMonths, ...(visitStart ? [visitStart] : []), previous];
+      const startMonth = candidates.reduce((a, b) => (a < b ? a : b));
+      const monthList = monthsInclusive(startMonth, current);
+
+      const rangeStart = monthBoundsUtc(startMonth)!;
+      const rangeEnd = monthBoundsUtc(shiftMonthKey(current, 1))!;
+      const visitsByMonth = await loadAllVisitsByMonth(
+        supabase,
+        rangeStart.startIso,
+        rangeEnd.startIso,
+      );
+
+      const savedByMonthGym = new Map<string, SettlementRow>();
+      for (const row of (saved ?? []) as SettlementRow[]) {
+        savedByMonthGym.set(`${row.month}:${row.gym_id}`, row);
+      }
+
+      const gymList = (gyms ?? []) as GymRow[];
+      const months = monthList.map((month) => {
+        const visitCounts = visitsByMonth[month] ?? {};
+        const savedByGym = new Map<string, SettlementRow>();
+        for (const gym of gymList) {
+          const s = savedByMonthGym.get(`${month}:${gym.id}`);
+          if (s) savedByGym.set(gym.id, s);
+        }
+        const rows = buildMonthRows(gymList, visitCounts, savedByGym);
+        const total_amount_mnt = rows.reduce(
+          (s, r) => s + (r.has_billing || r.settlement_id ? r.amount_mnt : 0),
+          0,
+        );
+        const total_visits = rows.reduce((s, r) => s + r.visit_count, 0);
+        const billed_count = rows.filter((r) => r.has_billing || r.settlement_id).length;
+        return { month, total_amount_mnt, total_visits, billed_count, rows };
+      });
+
+      return NextResponse.json({
+        all: true,
+        current_month: current,
+        previous_month: previous,
+        months,
+      });
+    }
+
+    const month = (searchParams.get("month") ?? previous).trim();
     const bounds = monthBoundsUtc(month);
     if (!bounds) {
       return NextResponse.json({ error: "month формат YYYY-MM байх ёстой." }, { status: 400 });
     }
-
-    const supabase = createAdminClient();
 
     const [{ data: gyms, error: gymErr }, { data: saved, error: savErr }, visitCounts] =
       await Promise.all([
@@ -132,54 +321,19 @@ export async function GET(request: Request) {
       savedByGym.set(row.gym_id, row);
     }
 
-    const rows = ((gyms ?? []) as GymRow[]).map((gym) => {
-      const visits = visitCounts[gym.id] ?? 0;
-      const computed = computeAmount(gym.billing_mode, gym.billing_amount_mnt, visits);
-      const settlement = savedByGym.get(gym.id) ?? null;
-      const amount = settlement?.amount_mnt ?? computed;
-      const isEdited =
-        !!settlement &&
-        (settlement.amount_mnt !== settlement.computed_amount_mnt ||
-          !!settlement.notes ||
-          settlement.status === "confirmed");
+    const rows = buildMonthRows((gyms ?? []) as GymRow[], visitCounts, savedByGym);
 
-      return {
-        gym_id: gym.id,
-        name: gym.name,
-        city: gym.city,
-        type: gym.type,
-        is_active: gym.is_active,
-        image_url: gym.image_url,
-        billing_mode: gym.billing_mode,
-        unit_amount_mnt: gym.billing_amount_mnt,
-        visit_count: visits,
-        computed_amount_mnt: computed,
-        amount_mnt: amount,
-        notes: settlement?.notes ?? null,
-        status: settlement?.status ?? "draft",
-        settlement_id: settlement?.id ?? null,
-        is_edited: isEdited,
-        has_billing: !!gym.billing_mode && gym.billing_amount_mnt != null,
-      };
-    });
-
-    // Prefer billed gyms first, then those with visits
-    rows.sort((a, b) => {
-      const score = (r: (typeof rows)[0]) =>
-        (r.has_billing ? 4 : 0) + (r.visit_count > 0 ? 2 : 0) + (r.is_active ? 1 : 0);
-      const d = score(b) - score(a);
-      if (d !== 0) return d;
-      return (a.name ?? "").localeCompare(b.name ?? "", "mn");
-    });
-
-    const totalAmount = rows.reduce((s, r) => s + (r.has_billing || r.settlement_id ? r.amount_mnt : 0), 0);
+    const totalAmount = rows.reduce(
+      (s, r) => s + (r.has_billing || r.settlement_id ? r.amount_mnt : 0),
+      0,
+    );
     const totalVisits = rows.reduce((s, r) => s + r.visit_count, 0);
     const billedCount = rows.filter((r) => r.has_billing || r.settlement_id).length;
 
     return NextResponse.json({
       month,
-      current_month: currentMonthMn(),
-      previous_month: previousMonthMn(),
+      current_month: current,
+      previous_month: previous,
       total_amount_mnt: totalAmount,
       total_visits: totalVisits,
       billed_count: billedCount,
@@ -282,7 +436,9 @@ export async function PUT(request: Request) {
             computeAmount(mode, unit, visitCount),
         ),
       );
-      const amount = Math.max(0, Math.round(Number(r.amount_mnt) || 0));
+      // Final amount may be negative (алдагдал / loss).
+      const rawAmount = Math.round(Number(r.amount_mnt));
+      const amount = Number.isFinite(rawAmount) ? rawAmount : 0;
       return {
         gym_id: r.gym_id,
         month,
