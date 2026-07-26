@@ -207,29 +207,15 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
     };
   }
 
-  // ── Шинэ Standard ─────────────────────────────────────────────────────
+  // ── Шинэ Standard (бүтээгдэхүүн = 6 сар; label-ийг сараар харуулна) ──
   if (key === "standard") {
-    if (days != null && days >= 280) {
-      const approxYears = Math.round(days / 365);
-      if (approxYears <= 1) {
-        return {
-          title: "Standard — 1 жилийн гишүүнчлэл",
-          shortLabel: "Standard · 1 жил",
-          variant: "standard_year",
-        };
-      }
-      return {
-        title: `Standard — урт хугацааны гишүүнчлэл (~${approxYears} жил)`,
-        shortLabel: `Standard · ~${approxYears} жил`,
-        variant: "standard_year",
-      };
-    }
-
-    // Standard / standard3 ≈ 6 сар
-    if (days != null && days >= 150 && days < 280) {
+    if (days != null && days >= 150) {
       const approxMonths = Math.max(2, Math.round(days / 30));
       return {
-        title: `Standard — ${approxMonths} сарын фитнес эрх`,
+        title:
+          approxMonths === 6
+            ? "Standard — 6 сарын фитнес эрх"
+            : `Standard — ~${approxMonths} сарын фитнес эрх`,
         shortLabel: approxMonths === 6 ? "Standard · 6 сар" : `Standard · ~${approxMonths} сар`,
         variant: "standard_year",
       };
@@ -253,9 +239,9 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
     }
 
     return {
-      title: "Standard — шинэ багц",
-      shortLabel: "Standard",
-      variant: "neutral",
+      title: "Standard — 6 сарын фитнес эрх",
+      shortLabel: "Standard · 6 сар",
+      variant: "standard_year",
     };
   }
 

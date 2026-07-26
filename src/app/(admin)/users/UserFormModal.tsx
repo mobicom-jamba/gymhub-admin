@@ -64,6 +64,22 @@ function resolveMembershipStatus(startedAt: string, expiresAt: string): "active"
   return isStarted && isNotExpired ? "active" : "inactive";
 }
 
+/** Standard = 6 сар; Early / Premium / GymCore = 12 сар */
+function membershipDurationMonths(tier: string): number {
+  const key = canonicalPlanKey(tier);
+  return key === "standard" ? 6 : 12;
+}
+
+/** YYYY-MM-DD ± months in UTC calendar (avoids local TZ day shift). */
+function shiftDateOnly(isoDate: string, months: number): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return null;
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(dt.getTime())) return null;
+  dt.setUTCMonth(dt.getUTCMonth() + months);
+  return dt.toISOString().slice(0, 10);
+}
+
 const MN_MONTHS = ["1-р","2-р","3-р","4-р","5-р","6-р","7-р","8-р","9-р","10-р","11-р","12-р"];
 const MN_DAYS   = ["Да","Мя","Лх","Пү","Ба","Бя","Ня"];
 
@@ -356,12 +372,31 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     setMembershipStatus(resolveMembershipStatus(startedAt, expiresAt));
   }, [startedAt, expiresAt]);
 
+  const handleStartedChange = (val: string) => {
+    setStartedAt(val);
+    if (!val) return;
+    const months = membershipDurationMonths(tier);
+    const nextExpiry = shiftDateOnly(val, months);
+    if (nextExpiry) setExpiresAt(nextExpiry);
+  };
+
   const handleExpiresChange = (val: string) => {
     setExpiresAt(val);
-    if (val) {
-      const d = new Date(val);
-      d.setFullYear(d.getFullYear() - 1);
-      setStartedAt(d.toISOString().slice(0, 10));
+    if (!val) return;
+    const months = membershipDurationMonths(tier);
+    const nextStart = shiftDateOnly(val, -months);
+    if (nextStart) setStartedAt(nextStart);
+  };
+
+  const handleTierChange = (nextTier: string) => {
+    setTier(nextTier);
+    const months = membershipDurationMonths(nextTier);
+    if (startedAt) {
+      const nextExpiry = shiftDateOnly(startedAt, months);
+      if (nextExpiry) setExpiresAt(nextExpiry);
+    } else if (expiresAt) {
+      const nextStart = shiftDateOnly(expiresAt, -months);
+      if (nextStart) setStartedAt(nextStart);
     }
   };
 
@@ -751,7 +786,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => setTier(opt.id)}
+                    onClick={() => handleTierChange(opt.id)}
                     className={`relative flex flex-col items-start rounded-xl border-2 px-4 py-3 transition ${
                       opt.selected
                         ? opt.id === "gymcore"
@@ -773,7 +808,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     }`}>
                       {opt.label}
                     </span>
-                    <span className="text-[11px] text-gray-400">{opt.price}</span>
+                    <span className="text-[11px] text-gray-400">
+                      {opt.price} · {opt.id === "standard" ? "6 сар" : "1 жил"}
+                    </span>
                     {opt.selected && (
                       <span className={`absolute right-2.5 top-2.5 flex h-4 w-4 items-center justify-center rounded-full ${
                         opt.id === "gymcore" ? "bg-amber-500" : opt.id.startsWith("premium") ? "bg-violet-500" : "bg-blue-500"
@@ -798,7 +835,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 <div>
                   <Label>Эхлэх огноо</Label>
                   <div className={canEditSubscriptionDates ? "" : "pointer-events-none opacity-70"}>
-                    <DateField value={startedAt} onChange={setStartedAt} />
+                    <DateField value={startedAt} onChange={handleStartedChange} />
                   </div>
                 </div>
                 <div>
