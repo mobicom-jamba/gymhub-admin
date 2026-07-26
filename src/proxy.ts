@@ -59,9 +59,18 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: { id: string } | null = null;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      // Password change / logout-all revokes refresh tokens; clear stale cookies quietly.
+      clearSupabaseAuthCookies(request, response);
+    } else {
+      user = data.user;
+    }
+  } catch {
+    clearSupabaseAuthCookies(request, response);
+  }
 
   if (isAuthPath(pathname)) {
     if (user && !pathname.startsWith("/auth")) {
@@ -81,6 +90,15 @@ export async function proxy(request: NextRequest) {
   }
 
   return response;
+}
+
+/** Drop sb-* auth cookies when refresh token is revoked/missing. */
+function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) {
+  for (const cookie of request.cookies.getAll()) {
+    if (cookie.name.startsWith("sb-") && cookie.name.includes("auth-token")) {
+      response.cookies.set(cookie.name, "", { maxAge: 0, path: "/" });
+    }
+  }
 }
 
 export const config = {

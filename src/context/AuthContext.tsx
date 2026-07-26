@@ -91,7 +91,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabaseRef.current.auth.signOut({ scope: "global" });
+    try {
+      await supabaseRef.current.auth.signOut({ scope: "global" });
+    } catch {
+      // Refresh token already revoked (password change / logout-all) — clear local only.
+      await supabaseRef.current.auth.signOut({ scope: "local" });
+    }
     window.location.href = "/signin";
   };
 
