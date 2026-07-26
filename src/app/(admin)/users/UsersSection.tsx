@@ -104,23 +104,70 @@ function profileStatus(p: Profile): "active" | "expired" | "inactive" {
   return "active";
 }
 
-function formatFilterDateLabel(value: string): string {
-  if (!value) return "";
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("mn-MN");
+/** Mongolia calendar date YYYY-MM-DD (Asia/Ulaanbaatar). */
+function getTodayDateStringUB(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ulaanbaatar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
+function formatFilterDateLabel(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(`${value}T12:00:00+08:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("mn-MN", { timeZone: "Asia/Ulaanbaatar" });
+}
+
+/** Day bounds for YYYY-MM-DD in Asia/Ulaanbaatar (UTC+8, no DST). */
 function buildLocalDayRange(value: string): { startIso: string; endIso: string } | null {
-  if (!value) return null;
-  const start = new Date(`${value}T00:00:00`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const start = new Date(`${value}T00:00:00+08:00`);
   if (Number.isNaN(start.getTime())) return null;
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return {
     startIso: start.toISOString(),
     endIso: end.toISOString(),
   };
+}
+
+function profilesStartedInRange(
+  profileRows: Profile[],
+  range: { startIso: string; endIso: string },
+): PaidBookingRow[] {
+  const startMs = new Date(range.startIso).getTime();
+  const endMs = new Date(range.endIso).getTime();
+  return profileRows
+    .filter((profile) => {
+      if ((profile.role ?? "user") !== "user") return false;
+      if (!profile.membership_started_at) return false;
+      const t = new Date(profile.membership_started_at).getTime();
+      return !Number.isNaN(t) && t >= startMs && t < endMs;
+    })
+    .map((profile) => ({
+      id: `profile-start-${profile.id}`,
+      user_id: profile.id,
+      paid_at: profile.membership_started_at,
+      created_at: profile.membership_started_at,
+      payment_channel: null,
+    }));
+}
+
+function mergePaidDayRows(primary: PaidBookingRow[], extra: PaidBookingRow[]): PaidBookingRow[] {
+  const seenUsers = new Set<string>();
+  const out: PaidBookingRow[] = [];
+  for (const row of [...primary, ...extra]) {
+    if (!row.user_id) {
+      out.push(row);
+      continue;
+    }
+    if (seenUsers.has(row.user_id)) continue;
+    seenUsers.add(row.user_id);
+    out.push(row);
+  }
+  return out;
 }
 
 function isMissingColumnError(message: string | null | undefined, column: string): boolean {
@@ -136,11 +183,6 @@ function isMissingProfilesColumnError(message: string | null | undefined, column
 function isMissingTableError(message: string | null | undefined, table: string): boolean {
   const text = (message ?? "").toLowerCase();
   return text.includes(`could not find the table 'public.${table.toLowerCase()}'`) || text.includes(`relation "public.${table.toLowerCase()}" does not exist`);
-}
-
-function isLegacyPaidStatus(status: string | null | undefined): boolean {
-  const s = (status ?? "").trim().toLowerCase();
-  return s === "paid" || s === "completed" || s === "success" || s === "succeeded" || s === "settled" || s === "approved" || s === "done";
 }
 
 const DATE_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate", "lastVisit"]);
@@ -489,10 +531,34 @@ export default function UsersSection() {
       setPaidBookingsError(null);
 
       const supabase = createBrowserSupabaseClient();
-      let rows: PaidBookingRow[] | null = null;
-      let bookingsError: { message: string } | null = null;
+      let rows: PaidBookingRow[] = [];
+      let bookingsError: string | null = null;
 
-      {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`;
+        }
+        const qs = new URLSearchParams({
+          start: range.startIso,
+          end: range.endIso,
+        });
+        const res = await fetch(`/api/admin/paid-day?${qs}`, { headers });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          rows?: PaidBookingRow[];
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(json.error || "Төлбөрийн жагсаалт ачаалахад алдаа гарлаа.");
+        }
+        rows = Array.isArray(json.rows) ? json.rows : [];
+      } catch (e) {
+        // Fallback: browser bookings query (no Flexy) if admin API fails.
+        bookingsError = e instanceof Error ? e.message : String(e);
         const res = await supabase
           .from("bookings")
           .select("id, user_id, paid_at, created_at, payment_channel, qpay_invoice_id")
@@ -500,121 +566,28 @@ export default function UsersSection() {
           .gte("paid_at", range.startIso)
           .lt("paid_at", range.endIso)
           .order("paid_at", { ascending: false });
-        rows = (res.data as PaidBookingRow[] | null) ?? null;
-        bookingsError = res.error;
-      }
-
-      if (bookingsError && isMissingColumnError(bookingsError.message, "payment_channel")) {
-        const withoutChannel = await supabase
-          .from("bookings")
-          .select("id, user_id, paid_at, created_at")
-          .eq("payment_status", "paid")
-          .gte("paid_at", range.startIso)
-          .lt("paid_at", range.endIso)
-          .order("paid_at", { ascending: false });
-        rows = (withoutChannel.data as PaidBookingRow[] | null) ?? null;
-        bookingsError = withoutChannel.error;
-      }
-
-      if (bookingsError && isMissingColumnError(bookingsError.message, "paid_at")) {
-        const fallback = await supabase
-          .from("bookings")
-          .select("id, user_id, created_at, payment_channel, qpay_invoice_id")
-          .eq("payment_status", "paid")
-          .gte("created_at", range.startIso)
-          .lt("created_at", range.endIso)
-          .order("created_at", { ascending: false });
-
-        rows = (fallback.data ?? []).map((row) => ({
-          ...(row as PaidBookingRow),
-          paid_at: row.created_at ?? null,
-        }));
-        bookingsError = fallback.error;
-      }
-
-      if (bookingsError && isMissingColumnError(bookingsError.message, "payment_status")) {
-        let legacySelect = "id, user_id, status, paid_at, created_at, channel";
-        let legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
-
-        if (legacyProbe.error?.message?.toLowerCase().includes("paid_at")) {
-          legacySelect = "id, user_id, status, created_at, channel";
-          legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
+        if (!res.error) {
+          rows = (res.data as PaidBookingRow[] | null) ?? [];
+          bookingsError = null;
+        } else if (
+          isMissingColumnError(res.error.message, "payment_status") ||
+          isMissingTableError(res.error.message, "bookings")
+        ) {
+          rows = profilesStartedInRange(profiles, range);
+          bookingsError = null;
+        } else {
+          bookingsError = res.error.message;
         }
-        if (legacyProbe.error?.message?.toLowerCase().includes("channel")) {
-          legacySelect = legacySelect.replace(", channel", "");
-          legacyProbe = await supabase.from("lending_records").select(legacySelect).limit(1);
-        }
-
-        if (!legacyProbe.error) {
-          const legacyRows = await supabase
-            .from("lending_records")
-            .select(legacySelect)
-            .gte("created_at", range.startIso)
-            .lt("created_at", range.endIso)
-            .order("created_at", { ascending: false });
-
-          if (!legacyRows.error) {
-            const legacyData = (legacyRows.data ?? []) as unknown as Record<string, unknown>[];
-            rows = legacyData.reduce<PaidBookingRow[]>((acc, row) => {
-              if (!row || typeof row !== "object") return acc;
-
-              const status = typeof row.status === "string" ? row.status : null;
-              if (!isLegacyPaidStatus(typeof status === "string" ? status : null)) return acc;
-
-              const id = typeof row.id === "string" ? row.id : null;
-              if (!id) return acc;
-
-              const userId = typeof row.user_id === "string" ? row.user_id : null;
-              const paidAt = typeof row.paid_at === "string" ? row.paid_at : null;
-              const createdAt = typeof row.created_at === "string" ? row.created_at : null;
-
-              acc.push({
-                id,
-                user_id: userId,
-                paid_at: paidAt ?? createdAt,
-                created_at: createdAt,
-                payment_channel:
-                  typeof row.channel === "string" ? row.channel : "sono",
-              });
-              return acc;
-            }, []);
-            bookingsError = null;
-          } else {
-            bookingsError = legacyRows.error;
-          }
-        }
-      }
-
-      if (
-        bookingsError &&
-        (
-          isMissingColumnError(bookingsError.message, "payment_status") ||
-          isMissingTableError(bookingsError.message, "lending_records")
-        )
-      ) {
-        rows = profiles
-          .filter((profile) => {
-            if ((profile.role ?? "user") !== "user") return false;
-            if (!profile.membership_started_at) return false;
-            const startedAt = new Date(profile.membership_started_at).toISOString();
-            return startedAt >= range.startIso && startedAt < range.endIso;
-          })
-          .map((profile) => ({
-            id: `profile-${profile.id}`,
-            user_id: profile.id,
-            paid_at: profile.membership_started_at,
-            created_at: profile.membership_started_at,
-          }));
-        bookingsError = null;
       }
 
       if (cancelled) return;
 
       if (bookingsError) {
         setPaidBookings([]);
-        setPaidBookingsError(bookingsError.message);
+        setPaidBookingsError(bookingsError);
       } else {
-        setPaidBookings(rows ?? []);
+        // Merge membership starts that day (covers activations without bookings/Flexy row timing quirks).
+        setPaidBookings(mergePaidDayRows(rows, profilesStartedInRange(profiles, range)));
         setPaidBookingsError(null);
       }
 
@@ -1083,7 +1056,7 @@ export default function UsersSection() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPaidOnDate(new Date().toISOString().slice(0, 10));
+                    setPaidOnDate(getTodayDateStringUB());
                     setPage(1);
                     setSelectedIds(new Set());
                   }}
@@ -1219,7 +1192,7 @@ export default function UsersSection() {
           )}
           {tab === "user" && paidOnDate && !paidBookingsLoading && !paidBookingsError && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Нийт төлбөрийн тоо: {paidCount}.
+              {paidDayLabel}: {paidUsersCount} гишүүн · {paidCount} бичилт (төлбөр / Flexy / идэвхжүүлэлт).
             </div>
           )}
           {tab === "user" && paidBookingsError && (
