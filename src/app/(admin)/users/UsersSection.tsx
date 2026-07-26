@@ -133,7 +133,8 @@ function buildLocalDayRange(value: string): { startIso: string; endIso: string }
   };
 }
 
-function profilesStartedInRange(
+/** Fallback only: paid-day evidence from active profiles (never include Төлөөгүй). */
+function activeProfilesStartedInRange(
   profileRows: Profile[],
   range: { startIso: string; endIso: string },
 ): PaidBookingRow[] {
@@ -142,6 +143,8 @@ function profilesStartedInRange(
   return profileRows
     .filter((profile) => {
       if ((profile.role ?? "user") !== "user") return false;
+      const status = (profile.membership_status ?? "inactive").trim().toLowerCase();
+      if (status !== "active" && status !== "expired") return false;
       if (!profile.membership_started_at) return false;
       const t = new Date(profile.membership_started_at).getTime();
       return !Number.isNaN(t) && t >= startMs && t < endMs;
@@ -153,21 +156,6 @@ function profilesStartedInRange(
       created_at: profile.membership_started_at,
       payment_channel: null,
     }));
-}
-
-function mergePaidDayRows(primary: PaidBookingRow[], extra: PaidBookingRow[]): PaidBookingRow[] {
-  const seenUsers = new Set<string>();
-  const out: PaidBookingRow[] = [];
-  for (const row of [...primary, ...extra]) {
-    if (!row.user_id) {
-      out.push(row);
-      continue;
-    }
-    if (seenUsers.has(row.user_id)) continue;
-    seenUsers.add(row.user_id);
-    out.push(row);
-  }
-  return out;
 }
 
 function isMissingColumnError(message: string | null | undefined, column: string): boolean {
@@ -573,7 +561,8 @@ export default function UsersSection() {
           isMissingColumnError(res.error.message, "payment_status") ||
           isMissingTableError(res.error.message, "bookings")
         ) {
-          rows = profilesStartedInRange(profiles, range);
+          // Last resort only — active members; never Төлөөгүй.
+          rows = activeProfilesStartedInRange(profiles, range);
           bookingsError = null;
         } else {
           bookingsError = res.error.message;
@@ -586,8 +575,9 @@ export default function UsersSection() {
         setPaidBookings([]);
         setPaidBookingsError(bookingsError);
       } else {
-        // Merge membership starts that day (covers activations without bookings/Flexy row timing quirks).
-        setPaidBookings(mergePaidDayRows(rows, profilesStartedInRange(profiles, range)));
+        // API already merges bookings + Flexy + activations; do not merge raw profile dates
+        // (that pulled in admin-set / unpaid "Төлөөгүй" members).
+        setPaidBookings(rows);
         setPaidBookingsError(null);
       }
 

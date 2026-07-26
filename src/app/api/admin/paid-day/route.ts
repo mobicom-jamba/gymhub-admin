@@ -9,7 +9,7 @@ export type PaidDayRow = {
   created_at: string | null;
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
-  source: "booking" | "flexy" | "membership_start";
+  source: "booking" | "flexy" | "activation";
 };
 
 function requiredIso(url: URL, key: string): string | null {
@@ -69,6 +69,8 @@ export async function GET(request: Request) {
       });
     }
 
+    const seenUsers = new Set(rows.map((r) => r.user_id).filter(Boolean) as string[]);
+
     // Flexy: installment_payments.paid_at (membership-* booking rows often missing from bookings)
     const { data: flexyPays, error: flexyErr } = await admin
       .from("installment_payments")
@@ -91,7 +93,6 @@ export async function GET(request: Request) {
         console.warn("paid-day flexy plans:", plansErr.message);
       } else {
         const planMap = new Map((plans ?? []).map((p) => [p.id, p]));
-        const seenUsers = new Set(rows.map((r) => r.user_id).filter(Boolean) as string[]);
         for (const pay of flexyPays!) {
           const plan = planMap.get(pay.plan_id);
           const userId = plan?.user_id ?? null;
@@ -107,6 +108,77 @@ export async function GET(request: Request) {
             source: "flexy",
           });
         }
+      }
+    }
+
+    // Real membership activations that day (not admin-only profile date edits)
+    const { data: activations, error: actErr } = await admin
+      .from("membership_activations")
+      .select("booking_id, user_id, applied_at")
+      .gte("applied_at", start)
+      .lt("applied_at", end)
+      .order("applied_at", { ascending: false });
+
+    if (actErr) {
+      console.warn("paid-day activations:", actErr.message);
+    } else if ((activations ?? []).length > 0) {
+      const bookingIds = Array.from(
+        new Set(
+          (activations ?? [])
+            .map((a) => a.booking_id)
+            .filter((id): id is string => typeof id === "string" && id.length > 0),
+        ),
+      );
+      const channelByBooking = new Map<string, string | null>();
+      if (bookingIds.length > 0) {
+        const { data: actBookings } = await admin
+          .from("bookings")
+          .select("id, payment_channel, qpay_invoice_id")
+          .in("id", bookingIds);
+        for (const b of actBookings ?? []) {
+          channelByBooking.set(
+            b.id,
+            b.payment_channel ?? (b.qpay_invoice_id ? "qpay" : null),
+          );
+        }
+      }
+      for (const a of activations ?? []) {
+        const userId = a.user_id ?? null;
+        if (!userId || seenUsers.has(userId)) continue;
+        seenUsers.add(userId);
+        const bookingId = typeof a.booking_id === "string" ? a.booking_id : "";
+        rows.push({
+          id: `activation-${bookingId || userId}`,
+          user_id: userId,
+          paid_at: a.applied_at ?? null,
+          created_at: a.applied_at ?? null,
+          payment_channel: bookingId ? channelByBooking.get(bookingId) ?? null : null,
+          qpay_invoice_id: null,
+          source: "activation",
+        });
+      }
+    }
+
+    // Drop unpaid/inactive profiles — admin-set dates must not appear on төлбөрийн өдөр.
+    const userIds = Array.from(seenUsers);
+    if (userIds.length > 0) {
+      const { data: profiles } = await admin
+        .from("profiles")
+        .select("id, membership_status")
+        .in("id", userIds);
+      const unpaid = new Set(
+        (profiles ?? [])
+          .filter((p) => {
+            const s = String(p.membership_status ?? "inactive").trim().toLowerCase();
+            return s !== "active" && s !== "expired";
+          })
+          .map((p) => p.id),
+      );
+      if (unpaid.size > 0) {
+        return NextResponse.json({
+          ok: true,
+          rows: rows.filter((r) => !r.user_id || !unpaid.has(r.user_id)),
+        });
       }
     }
 
