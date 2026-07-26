@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAccessTokenSessionActive } from "@/lib/auth-sessions";
 import { createAdminClient } from "@/lib/supabase";
 
 export type JwtUserResult =
@@ -24,6 +25,15 @@ export async function verifyJwtUser(request: Request): Promise<JwtUserResult> {
     return {
       ok: false,
       response: NextResponse.json({ error: "Нэвтрэх эсвэл token хүчингүй байна" }, { status: 401 }),
+    };
+  }
+  if (!(await isAccessTokenSessionActive(supabase, token))) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Session хүчингүй болсон. Дахин нэвтэрнэ үү." },
+        { status: 401 },
+      ),
     };
   }
   return { ok: true, userId: user.id };

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { revokeAllUserSessions } from "@/lib/auth-sessions";
 import { createAdminClient } from "@/lib/supabase";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
@@ -143,12 +144,17 @@ export async function POST(request: Request) {
         email_confirm: true,
         user_metadata: meta,
       };
-      if (password?.trim()) {
-        updatePayload.password = password.trim();
+      const passwordChanged = Boolean(password?.trim());
+      if (passwordChanged) {
+        updatePayload.password = password!.trim();
       }
       const { error: authErr } = await supabase.auth.admin.updateUserById(userId, updatePayload);
       if (authErr) {
         return NextResponse.json({ error: `Auth update: ${authErr.message}` }, { status: 500 });
+      }
+      if (passwordChanged) {
+        const revoked = await revokeAllUserSessions(supabase, userId);
+        if (revoked.error) console.warn("admin_revoke_user_sessions:", revoked.error);
       }
 
       const { error: profileErr } = await supabase.from("profiles").upsert(
@@ -184,6 +190,10 @@ export async function POST(request: Request) {
           const { error: updErr } = await supabase.auth.admin.updateUserById(userId, up);
           if (updErr) {
             return NextResponse.json({ error: `Auth link: ${updErr.message}` }, { status: 500 });
+          }
+          if (password?.trim()) {
+            const revoked = await revokeAllUserSessions(supabase, userId);
+            if (revoked.error) console.warn("admin_revoke_user_sessions:", revoked.error);
           }
         } else {
           return NextResponse.json({ error: `Auth create: ${authErr.message}` }, { status: 500 });

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
+import { revokeAllUserSessions } from "@/lib/auth-sessions";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
@@ -70,11 +71,18 @@ export async function PATCH(
       );
     }
 
+    let passwordChanged = false;
     if (password) {
       const { error } = await admin.auth.admin.updateUserById(id, { password });
       if (error) {
         return errorResponse("VALIDATION_ERROR", "Нууц үг шинэчлэхэд алдаа гарлаа.", 400, error.message);
       }
+      // GoTrue already logs out on password change; revoke again for defense-in-depth.
+      const revoked = await revokeAllUserSessions(admin, id);
+      if (revoked.error) {
+        console.warn("admin_revoke_user_sessions:", revoked.error);
+      }
+      passwordChanged = true;
     }
 
     const hasProfileFields =
@@ -158,7 +166,11 @@ export async function PATCH(
       }
     }
 
-    return successResponse({ id });
+    return successResponse({
+      id,
+      password_changed: passwordChanged,
+      logged_out_all_devices: passwordChanged,
+    });
   } catch (e) {
     return errorResponse("INTERNAL_ERROR", "Системийн алдаа.", 500, e instanceof Error ? e.message : String(e));
   }

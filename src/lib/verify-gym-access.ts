@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAccessTokenSessionActive } from "@/lib/auth-sessions";
 import { createAdminClient } from "@/lib/supabase";
 import {
   getPermissionsForRole,
@@ -39,6 +40,15 @@ export async function verifyBearerUser(request: Request): Promise<VerifiedCaller
     return {
       ok: false,
       response: NextResponse.json({ error: "Нэвтрэх эсвэл token хүчингүй байна" }, { status: 401 }),
+    };
+  }
+  if (!(await isAccessTokenSessionActive(supabase, token))) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "Session хүчингүй болсон. Дахин нэвтэрнэ үү." },
+        { status: 401 },
+      ),
     };
   }
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();

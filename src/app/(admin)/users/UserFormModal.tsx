@@ -293,7 +293,7 @@ function DateField({ value, onChange }: { value: string; onChange: (v: string) =
 }
 
 export default function UserFormModal({ isOpen, onClose, profile, organizations, onOrganizationsRefresh, onSuccess }: Props) {
-  const { can } = useAuth();
+  const { can, user, signOut } = useAuth();
   const isCreate = !profile;
   const canEditSubscriptionDates = can("users.subscription.edit");
   const orgDropRef = useRef<HTMLDivElement>(null);
@@ -442,6 +442,13 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           }),
         });
         if (!res.ok) { setFormError(await parseApiError(res)); return; }
+        // Password change revokes all sessions — kick this browser if self.
+        if (password && profile!.id === user?.id) {
+          onSuccess();
+          onClose();
+          await signOut();
+          return;
+        }
       }
       onSuccess(); onClose();
     } finally { setLoading(false); }
@@ -583,7 +590,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                         </span>
                       )}
                     </div>
-                    <p className="mt-1.5 text-[10px] text-gray-400">Хоосон үлдээвэл одоогийн нууц үг хэвээр үлдэнэ.</p>
+                    <p className="mt-1.5 text-[10px] text-gray-400">
+                      Хоосон үлдээвэл одоогийн нууц үг хэвээр үлдэнэ. Соливол бүх төхөөрөмжөөс автоматаар гарна.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -681,6 +681,11 @@ export default function GymFormModal({
                       hasExistingOwner ? "Солих бол бичнэ үү" : "123456"
                     }
                   />
+                  {hasExistingOwner && (
+                    <p className="mt-1.5 text-[10px] text-gray-400">
+                      Нууц үг соливол эзэмшигч бүх төхөөрөмжөөс автоматаар гарна.
+                    </p>
+                  )}
                 </div>
                 {hasExistingOwner && gym && (
                   <p className="text-[11px] text-gray-400">

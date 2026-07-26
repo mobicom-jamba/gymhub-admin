@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabaseRef.current.auth.signOut();
+    await supabaseRef.current.auth.signOut({ scope: "global" });
     window.location.href = "/signin";
   };
 
