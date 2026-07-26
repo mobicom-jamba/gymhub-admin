@@ -8,7 +8,6 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type Settings = {
   early_membership_price_mnt: number;
-  early_first_month_price_mnt: number;
   early_remainder_price_mnt: number;
   premium_membership_price_mnt: number;
   smart1_price_mnt: number;
@@ -34,7 +33,6 @@ export default function PaymentAppSettingsSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [earlyLegacy, setEarlyLegacy] = useState(480_000);
-  const [earlyFirst, setEarlyFirst] = useState(150_000);
   const [earlyRest, setEarlyRest] = useState(330_000);
   const [premium, setPremium] = useState(780_000);
   const [smart1, setSmart1] = useState(780_000);
@@ -68,7 +66,6 @@ export default function PaymentAppSettingsSection() {
       }
       const s = data.settings as Settings;
       setEarlyLegacy(s.early_membership_price_mnt);
-      setEarlyFirst(s.early_first_month_price_mnt);
       setEarlyRest(s.early_remainder_price_mnt);
       setPremium(s.premium_membership_price_mnt);
       setSmart1(s.smart1_price_mnt);
@@ -105,7 +102,6 @@ export default function PaymentAppSettingsSection() {
         headers,
         body: JSON.stringify({
           early_membership_price_mnt: earlyLegacy,
-          early_first_month_price_mnt: earlyFirst,
           early_remainder_price_mnt: earlyRest,
           premium_membership_price_mnt: premium,
           smart1_price_mnt: smart1,
@@ -137,80 +133,13 @@ export default function PaymentAppSettingsSection() {
   return (
     <ComponentCard
       title="Төлбөр ба гишүүнчлэлийн үнэ"
-      subtitle="Standard (хуучин Early), Premium 1/2, GymCore — QPay · Sono · Pocket · Carepay · MonPay · Flexy"
+      subtitle="Standard · Premium 1/2 · GymCore — QPay · Sono · Pocket · Carepay · MonPay · Flexy"
       desc="Өөрчлөлт нь шууд /api/payment/health болон төлбөрийн API-д тусгагдана. Supabase дээр хүснэгт байхгүй бол эхлээд sql/payment_app_settings.sql ажиллуулна уу."
     >
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Ачаалж байна…</p>
       ) : (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Standard — хуваагдсан төлбөр (хуучин Early)
-              </p>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Эхний 1 сар (₮)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={999_999_999}
-                value={earlyFirst}
-                onChange={(e) => setEarlyFirst(Number(e.target.value) || 0)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(earlyFirst)}</p>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Үлдсэн 11 сар (₮)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={999_999_999}
-                value={earlyRest}
-                onChange={(e) => setEarlyRest(Number(e.target.value) || 0)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(earlyRest)}</p>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Нэг дор Standard (legacy Early, ₮)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={999_999_999}
-                value={earlyLegacy}
-                onChange={(e) => setEarlyLegacy(Number(e.target.value) || 0)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
-              <p className="mt-1 text-xs text-gray-400">
-                Хуучин нэхэмжлэл <code className="rounded bg-gray-100 px-1 dark:bg-white/10">membership-early-…</code>
-              </p>
-            </div>
-            <div className="sm:col-span-2 lg:col-span-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Premium 2 (₮)
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={999_999_999}
-                value={premium}
-                onChange={(e) => setPremium(Number(e.target.value) || 0)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-              />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium)}</p>
-              <p className="mt-0.5 text-xs text-gray-400">Хуучин Smart-2 — Fitness + Иога</p>
-            </div>
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="sm:col-span-2 lg:col-span-3">
               <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -229,7 +158,7 @@ export default function PaymentAppSettingsSection() {
                 onChange={(e) => setSmart1(Number(e.target.value) || 0)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(smart1)} — Fitness 1 жил + Бассейн 3 сар (хуучин Smart-1)</p>
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(smart1)} — Fitness 1 жил + Бассейн 3 сар</p>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -247,6 +176,20 @@ export default function PaymentAppSettingsSection() {
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Premium 2 (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={premium}
+                onChange={(e) => setPremium(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium)} — Fitness + Иога</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 GymCore (₮)
               </label>
               <input
@@ -257,7 +200,39 @@ export default function PaymentAppSettingsSection() {
                 onChange={(e) => setPremium4(Number(e.target.value) || 0)}
                 className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
               />
-              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium4)} — Бүгд (Fitness+Бассейн+Иога, хуучин Premium-4)</p>
+              <p className="mt-1 text-xs text-gray-400">{formatMnt(premium4)} — Fitness + Бассейн + Иога</p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Legacy Early нэг дор (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={earlyLegacy}
+                onChange={(e) => setEarlyLegacy(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Хуучин нэхэмжлэл <code className="rounded bg-gray-100 px-1 dark:bg-white/10">membership-early-…</code>
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Үлдсэн 11 сар — хуучин хэрэглэгч (₮)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={999_999_999}
+                value={earlyRest}
+                onChange={(e) => setEarlyRest(Number(e.target.value) || 0)}
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                {formatMnt(earlyRest)} — зөвхөн эхний сараа төлсөн хүмүүст (шинэ 150k хаалттай)
+              </p>
             </div>
           </div>
 

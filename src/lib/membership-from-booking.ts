@@ -47,17 +47,25 @@ export function canonicalStoredTier(bookingTier: string): string {
 export function parseMembershipBookingId(bookingId: string): ParsedMembershipBooking | null {
   if (!bookingId.startsWith("membership-")) return null;
   const parts = bookingId.split("-");
+  // Хуучин эхний сар / үлдэгдэл (шинэ 150k зарахгүй; үлдэгдэл төлбөр үлдэнэ)
   if (parts.length >= 4 && parts[1] === "early" && parts[2] === "first") {
     return { kind: "early_first" };
   }
   if (parts.length >= 4 && parts[1] === "early" && parts[2] === "rest") {
     return { kind: "early_rest" };
   }
+  // Legacy full-year Early (membership-early-<ts>) → шинэ Standard 6 сар
+  if (parts.length === 3 && parts[1] === "early" && /^\d+$/.test(parts[2] ?? "")) {
+    return { kind: "annual_from_payment", tier: "standard3" };
+  }
   const tier = parts[1];
-  if (tier === "early" || tier === "premium") {
+  if (tier === "early") {
+    return { kind: "annual_from_payment", tier: "standard3" };
+  }
+  if (tier === "premium") {
     return { kind: "annual_from_payment", tier };
   }
-  return { kind: "annual_from_payment", tier: tier || "early" };
+  return { kind: "annual_from_payment", tier: tier || "standard3" };
 }
 
 function addCalendarMonths(from: Date, months: number): Date {
@@ -76,7 +84,7 @@ function addCalendarYears(from: Date, years: number): Date {
 
 /**
  * Төлбөр баталгаажсаны дараах profiles шинэчлэлт.
- * early_rest: дуусах = анхны эхний сар эхэлсэн огноос +1 жил (төлсөн цагаас биш).
+ * early_rest: дуусах = анхны эхний сар эхэлсэн огноос +1 жил.
  */
 export function computeMembershipDatesAfterPayment(args: {
   bookingId: string;
@@ -121,7 +129,6 @@ export function computeMembershipDatesAfterPayment(args: {
       ? new Date(profile.membership_started_at)
       : now;
     return {
-      // Үлдсэн 11 сар төлөгдсөний дараа Early жилийн эрх (хуучин багц)
       membership_tier: "early",
       membership_status: "active",
       membership_started_at: anchor.toISOString(),
@@ -137,9 +144,9 @@ export function computeMembershipDatesAfterPayment(args: {
     }
   }
 
-  // Standard / standard3 — 6 сарын эрх; Early (legacy) + Premium 1/2 + GymCore — 1 жил.
+  // Standard / standard3 / legacy early full-year → 6 сар; Premium 1/2 + GymCore → 1 жил.
   const expiresAt =
-    parsed.tier === "standard3" || parsed.tier === "standard"
+    parsed.tier === "standard3" || parsed.tier === "standard" || parsed.tier === "early"
       ? addCalendarMonths(baseDate, 6)
       : addCalendarYears(baseDate, 1);
 

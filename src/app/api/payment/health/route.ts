@@ -210,10 +210,9 @@ export async function GET() {
       gymfintech,
     },
     membership_prices: {
-      early_mnt:
-        settings.early_first_month_price_mnt + settings.early_remainder_price_mnt,
+      early_mnt: settings.early_membership_price_mnt,
       early_legacy_full_mnt: settings.early_membership_price_mnt,
-      early_first_month_mnt: settings.early_first_month_price_mnt,
+      // Хуучин эхний сар төлсөн хэрэглэгчдийн үлдэгдэл (шинэ 150k зарахгүй)
       early_remainder_mnt: settings.early_remainder_price_mnt,
       premium_mnt: settings.premium_membership_price_mnt,
       smart1_mnt: settings.smart1_price_mnt,

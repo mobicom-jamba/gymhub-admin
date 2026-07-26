@@ -14,11 +14,6 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
     if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
     out.early_membership_price_mnt = Math.floor(n);
   }
-  if ("early_first_month_price_mnt" in o) {
-    const n = Number(o.early_first_month_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.early_first_month_price_mnt = Math.floor(n);
-  }
   if ("early_remainder_price_mnt" in o) {
     const n = Number(o.early_remainder_price_mnt);
     if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;

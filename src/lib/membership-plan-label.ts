@@ -160,7 +160,7 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
       isApproximatelyEarlyFirstSegmentOnly(snap)
     ) {
       return {
-        title: "Early — эхний сар төлсөн, үлдсэн 11 сарын төлбөр төлөх шаардлагатай",
+        title: "Early — эхний сар төлсөн, үлдсэн 11 сарын төлбөр төлөх боломжтой",
         shortLabel: "Early · 1 сар",
         variant: "early_rest_due",
       };
