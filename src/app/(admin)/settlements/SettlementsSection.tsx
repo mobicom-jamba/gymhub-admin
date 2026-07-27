@@ -485,7 +485,7 @@ export default function SettlementsSection() {
             idx + 1,
             r.name ?? "",
             cityLabel(r.city),
-            r.type === "yoga" ? "Йога" : "Фитнес",
+            r.type === "yoga" ? "Йога" : r.type === "pool" ? "Бассейн" : "Фитнес",
             r.visit_count,
             modeLabel(r.billing_mode),
             r.unit_amount_mnt ?? "",
@@ -525,7 +525,7 @@ export default function SettlementsSection() {
             idx + 1,
             r.name ?? "",
             cityLabel(r.city),
-            r.type === "yoga" ? "Йога" : "Фитнес",
+            r.type === "yoga" ? "Йога" : r.type === "pool" ? "Бассейн" : "Фитнес",
             r.visit_count,
             modeLabel(r.billing_mode),
             r.unit_amount_mnt ?? "",
@@ -809,7 +809,11 @@ export default function SettlementsSection() {
                             </div>
                             <div className="text-[11px] text-gray-400">
                               {cityLabel(row.city)}
-                              {row.type === "yoga" ? " · йога" : ""}
+                              {row.type === "yoga"
+                                ? " · йога"
+                                : row.type === "pool"
+                                  ? " · бассейн"
+                                  : ""}
                               {!row.is_active ? " · идэвхгүй" : ""}
                             </div>
                           </div>

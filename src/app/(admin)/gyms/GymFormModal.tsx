@@ -380,7 +380,11 @@ export default function GymFormModal({
       <div className="p-6">
         <h3 className="mb-4 text-lg font-semibold text-gray-800 dark:text-white/90">
           {gym ? t("edit") : t("add")}{" "}
-          {defaultType === "yoga" ? "Йога төвүүд" : t("gyms")}
+          {defaultType === "yoga"
+            ? "Йога төвүүд"
+            : defaultType === "pool"
+              ? "Бассейн"
+              : t("gyms")}
         </h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <FormError message={error} />
@@ -390,7 +394,11 @@ export default function GymFormModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={
-                defaultType === "yoga" ? "Йога төвийн нэр" : "Фитнес төвийн нэр"
+                defaultType === "yoga"
+                  ? "Йога төвийн нэр"
+                  : defaultType === "pool"
+                    ? "Бассейны нэр"
+                    : "Фитнес төвийн нэр"
               }
             />
           </div>

@@ -1,4 +1,5 @@
 export const dynamic = "force-dynamic";
+import { Suspense } from "react";
 import PageBreadcrumb from "@/components/common/PageBreadCrumb";
 import { t } from "@/lib/i18n";
 import { Metadata } from "next";
@@ -14,7 +15,15 @@ export default function GymsPage() {
     <div>
       <PageBreadcrumb pageTitle={t("gyms")} />
       <div className="space-y-6">
-        <GymsSection />
+        <Suspense
+          fallback={
+            <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500 dark:border-gray-800 dark:bg-white/[0.03]">
+              {t("loading")}
+            </div>
+          }
+        >
+          <GymsSection />
+        </Suspense>
       </div>
     </div>
   );
