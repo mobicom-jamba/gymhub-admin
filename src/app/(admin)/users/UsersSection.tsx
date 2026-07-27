@@ -97,7 +97,8 @@ function isMembershipExpired(expiresAt: string | null): boolean {
   return new Date(expiresAt) < new Date();
 }
 
-function profileStatus(p: Profile): "active" | "expired" | "inactive" {
+function profileStatus(p: Profile): "active" | "expired" | "inactive" | "paused" {
+  if (p.membership_status === "paused") return "paused";
   if (p.membership_status === "inactive") return "inactive";
   if (isMembershipExpired(p.membership_expires_at)) return "expired";
   if (p.membership_status === "expired") return "expired";
@@ -218,6 +219,8 @@ function usersTabLabel(tab: UsersRoleTab): string {
 export default function UsersSection() {
   const { can } = useAuth();
   const canManageUsers = can("users.manage");
+  // Зөвхөн модератор — админ UserFormModal-оор солино, шинэ reset товч харагдахгүй
+  const canResetPassword = can("users.password.reset") && !canManageUsers;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -234,6 +237,8 @@ export default function UsersSection() {
   const [confirmBulk, setConfirmBulk] = useState(false);
   const [confirmResetCheckin, setConfirmResetCheckin] = useState<{ id: string; name: string } | null>(null);
   const [resettingCheckin, setResettingCheckin] = useState(false);
+  const [confirmResetPassword, setConfirmResetPassword] = useState<{ id: string; name: string } | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
     member: true, phone: true, organization: true, tier: true, paymentChannel: true, agreement: true, startDate: true, expireDate: true,
@@ -869,6 +874,36 @@ export default function UsersSection() {
     }
   };
 
+  const handleResetPasswordConfirm = async () => {
+    if (!confirmResetPassword) return;
+    const { id, name } = confirmResetPassword;
+    setResettingPassword(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/admin/users/${id}/reset-password`, {
+        method: "POST",
+        headers,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        password?: string;
+        data?: { password?: string };
+      };
+      if (!res.ok) {
+        toast.show(toMnErrorMessage(data.message || data.error || ""), "error");
+        return;
+      }
+      const newPass = data.data?.password ?? data.password ?? "123456";
+      toast.show(
+        `«${name}»-ийн нууц үг ${newPass} боллоо. Бүх төхөөрөмжөөс гарна.`,
+      );
+    } finally {
+      setResettingPassword(false);
+      setConfirmResetPassword(null);
+    }
+  };
+
   const handleBulkDeleteConfirmed = async () => {
     if (selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
@@ -930,7 +965,9 @@ export default function UsersSection() {
           label: `Төлөв: ${
             statusFilter === "active"
               ? "Идэвхтэй"
-              : statusFilter === "inactive"
+              : statusFilter === "paused"
+                ? "Түдгэлзүүлсэн"
+                : statusFilter === "inactive"
                   ? "Идэвхгүй"
                   : "Дууссан"
           }`,
@@ -1004,7 +1041,8 @@ export default function UsersSection() {
               {([
                 ["", "Бүгд"],
                 ["active", "✅ Идэвх"],
-                ["inactive", "⏸ Идэвхгүй"],
+                ["paused", "⏸ Түдгэлзүүлсэн"],
+                ["inactive", "Идэвхгүй"],
                 ["expired", "⛔ Дууссан"],
               ] as const).map(([v, label]) => (
                 <button key={v} type="button"
@@ -1012,6 +1050,7 @@ export default function UsersSection() {
                   className={`h-8 rounded-lg px-3 text-xs font-medium transition-all ${
                     statusFilter === v
                       ? v === "active" ? "bg-emerald-500 text-white shadow-sm"
+                        : v === "paused" ? "bg-orange-500 text-white shadow-sm"
                         : v === "inactive" ? "bg-amber-500 text-white shadow-sm"
                         : v === "expired" ? "bg-red-500 text-white shadow-sm"
                         : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
@@ -1205,6 +1244,11 @@ export default function UsersSection() {
               ? (p) => setConfirmResetCheckin({ id: p.id, name: profileDisplayName(p) })
               : undefined
           }
+          onResetPassword={
+            canResetPassword && tab === "user"
+              ? (p) => setConfirmResetPassword({ id: p.id, name: profileDisplayName(p) })
+              : undefined
+          }
           selectedIds={canManageUsers ? selectedIds : undefined}
           onToggleSelect={canManageUsers ? toggleSelect : undefined}
           onToggleSelectAll={canManageUsers ? toggleSelectAll : undefined}
@@ -1333,6 +1377,21 @@ export default function UsersSection() {
         onConfirm={handleResetCheckinConfirm}
         onCancel={() => !resettingCheckin && setConfirmResetCheckin(null)}
         loading={resettingCheckin}
+      />
+
+      <ConfirmModal
+        isOpen={confirmResetPassword !== null}
+        title="Нууц үг шинэчлэх үү?"
+        message={
+          confirmResetPassword
+            ? `«${confirmResetPassword.name}»-ийн нууц үгийг 123456 болгоно. Бүх төхөөрөмжөөс автоматаар гарна.`
+            : undefined
+        }
+        confirmLabel={resettingPassword ? "Түр хүлээнэ үү..." : "123456 болгох"}
+        onConfirm={handleResetPasswordConfirm}
+        onCancel={() => !resettingPassword && setConfirmResetPassword(null)}
+        loading={resettingPassword}
+        variant="warning"
       />
     </>
   );

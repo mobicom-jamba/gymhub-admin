@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
+import { resumeMembershipAfterFlexyPayment } from "@/lib/flexy-membership-pause";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 
@@ -60,6 +61,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           });
         } catch (e) {
           console.error("Admin mark-paid membership activation failed:", e);
+        }
+      } else if (plan && installment.installment_no > 1) {
+        try {
+          membershipActivated = await resumeMembershipAfterFlexyPayment(
+            admin,
+            plan.user_id,
+          );
+        } catch (e) {
+          console.error("Admin mark-paid membership resume failed:", e);
         }
       }
 

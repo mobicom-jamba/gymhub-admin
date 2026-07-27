@@ -4,6 +4,7 @@ export type AppPermission =
   | "admin.app.access"
   | "users.view"
   | "users.manage"
+  | "users.password.reset"
   | "users.role.assign"
   | "users.subscription.edit"
   | "organizations.view"
@@ -24,6 +25,7 @@ const ALL_PERMISSIONS: AppPermission[] = [
   "admin.app.access",
   "users.view",
   "users.manage",
+  "users.password.reset",
   "users.role.assign",
   "users.subscription.edit",
   "organizations.view",
@@ -43,7 +45,7 @@ const ALL_PERMISSIONS: AppPermission[] = [
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
   admin: ALL_PERMISSIONS,
-  // Moderators: view-only for users + organizations (no create/edit/delete).
+  // Moderators: view-only for users + organizations, but can reset password.
   moderator: ALL_PERMISSIONS.filter(
     (permission) =>
       permission !== "users.manage" &&

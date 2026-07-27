@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { QPayError, checkQpayInvoice } from "@/lib/qpay-client";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
+import { resumeMembershipAfterFlexyPayment } from "@/lib/flexy-membership-pause";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
 
 export async function POST(request: Request) {
@@ -56,8 +57,9 @@ export async function POST(request: Request) {
           .eq("plan_id", plan_id)
           .eq("installment_no", installment_no);
 
+        const uid = user_id || plan.user_id;
+
         if (installment_no === 1) {
-          const uid = user_id || plan.user_id;
           try {
             membershipActivated = await applyMembershipActivationForPaidBooking(supabase, {
               userId: uid,
@@ -74,6 +76,14 @@ export async function POST(request: Request) {
             });
           } catch (e) {
             console.error("Flexy membership activation failed:", e);
+          }
+        } else {
+          // 2+ хуваарь: overdue-оос pause хийсэн бол төлсний дараа дахин нээнэ
+          try {
+            const resumed = await resumeMembershipAfterFlexyPayment(supabase, uid);
+            if (resumed) membershipActivated = true;
+          } catch (e) {
+            console.error("Flexy membership resume failed:", e);
           }
         }
 

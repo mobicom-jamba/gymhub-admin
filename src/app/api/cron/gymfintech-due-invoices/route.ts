@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import { pauseMembershipsForOverdueFlexy } from "@/lib/flexy-membership-pause";
 import { normalizeQpayBankUrls } from "@/lib/qpay-bank-urls";
 import { buildSenderInvoiceNo, createQpayInvoice } from "@/lib/qpay-client";
 
@@ -9,7 +10,7 @@ const LEAD_DAYS = 2;
 /**
  * Vercel Cron: GymFinTech-ийн удахгүй болон хугацаа хэтэрсэн хуваарьт төлбөрийг боловсруулна.
  * - due_date <= now+2d, invoice үүсээгүй бол QPay нэхэмжлэл урьдчилан үүсгэнэ.
- * - due_date < today, төлөгдөөгүй бол 'overdue' гэж тэмдэглэнэ (админд харагдана, membership хаахгүй).
+ * - due_date < today, төлөгдөөгүй бол 'overdue' + membership_status='paused'.
  */
 export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
   const todayStr = now.toISOString().slice(0, 10);
   const leadDate = new Date(now.getTime() + LEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
 
-  const results = { invoiced: 0, overdue: 0, errors: [] as string[] };
+  const results = { invoiced: 0, overdue: 0, paused: 0, errors: [] as string[] };
 
   const { data: due } = await supabase
     .from("installment_payments")
@@ -79,6 +80,14 @@ export async function GET(request: Request) {
 
   if (!overdueErr) {
     results.overdue = overdueRows?.length ?? 0;
+  }
+
+  try {
+    results.paused = await pauseMembershipsForOverdueFlexy(supabase);
+  } catch (e) {
+    results.errors.push(
+      `pause: ${e instanceof Error ? e.message : "unknown"}`,
+    );
   }
 
   return NextResponse.json({ ok: true, ...results });

@@ -59,6 +59,12 @@ export function getMembershipPaymentBadge(status: string | null | undefined): {
       className: "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200",
     };
   }
+  if (s === "paused") {
+    return {
+      label: "Түдгэлзүүлсэн",
+      className: "bg-orange-100 text-orange-900 dark:bg-orange-900/30 dark:text-orange-200",
+    };
+  }
   return {
     label: "Төлөөгүй",
     className:

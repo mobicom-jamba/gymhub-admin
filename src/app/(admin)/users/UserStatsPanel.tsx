@@ -20,9 +20,22 @@ type MonthRow = {
   days: number;       // өвөрмөц өдрийн тоо
 };
 
+type GymRow = {
+  name: string;
+  visits: number;
+  imageUrl: string | null;
+};
+
 type VisitRow = {
   checked_in_at: string;
   gym_name: string | null;
+};
+
+type ByGymApiRow = {
+  gym_id: string | null;
+  gym_name: string;
+  gym_image_url: string | null;
+  visits: number;
 };
 
 function toMnMonthLabel(yearMonth: string): string {
@@ -53,6 +66,17 @@ function buildMonthRows(rows: VisitRow[]): MonthRow[] {
       visits,
       days: daySet.size,
     }));
+}
+
+function buildGymRows(rows: VisitRow[]): GymRow[] {
+  const map = new Map<string, number>();
+  for (const r of rows) {
+    const name = (r.gym_name ?? "").trim() || "Тодорхойгүй";
+    map.set(name, (map.get(name) ?? 0) + 1);
+  }
+  return Array.from(map.entries())
+    .map(([name, visits]) => ({ name, visits, imageUrl: null as string | null }))
+    .sort((a, b) => b.visits - a.visits || a.name.localeCompare(b.name, "mn"));
 }
 
 function countUniqueDays(rows: VisitRow[]): number {
@@ -117,8 +141,10 @@ export default function UserStatsPanel({
   onClose: () => void;
 }) {
   const [monthRows, setMonthRows] = useState<MonthRow[]>([]);
+  const [gymRows, setGymRows] = useState<GymRow[]>([]);
   const [uniqueDays, setUniqueDays] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   // ESC хаах
   useEffect(() => {
@@ -128,11 +154,18 @@ export default function UserStatsPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [profile, onClose]);
 
-  // Профайл солигдоход сарын дэлгэрэнгүйг fetch хий (admin API — RLS bypass)
+  // Профайл солигдоход ирцийн дэлгэрэнгүйг fetch хий
   useEffect(() => {
-    if (!profile) { setMonthRows([]); setUniqueDays(0); return; }
+    if (!profile) {
+      setMonthRows([]);
+      setGymRows([]);
+      setUniqueDays(0);
+      setDetailError(null);
+      return;
+    }
     let cancelled = false;
     setDetailLoading(true);
+    setDetailError(null);
     getAuthHeader().then(async (authHeader) => {
       try {
         const res = await fetch(
@@ -141,11 +174,33 @@ export default function UserStatsPanel({
         );
         if (cancelled) return;
         const json = await res.json();
+        if (!res.ok) {
+          setMonthRows([]);
+          setGymRows([]);
+          setUniqueDays(0);
+          setDetailError(json.error || "Ирц ачаалахад алдаа");
+          return;
+        }
         const rows = (json.visits ?? []) as VisitRow[];
+        const byGym = (json.by_gym ?? []) as ByGymApiRow[];
         setMonthRows(buildMonthRows(rows));
+        setGymRows(
+          byGym.length > 0
+            ? byGym.map((g) => ({
+                name: g.gym_name,
+                visits: g.visits,
+                imageUrl: g.gym_image_url ?? null,
+              }))
+            : buildGymRows(rows),
+        );
         setUniqueDays(countUniqueDays(rows));
       } catch {
-        // чимээгүй алдаа — 0 үлдэнэ
+        if (!cancelled) {
+          setDetailError("Ирц ачаалахад алдаа");
+          setMonthRows([]);
+          setGymRows([]);
+          setUniqueDays(0);
+        }
       } finally {
         if (!cancelled) setDetailLoading(false);
       }
@@ -200,6 +255,66 @@ export default function UserStatsPanel({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
+
+          {/* ── Фитнес бүрийн ирц (дээр) ── */}
+          <section>
+            <h4 className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+              Аль фитнест хэд удаа
+            </h4>
+
+            {detailLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-12 animate-pulse rounded-xl bg-gray-100 dark:bg-white/5" />
+                ))}
+              </div>
+            ) : detailError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 py-4 text-center text-sm text-red-600 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-400">
+                {detailError}
+              </div>
+            ) : gymRows.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-gray-200 py-6 text-center text-sm text-gray-400 dark:border-white/6 dark:text-gray-500">
+                Энэ хэрэглэгч одоогоор ямар ч фитнест ороогүй
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 dark:divide-white/6 dark:border-white/8">
+                {gymRows.map((row, idx) => (
+                  <li
+                    key={`${row.name}-${idx}`}
+                    className="flex items-center justify-between gap-3 bg-white px-4 py-3 dark:bg-white/[0.02]"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      {row.imageUrl ? (
+                        <img
+                          src={row.imageUrl}
+                          alt=""
+                          className="h-9 w-9 shrink-0 rounded-lg border border-gray-100 object-cover dark:border-white/10"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                            if (fallback) fallback.classList.remove("hidden");
+                          }}
+                        />
+                      ) : null}
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-xs font-bold tabular-nums text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 ${
+                          row.imageUrl ? "hidden" : ""
+                        }`}
+                      >
+                        {(row.name.trim().charAt(0) || "?").toUpperCase()}
+                      </span>
+                      <span className="truncate text-sm font-medium text-gray-800 dark:text-white/90">
+                        {row.name}
+                      </span>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-bold tabular-nums text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                      {row.visits} удаа
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           {/* ── Нийт статистик ── */}
           <section>

@@ -106,6 +106,7 @@ export default function UsersTable({
   onEdit,
   onDelete,
   onResetDailyCheckin,
+  onResetPassword,
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
@@ -129,6 +130,8 @@ export default function UsersTable({
   onDelete?: (profileId: string) => void;
   /** Гишүүдийн өнөөдрийн ирц (өдөрт 1 орох) цэвэрлэх — зөвхөн админ хэрэглээ */
   onResetDailyCheckin?: (profile: Profile) => void;
+  /** Нууц үгийг 123456 болгох (модератор + админ) */
+  onResetPassword?: (profile: Profile) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onToggleSelectAll?: () => void;
@@ -430,7 +433,7 @@ export default function UsersTable({
                     </TableCell>
                   )}
 
-                  {(onEdit || onDelete || onResetDailyCheckin || onNoteClick) && (
+                  {(onEdit || onDelete || onResetDailyCheckin || onResetPassword || onNoteClick) && (
                     <TableCell className={`px-4 ${py} text-end`}>
                       <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
                         {onNoteClick && (() => {
@@ -471,6 +474,18 @@ export default function UsersTable({
                           >
                             <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </button>
+                        )}
+                        {onResetPassword && (
+                          <button
+                            type="button"
+                            onClick={() => onResetPassword(p)}
+                            className="rounded-xl p-2 text-sky-500 hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-900/25 dark:text-sky-400 dark:hover:text-sky-300"
+                            title="Нууц үг 123456 болгох"
+                          >
+                            <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.743 5.743L11.743 17.25H8.25v-3.493l5.257-5.257A6 6 0 0121.75 8.25zM4.5 19.5h6.75" />
                             </svg>
                           </button>
                         )}

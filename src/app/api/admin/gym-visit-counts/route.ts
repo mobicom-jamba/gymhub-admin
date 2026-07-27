@@ -1,17 +1,22 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 /**
  * GET /api/admin/gym-visit-counts?since=<ISO>
- * Returns visit counts per gym_id since the given timestamp (admin only).
+ * Returns visit counts per gym_id since the given timestamp.
  */
 export async function GET(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!auth.isAdmin) {
-      return NextResponse.json({ error: "Зөвхөн админ эрхтэй." }, { status: 403 });
+    const canView =
+      auth.isAdmin ||
+      hasPermission(auth.permissions, "gyms.view") ||
+      hasPermission(auth.permissions, "fitness.activity.view");
+    if (!canView) {
+      return NextResponse.json({ error: "Эрх хүрэлцэхгүй." }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
