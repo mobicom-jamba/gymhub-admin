@@ -140,7 +140,18 @@ export function computeMembershipDatesAfterPayment(args: {
   if (profile.membership_expires_at) {
     const currentExpiry = new Date(profile.membership_expires_at);
     if (currentExpiry > now && profile.membership_status === "active") {
-      baseDate = currentExpiry;
+      // Client+server race: web/app аль хэдийн +6 сар тавьсан бол дахин stack хийхгүй.
+      // (шинэ төлбөрөөр 12 сар болж байсан)
+      const startedMs = profile.membership_started_at
+        ? new Date(profile.membership_started_at).getTime()
+        : NaN;
+      const isStandard =
+        parsed.tier === "standard3" || parsed.tier === "standard" || parsed.tier === "early";
+      const recentStart =
+        Number.isFinite(startedMs) && Math.abs(now.getTime() - startedMs) < 15 * 60 * 1000;
+      if (!(isStandard && recentStart)) {
+        baseDate = currentExpiry;
+      }
     }
   }
 

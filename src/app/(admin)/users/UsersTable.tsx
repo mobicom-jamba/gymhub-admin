@@ -23,6 +23,31 @@ import {
 import { EMPTY_VISIT_STATS, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UserSalesNote } from "./UserNoteModal";
 
+/** Client-safe: membership-from-booking pulls firebase-admin — do not import it here. */
+function paidDayTierOverride(bookingId: string | undefined): {
+  shortLabel: string;
+  title: string;
+  variant: "early_rest_due" | "early_month";
+} | null {
+  if (!bookingId?.startsWith("membership-")) return null;
+  const parts = bookingId.split("-");
+  if (parts.length >= 4 && parts[1] === "early" && parts[2] === "rest") {
+    return {
+      shortLabel: "Early 11 сар үлдэгдэл",
+      title: "Early — үлдсэн 11 сарын төлбөр",
+      variant: "early_rest_due",
+    };
+  }
+  if (parts.length >= 4 && parts[1] === "early" && parts[2] === "first") {
+    return {
+      shortLabel: "Early · 1 сар",
+      title: "Early — эхний сарын төлбөр",
+      variant: "early_month",
+    };
+  }
+  return null;
+}
+
 function formatVisitDate(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -117,6 +142,7 @@ export default function UsersTable({
   statsMap,
   statsLoading,
   paymentChannelByUser,
+  paidBookingIdByUser,
   onRowClick,
   notesMap,
   onNoteClick,
@@ -144,6 +170,8 @@ export default function UsersTable({
   statsLoading?: boolean;
   /** Latest paid booking payment_channel keyed by profile id. */
   paymentChannelByUser?: Record<string, string>;
+  /** Төлбөрийн өдөр шүүлт: тухайн өдрийн booking id (Early үлдэгдэл label). */
+  paidBookingIdByUser?: Record<string, string>;
   /** Open the per-user stats detail panel. */
   onRowClick?: (profile: Profile) => void;
   /** Sales call notes map keyed by profile id. */
@@ -304,6 +332,17 @@ export default function UsersTable({
 
                   {(visibleColumns?.tier ?? true) && <TableCell className={`px-4 ${py}`}>
                     {(() => {
+                      const override = paidDayTierOverride(paidBookingIdByUser?.[p.id]);
+                      if (override) {
+                        return (
+                          <span
+                            title={override.title}
+                            className={`inline-flex max-w-full items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold leading-tight ${membershipPlanBadgeClass(override.variant)}`}
+                          >
+                            <span className="truncate">{override.shortLabel}</span>
+                          </span>
+                        );
+                      }
                       const plan = getMembershipPlanVisual({
                         membership_tier: p.membership_tier,
                         membership_started_at: p.membership_started_at,

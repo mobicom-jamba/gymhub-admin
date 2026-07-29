@@ -616,6 +616,16 @@ export default function UsersSection() {
     return map;
   }, [paidBookings]);
 
+  /** Төлбөрийн өдөр шүүлт: тухайн өдрийн booking id (Early үлдэгдэл гэх мэт label-д). */
+  const paidBookingIdByUser = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const booking of paidBookings) {
+      if (!booking.user_id || !booking.id || map[booking.user_id]) continue;
+      map[booking.user_id] = booking.id;
+    }
+    return map;
+  }, [paidBookings]);
+
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
       if ((p.role ?? "user") !== tab) return false;
@@ -1259,6 +1269,7 @@ export default function UsersSection() {
           statsMap={statsMap ?? undefined}
           statsLoading={statsLoading}
           paymentChannelByUser={paymentChannelByUser}
+          paidBookingIdByUser={paidOnDate ? paidBookingIdByUser : undefined}
           onRowClick={(p) => setPanelProfile(p)}
           notesMap={notesMap}
           onNoteClick={(p) => setNoteProfile(p)}
