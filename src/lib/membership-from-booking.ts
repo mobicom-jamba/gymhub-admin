@@ -206,9 +206,9 @@ async function releaseMembershipBooking(supabase: SupabaseClient, bookingId: str
 /** Төлбөр баталгаажсаны дараа profile шинэчлэх (алдаа гарвал дотроо log, throw хийхгүй) */
 export async function applyMembershipActivationForPaidBooking(
   supabase: SupabaseClient,
-  params: { userId: string; bookingId: string },
+  params: { userId: string; bookingId: string; actorId?: string | null },
 ): Promise<boolean> {
-  const { userId, bookingId } = params;
+  const { userId, bookingId, actorId } = params;
   if (!bookingId.startsWith("membership-")) return false;
 
   // Idempotency: booking тус бүрт зөвхөн нэг л удаа идэвхжүүлнэ (давтагдсан төлбөр шалгалт хугацаа нэмэхгүй).
@@ -248,6 +248,28 @@ export async function applyMembershipActivationForPaidBooking(
     console.error("[membership-from-booking] profile update:", upErr.message);
     if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
     return false;
+  }
+
+  // Audit: booking + payment channel (+ админ гараар тэмдэглэсэн бол actor)
+  try {
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("payment_channel")
+      .eq("id", bookingId)
+      .maybeSingle();
+
+    const { attributeMembershipAudit } = await import("@/lib/membership-audit");
+    await attributeMembershipAudit(supabase, userId, {
+      actorId: actorId ?? null,
+      source: actorId ? "admin" : "payment",
+      bookingId,
+      paymentChannel: booking?.payment_channel ?? null,
+    });
+  } catch (e) {
+    console.warn(
+      "[membership-from-booking] audit enrich failed:",
+      e instanceof Error ? e.message : e,
+    );
   }
 
   // Fire-and-forget push — never block payment activation on FCM failures.

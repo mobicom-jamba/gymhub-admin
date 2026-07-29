@@ -50,7 +50,7 @@ export default function SignUpForm() {
           email,
           password,
           full_name: `${fname.trim()} ${lname.trim()}`,
-          role: "admin",
+          role: "user",
         }),
       });
 

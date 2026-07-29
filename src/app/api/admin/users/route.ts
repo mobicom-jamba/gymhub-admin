@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
+import { attributeMembershipAudit } from "@/lib/membership-audit";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
@@ -137,6 +138,7 @@ export async function POST(request: Request) {
           profileUpdateError.message,
         );
       }
+      await attributeMembershipAudit(admin, authData.user.id, auth.userId, "admin");
     }
     return successResponse({ id: authData.user?.id });
   } catch (e) {

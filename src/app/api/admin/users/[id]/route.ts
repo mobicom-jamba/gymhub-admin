@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
 import { revokeAllUserSessions } from "@/lib/auth-sessions";
+import { attributeMembershipAudit } from "@/lib/membership-audit";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
@@ -163,6 +164,10 @@ export async function PATCH(
           400,
           profileError.message,
         );
+      }
+
+      if (membershipTouched) {
+        await attributeMembershipAudit(admin, id, auth.userId, "admin");
       }
     }
 

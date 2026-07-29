@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { attributeMembershipAudit } from "@/lib/membership-audit";
 
 /**
  * Flexy хуваарьт төлбөр overdue үед гишүүнчлэлийг pause;
@@ -56,6 +57,14 @@ export async function pauseMembershipsForOverdueFlexy(
     console.warn("[flexy-pause] pause profiles:", upErr.message);
     return 0;
   }
+
+  for (const row of updated ?? []) {
+    await attributeMembershipAudit(supabase, row.id, {
+      source: "system",
+      paymentChannel: "gymfintech",
+    });
+  }
+
   return updated?.length ?? 0;
 }
 
@@ -66,6 +75,7 @@ export async function pauseMembershipsForOverdueFlexy(
 export async function resumeMembershipAfterFlexyPayment(
   supabase: SupabaseClient,
   userId: string,
+  opts?: { actorId?: string | null; bookingId?: string | null },
 ): Promise<boolean> {
   if (!userId) return false;
 
@@ -110,5 +120,13 @@ export async function resumeMembershipAfterFlexyPayment(
     console.warn("[flexy-pause] resume:", upErr.message);
     return false;
   }
+
+  await attributeMembershipAudit(supabase, userId, {
+    actorId: opts?.actorId ?? null,
+    source: opts?.actorId ? "admin" : "payment",
+    bookingId: opts?.bookingId ?? null,
+    paymentChannel: "gymfintech",
+  });
+
   return true;
 }

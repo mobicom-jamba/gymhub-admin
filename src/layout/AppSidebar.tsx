@@ -19,6 +19,8 @@ import {
   UserCircleIcon,
 } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
+import { canAccessAuditLog } from "@/lib/audit-log-access";
+import { hasPermission } from "@/lib/permissions";
 
 type NavItem = {
   name: string;
@@ -81,7 +83,10 @@ const navItems: NavItem[] = [
   {
     icon: <UserCircleIcon />,
     name: "Профайл",
-    path: "/profile",
+    subItems: [
+      { name: "Миний профайл", path: "/profile" },
+      { name: "Audit Log", path: "/profile/audit-log", new: true },
+    ],
   },
 ];
 
@@ -89,18 +94,32 @@ const othersItems: NavItem[] = [];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { can, role } = useAuth();
+  const { role, permissions, user } = useAuth();
   const pathname = usePathname();
-  const allowedNavItems = navItems.filter((item) => {
-    if (!item.path) return true;
-    if (item.path === "/users") return can("users.view");
-    if (item.path === "/organizations") return can("organizations.view");
-    if (item.path === "/gyms") return can("gyms.view");
-    if (item.path === "/settlements") return role === "admin";
-    if (item.path === "/coupons") return can("coupons.manage");
-    if (item.path === "/notifications") return can("users.manage");
-    return true;
-  });
+  const allowedNavItems = React.useMemo(
+    () =>
+      navItems
+        .map((item) => {
+          if (!item.subItems) return item;
+          const filteredSub = item.subItems.filter((sub) => {
+            if (sub.path === "/profile/audit-log") return canAccessAuditLog(user?.email);
+            return true;
+          });
+          return { ...item, subItems: filteredSub };
+        })
+        .filter((item) => {
+          if (item.subItems) return item.subItems.length > 0;
+          if (!item.path) return true;
+          if (item.path === "/users") return hasPermission(permissions, "users.view");
+          if (item.path === "/organizations") return hasPermission(permissions, "organizations.view");
+          if (item.path === "/gyms") return hasPermission(permissions, "gyms.view");
+          if (item.path === "/settlements") return role === "admin";
+          if (item.path === "/coupons") return hasPermission(permissions, "coupons.manage");
+          if (item.path === "/notifications") return hasPermission(permissions, "users.manage");
+          return true;
+        }),
+    [permissions, role, user?.email],
+  );
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -244,7 +263,7 @@ const AppSidebar: React.FC = () => {
     // Check if the current path matches any submenu item
     let submenuMatched = false;
     ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
+      const items = menuType === "main" ? allowedNavItems : othersItems;
       items.forEach((nav, index) => {
         if (nav.subItems) {
           nav.subItems.forEach((subItem) => {
@@ -264,7 +283,7 @@ const AppSidebar: React.FC = () => {
     if (!submenuMatched) {
       setOpenSubmenu(null);
     }
-  }, [pathname,isActive]);
+  }, [pathname, isActive, allowedNavItems]);
 
   useEffect(() => {
     // Set the height of the submenu items when the submenu is opened

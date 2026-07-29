@@ -54,6 +54,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           membershipActivated = await applyMembershipActivationForPaidBooking(admin, {
             userId: plan.user_id,
             bookingId: plan.booking_id,
+            actorId: auth.userId,
           });
           await recordSalesCommissionForPaidMembership(admin, {
             buyerUserId: plan.user_id,
@@ -67,6 +68,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           membershipActivated = await resumeMembershipAfterFlexyPayment(
             admin,
             plan.user_id,
+            { actorId: auth.userId, bookingId: plan.booking_id },
           );
         } catch (e) {
           console.error("Admin mark-paid membership resume failed:", e);

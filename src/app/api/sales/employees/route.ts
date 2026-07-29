@@ -85,6 +85,12 @@ export async function POST(request: Request) {
       if (profileUpdateError) {
         return NextResponse.json({ error: profileUpdateError.message }, { status: 500 });
       }
+
+      const { attributeMembershipAudit } = await import("@/lib/membership-audit");
+      await attributeMembershipAudit(admin, authData.user.id, {
+        actorId: auth.userId,
+        source: "admin",
+      });
     }
 
     return NextResponse.json({ success: true, id: authData.user?.id });

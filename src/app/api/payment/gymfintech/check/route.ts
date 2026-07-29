@@ -80,7 +80,9 @@ export async function POST(request: Request) {
         } else {
           // 2+ хуваарь: overdue-оос pause хийсэн бол төлсний дараа дахин нээнэ
           try {
-            const resumed = await resumeMembershipAfterFlexyPayment(supabase, uid);
+            const resumed = await resumeMembershipAfterFlexyPayment(supabase, uid, {
+              bookingId: plan.booking_id,
+            });
             if (resumed) membershipActivated = true;
           } catch (e) {
             console.error("Flexy membership resume failed:", e);

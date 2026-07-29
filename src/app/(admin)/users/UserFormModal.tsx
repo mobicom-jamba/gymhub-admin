@@ -325,7 +325,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [orgOpen, setOrgOpen]           = useState(false);
   const [quickCreateOrgOpen, setQuickCreateOrgOpen] = useState(false);
   const [tier, setTier]                 = useState("early");
-  const [membershipStatus, setMembershipStatus] = useState("active");
+  const [membershipStatus, setMembershipStatus] = useState("inactive");
   const [startedAt, setStartedAt]       = useState("");
   const [expiresAt, setExpiresAt]       = useState("");
   const [formError, setFormError]       = useState("");
@@ -355,7 +355,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         // Хуучин Early — DB-д early үлдээнэ (Standard руу бүү map)
         setTier(key === "early" ? "early" : key || "standard");
       }
-      setMembershipStatus(profile.membership_status ?? "active");
+      setMembershipStatus(profile.membership_status ?? "inactive");
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
       setExpiresAt(profile.membership_expires_at?.slice(0, 10) ?? "");
       setPassword("");
@@ -363,7 +363,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setPassword("123456");
       setOvog(""); setNer(""); setPhone(""); setRole("user");
       setOrganizationId("");
-      setOrganization(""); setTier("standard"); setMembershipStatus("active"); setStartedAt(""); setExpiresAt("");
+      setOrganization(""); setTier("standard"); setMembershipStatus("inactive"); setStartedAt(""); setExpiresAt("");
     }
     setOrgSearch(""); setOrgOpen(false); setFormError("");
   }, [isOpen, profile]);

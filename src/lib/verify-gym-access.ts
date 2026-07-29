@@ -13,6 +13,7 @@ export type VerifiedCaller =
   | {
       ok: true;
       userId: string;
+      email: string | null;
       role: AppRole;
       permissions: AppPermission[];
       isAdmin: boolean;
@@ -57,7 +58,16 @@ export async function verifyBearerUser(request: Request): Promise<VerifiedCaller
   const isAdmin = role === "admin";
   const isModerator = role === "moderator";
   const isSales = role === "sales";
-  return { ok: true, userId: user.id, role, permissions, isAdmin, isModerator, isSales };
+  return {
+    ok: true,
+    userId: user.id,
+    email: user.email ?? null,
+    role,
+    permissions,
+    isAdmin,
+    isModerator,
+    isSales,
+  };
 }
 
 /** Админ эсвэл тухайн фитнесийн owner/manager */
