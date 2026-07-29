@@ -57,6 +57,17 @@ type PaidBookingRow = {
   qpay_invoice_id?: string | null;
 };
 
+/** Early төлбөрийн төрөл: 150k эхний сар / 330k үлдэгдэл */
+type EarlyPaymentFilter = "" | "early_first" | "early_rest";
+
+function isEarlyFirstBookingId(id: string): boolean {
+  return id.startsWith("membership-early-first-");
+}
+
+function isEarlyRestBookingId(id: string): boolean {
+  return id.startsWith("membership-early-rest-");
+}
+
 function buildOrganizationOptions(
   tableOrganizations: OrganizationOption[],
   profileRows: Profile[],
@@ -257,6 +268,9 @@ export default function UsersSection() {
   const [paidBookingsLoading, setPaidBookingsLoading] = useState(false);
   const [paidBookingsError, setPaidBookingsError] = useState<string | null>(null);
   const [paymentChannelByUser, setPaymentChannelByUser] = useState<Record<string, string>>({});
+  const [earlyPaymentFilter, setEarlyPaymentFilter] = useState<EarlyPaymentFilter>("");
+  const [earlyPaymentUserIds, setEarlyPaymentUserIds] = useState<Set<string>>(new Set());
+  const [earlyPaymentLoading, setEarlyPaymentLoading] = useState(false);
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -465,10 +479,13 @@ export default function UsersSection() {
     const org = searchParams.get("org");
     const role = searchParams.get("role");
     const paidOn = searchParams.get("paidOn");
+    const earlyPay = searchParams.get("earlyPay");
     if (q) setSearch(q);
     if (status) setStatusFilter(status);
     if (org) setOrgFilter(org);
     if (paidOn) setPaidOnDate(paidOn);
+    if (earlyPay === "first") setEarlyPaymentFilter("early_first");
+    if (earlyPay === "rest") setEarlyPaymentFilter("early_rest");
     if (role === "user" || role === "admin" || role === "moderator" || role === "sales") setTab(role);
     initializedFromQuery.current = true;
   }, [searchParams]);
@@ -480,13 +497,16 @@ export default function UsersSection() {
     if (statusFilter) params.set("status", statusFilter); else params.delete("status");
     if (orgFilter) params.set("org", orgFilter); else params.delete("org");
     if (paidOnDate) params.set("paidOn", paidOnDate); else params.delete("paidOn");
+    if (earlyPaymentFilter === "early_first") params.set("earlyPay", "first");
+    else if (earlyPaymentFilter === "early_rest") params.set("earlyPay", "rest");
+    else params.delete("earlyPay");
     if (tab && tab !== "user") params.set("role", tab); else params.delete("role");
     params.delete("page");
     const next = params.toString();
     const current = searchParams.toString();
     if (next === current) return;
     router.replace(next ? `${pathname}?${next}` : pathname);
-  }, [search, statusFilter, orgFilter, paidOnDate, tab, pathname, router, searchParams]);
+  }, [search, statusFilter, orgFilter, paidOnDate, earlyPaymentFilter, tab, pathname, router, searchParams]);
 
   const organizations = useMemo(() => {
     const orgs = [...new Set(
@@ -626,10 +646,72 @@ export default function UsersSection() {
     return map;
   }, [paidBookings]);
 
+  /** Early 150k/330k: төлбөрийн өдөр сонгосон бол paidBookings-оос, үгүй бол API-аас. */
+  const earlyFilteredUserIds = useMemo(() => {
+    if (!earlyPaymentFilter) return null;
+    if (paidOnDate) {
+      const ids = new Set<string>();
+      const match =
+        earlyPaymentFilter === "early_first" ? isEarlyFirstBookingId : isEarlyRestBookingId;
+      for (const booking of paidBookings) {
+        if (booking.user_id && booking.id && match(booking.id)) {
+          ids.add(booking.user_id);
+        }
+      }
+      return ids;
+    }
+    return earlyPaymentUserIds;
+  }, [earlyPaymentFilter, paidOnDate, paidBookings, earlyPaymentUserIds]);
+
+  // Өдөргүй үед Early төлбөр төлсөн user_id-уудыг API-аас ачаална
+  useEffect(() => {
+    let cancelled = false;
+
+    if (tab !== "user" || !earlyPaymentFilter || paidOnDate) {
+      if (!earlyPaymentFilter) setEarlyPaymentUserIds(new Set());
+      setEarlyPaymentLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const load = async () => {
+      setEarlyPaymentLoading(true);
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers.Authorization = `Bearer ${session.access_token}`;
+        }
+        const res = await fetch(
+          `/api/admin/early-payments?kind=${earlyPaymentFilter}`,
+          { headers },
+        );
+        const json = (await res.json()) as { userIds?: string[]; error?: string };
+        if (!res.ok) throw new Error(json.error || "Early төлбөрийн жагсаалт ачаалахад алдаа.");
+        if (cancelled) return;
+        setEarlyPaymentUserIds(new Set(Array.isArray(json.userIds) ? json.userIds : []));
+      } catch {
+        if (!cancelled) setEarlyPaymentUserIds(new Set());
+      } finally {
+        if (!cancelled) setEarlyPaymentLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, earlyPaymentFilter, paidOnDate]);
+
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
       if ((p.role ?? "user") !== tab) return false;
       if (tab === "user" && paidOnDate && !paidUserIds.has(p.id)) return false;
+      if (tab === "user" && earlyFilteredUserIds && !earlyFilteredUserIds.has(p.id)) return false;
       const orgName = profileOrgName(p);
       if (orgFilter && orgName !== orgFilter) return false;
       if (statusFilter && profileStatus(p) !== statusFilter) return false;
@@ -645,7 +727,7 @@ export default function UsersSection() {
       }
       return true;
     });
-  }, [profiles, search, tab, orgFilter, statusFilter, paidOnDate, paidUserIds]);
+  }, [profiles, search, tab, orgFilter, statusFilter, paidOnDate, paidUserIds, earlyFilteredUserIds]);
 
   const sortedFilteredProfiles = useMemo(() => {
     if (!sortColumn) return filteredProfiles;
@@ -985,6 +1067,16 @@ export default function UsersSection() {
         }
       : null,
     orgFilter ? { key: "org", label: `Байгууллага: ${orgFilter}`, clear: () => setOrgFilter("") } : null,
+    earlyPaymentFilter
+      ? {
+          key: "earlyPay",
+          label:
+            earlyPaymentFilter === "early_first"
+              ? "Early 150k (эхний сар)"
+              : "Early 330k (үлдэгдэл)",
+          clear: () => setEarlyPaymentFilter(""),
+        }
+      : null,
   ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
 
   return (
@@ -1000,7 +1092,10 @@ export default function UsersSection() {
               key={r}
               onClick={() => {
                 setTab(r);
-                if (r !== "user") setPaidOnDate("");
+                if (r !== "user") {
+                  setPaidOnDate("");
+                  setEarlyPaymentFilter("");
+                }
                 setPage(1);
                 setPageSize(25);
                 setSelectedIds(new Set());
@@ -1131,9 +1226,63 @@ export default function UsersSection() {
               </div>
             )}
 
-            {(search || orgFilter || statusFilter || paidOnDate) && (
+            {tab === "user" && (
+              <div className={`flex items-center gap-1 rounded-xl border p-1 transition-all ${
+                earlyPaymentLoading
+                  ? "border-teal-300 bg-teal-50/70 dark:border-teal-700 dark:bg-teal-900/20"
+                  : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60"
+              }`}>
+                {([
+                  ["", "Бүгд"],
+                  ["early_first", "Early 150k"],
+                  ["early_rest", "Early 330k"],
+                ] as const).map(([v, label]) => (
+                  <button
+                    key={v || "all"}
+                    type="button"
+                    title={
+                      v === "early_first"
+                        ? "Early эхний сарын төлбөр (150k)"
+                        : v === "early_rest"
+                          ? "Early 11 сар үлдэгдэл (330k)"
+                          : "Early төлбөрийн шүүлтгүй"
+                    }
+                    onClick={() => {
+                      setEarlyPaymentFilter(v);
+                      setPage(1);
+                      setSelectedIds(new Set());
+                    }}
+                    disabled={earlyPaymentLoading}
+                    className={`h-8 rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-70 ${
+                      earlyPaymentFilter === v
+                        ? v === "early_first"
+                          ? "bg-teal-500 text-white shadow-sm"
+                          : v === "early_rest"
+                            ? "bg-sky-500 text-white shadow-sm"
+                            : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
+                        : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {earlyPaymentLoading && (
+                  <span className="mx-1 size-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+                )}
+              </div>
+            )}
+
+            {(search || orgFilter || statusFilter || paidOnDate || earlyPaymentFilter) && (
               <button
-                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); setPaidOnDate(""); setSelectedIds(new Set()); resetPage(); }}
+                onClick={() => {
+                  setSearch("");
+                  setOrgFilter("");
+                  setStatusFilter("");
+                  setPaidOnDate("");
+                  setEarlyPaymentFilter("");
+                  setSelectedIds(new Set());
+                  resetPage();
+                }}
                 className="h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-400 hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-gray-700 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
                 ✕ Цэвэрлэх
@@ -1217,7 +1366,15 @@ export default function UsersSection() {
                 </button>
               ))}
               <button
-                onClick={() => { setSearch(""); setOrgFilter(""); setStatusFilter(""); setPaidOnDate(""); setSelectedIds(new Set()); resetPage(); }}
+                onClick={() => {
+                  setSearch("");
+                  setOrgFilter("");
+                  setStatusFilter("");
+                  setPaidOnDate("");
+                  setEarlyPaymentFilter("");
+                  setSelectedIds(new Set());
+                  resetPage();
+                }}
                 className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
               >
                 Бүгдийг цэвэрлэх

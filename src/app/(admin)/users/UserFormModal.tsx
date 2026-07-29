@@ -400,6 +400,24 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
     }
   };
 
+  const DURATION_PRESETS = [3, 6, 12] as const;
+
+  const activeDurationMonths = (() => {
+    if (!startedAt || !expiresAt) return null;
+    for (const m of DURATION_PRESETS) {
+      if (shiftDateOnly(startedAt, m) === expiresAt) return m;
+    }
+    return null;
+  })();
+
+  const handleDurationPreset = (months: number) => {
+    if (!canEditSubscriptionDates) return;
+    const base = startedAt || new Date().toISOString().slice(0, 10);
+    if (!startedAt) setStartedAt(base);
+    const nextExpiry = shiftDateOnly(base, months);
+    if (nextExpiry) setExpiresAt(nextExpiry);
+  };
+
   const safeOrganizationId = organizationId && isUuid(organizationId) ? organizationId : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -879,6 +897,41 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 <p className="mt-1.5 text-[11px] text-gray-400">Эхлэх огноог дуусах огнооноос нэг жилийн өмнө автоматаар тооцоолно.</p>
               )}
             </div>
+            )}
+
+            {/* Duration presets — form-ийн хамгийн доор */}
+            {!shouldHideMembershipFields && (
+              <div className={`px-5 pb-5 ${canEditSubscriptionDates ? "" : "pointer-events-none opacity-70"}`}>
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30">
+                  <div className="mb-3 flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-gray-200 dark:bg-gray-700">
+                      <svg className="h-3 w-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Хугацаа нэмэх</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {DURATION_PRESETS.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => handleDurationPreset(m)}
+                        className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                          activeDurationMonths === m
+                            ? "border-brand-500 bg-brand-50 text-brand-700 dark:border-brand-400 dark:bg-brand-900/30 dark:text-brand-300"
+                            : "border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300 dark:hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        {m} сар
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] text-gray-400">
+                    Эхлэх огнооноос тооцоолж дуусах огноог автоматаар тохируулна.
+                  </p>
+                </div>
+              </div>
             )}
           </form>
         </div>
