@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from "
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 import UserFormModal from "../users/UserFormModal";
+import UserNoteModal, { type UserSalesNote } from "../users/UserNoteModal";
 import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
@@ -135,6 +136,7 @@ export default function OrganizationsSection() {
   const { can } = useAuth();
   const canManageOrgs = can("organizations.create");
   const canManageUsers = can("users.manage");
+  const canNote = can("users.view");
   const [members, setMembers] = useState<Member[]>([]);
   const [orgRecords, setOrgRecords] = useState<OrgRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +148,8 @@ export default function OrganizationsSection() {
   const [removeLoading, setRemoveLoading] = useState<string | null>(null);
   const [formOrg, setFormOrg] = useState<OrgRecord | "new" | null>(null);
   const [editProfile, setEditProfile] = useState<Profile | null>(null);
+  const [notesMap, setNotesMap] = useState<Record<string, UserSalesNote>>({});
+  const [noteMember, setNoteMember] = useState<Member | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<{ memberId: string; name: string } | null>(null);
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
   const toast = useToast();
@@ -193,7 +197,27 @@ export default function OrganizationsSection() {
     if (orgsRes.data) setOrgRecords(orgsRes.data as OrgRecord[]);
   }, [fetchAllMemberPages]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const fetchNotes = useCallback(async () => {
+    if (!canNote) return;
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : "";
+      const res = await fetch("/api/admin/user-notes", { headers: { Authorization: authHeader } });
+      if (!res.ok) return;
+      const json = await res.json();
+      const map: Record<string, UserSalesNote> = {};
+      for (const n of json.notes ?? []) map[n.user_id] = n;
+      setNotesMap(map);
+    } catch {
+      /* чимээгүй */
+    }
+  }, [canNote]);
+
+  useEffect(() => {
+    fetchAll();
+    fetchNotes();
+  }, [fetchAll, fetchNotes]);
 
   const orgs: OrgGroup[] = useMemo(() => {
     const map: Record<string, Member[]> = {};
@@ -534,6 +558,8 @@ export default function OrganizationsSection() {
             onDelete={canManageOrgs ? () => handleDeleteOrg(selectedOrg.name, selectedRecord?.id ?? null) : undefined}
             onRemove={canManageOrgs ? handleRemove : undefined}
             onEditMember={canManageUsers ? (m) => setEditProfile(m as unknown as Profile) : undefined}
+            onNoteClick={canNote ? (m) => setNoteMember(m) : undefined}
+            notesMap={notesMap}
             onOpenAdd={canManageOrgs ? () => { setAddOrgTarget(selectedOrg.name); setAddOpen(true); setAddSearch(""); } : undefined}
             onCloseAdd={() => { setAddOpen(false); setAddSearch(""); }}
             onAddSearchChange={setAddSearch}
@@ -557,6 +583,17 @@ export default function OrganizationsSection() {
         organizations={orgRecords.map((r) => ({ id: r.id, name: r.name }))}
         onOrganizationsRefresh={silentRefresh}
         onSuccess={() => { setEditProfile(null); toast.show("Хэрэглэгчийн мэдээлэл амжилттай хадгалагдлаа."); silentRefresh(); }}
+      />
+
+      <UserNoteModal
+        profile={noteMember}
+        note={noteMember ? (notesMap[noteMember.id] ?? null) : null}
+        onClose={() => setNoteMember(null)}
+        onSave={(saved) => {
+          setNotesMap((prev) => ({ ...prev, [saved.user_id]: saved }));
+          setNoteMember(null);
+          toast.show("Тэмдэглэл хадгалагдлаа.");
+        }}
       />
 
       <ConfirmModal
@@ -584,7 +621,8 @@ function OrgDetailPanel({
   org, record, removeLoading,
   canManageOrgs, canManageUsers,
   addOpen, addSearch, addCandidates,
-  onEdit, onDelete, onRemove, onEditMember, onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
+  onEdit, onDelete, onRemove, onEditMember, onNoteClick, notesMap,
+  onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
 }: {
   org: OrgGroup;
   record: OrgRecord | null;
@@ -596,6 +634,8 @@ function OrgDetailPanel({
   onDelete?: () => void;
   onRemove?: (id: string) => void;
   onEditMember?: (m: Member) => void;
+  onNoteClick?: (m: Member) => void;
+  notesMap?: Record<string, UserSalesNote>;
   onOpenAdd?: () => void; onCloseAdd: () => void;
   onAddSearchChange: (v: string) => void;
   onAddMember: (id: string) => void;
@@ -898,13 +938,13 @@ function OrgDetailPanel({
                 {(visibleColumns.phone ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Утас</th>}
                 {(visibleColumns.tier ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Тариф</th>}
                 {(visibleColumns.expires ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Дуусах</th>}
-                {(canManageOrgs || canManageUsers) && (
+                {(canManageOrgs || canManageUsers || onNoteClick) && (
                   <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-400"></th>
                 )}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50 dark:divide-white/[0.04]">
-              {filteredMembers.map((m, i) => {
+              {filteredMembers.map((m) => {
                 const days = m.membership_expires_at
                   ? Math.ceil((new Date(m.membership_expires_at).getTime() - Date.now()) / 86400000)
                   : null;
@@ -955,9 +995,36 @@ function OrgDetailPanel({
                             : <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
                       ) : <span className="text-xs text-gray-400">—</span>}
                     </td>}
-                    {(canManageOrgs || canManageUsers) && (
+                    {(canManageOrgs || canManageUsers || onNoteClick) && (
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {onNoteClick && (() => {
+                            const n = notesMap?.[m.id];
+                            const called = n?.called ?? false;
+                            const hasNote = !!(n?.note?.trim());
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => onNoteClick(m)}
+                                title={called ? "Залгасан · Тэмдэглэл харах" : hasNote ? "Тэмдэглэл байна · Нэмэх" : "Дуудлага / тэмдэглэл"}
+                                className={`rounded-lg p-1.5 transition ${
+                                  called
+                                    ? "text-green-500 hover:bg-green-50 dark:hover:bg-green-900/25"
+                                    : hasNote
+                                      ? "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/25"
+                                      : "text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] dark:hover:text-gray-300"
+                                }`}
+                              >
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                                  {called ? (
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                  ) : (
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                                  )}
+                                </svg>
+                              </button>
+                            );
+                          })()}
                           {onEditMember && (
                             <button
                               onClick={() => onEditMember(m)}

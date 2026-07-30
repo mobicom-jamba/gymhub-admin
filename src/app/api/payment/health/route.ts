@@ -165,9 +165,13 @@ export async function GET() {
     configured: false,
   };
   try {
-    const { healthCheck, isMonpayConfigured, monpayConfigStatusMessage } = await import(
-      "@/lib/monpay",
-    );
+    const {
+      healthCheck,
+      isMonpayConfigured,
+      monpayConfigStatusMessage,
+      getMonpayWebhookSecretConfigured,
+      resolveMonpayWebhookUrl,
+    } = await import("@/lib/monpay");
     if (!isMonpayConfigured()) {
       monpayTech = {
         enabled: false,
@@ -176,9 +180,17 @@ export async function GET() {
       };
     } else {
       const result = await healthCheck();
+      const webhookOk = Boolean(resolveMonpayWebhookUrl());
+      const secretOk = getMonpayWebhookSecretConfigured();
+      let message = result.message;
+      if (!webhookOk) {
+        message = `${result.message} — MONPAY_WEBHOOK_URL дутуу`;
+      } else if (process.env.NODE_ENV === "production" && !secretOk) {
+        message = `${result.message} — MONPAY_WEBHOOK_SECRET дутуу (webhook 401)`;
+      }
       monpayTech = {
         enabled: result.ok,
-        message: result.message,
+        message,
         configured: true,
       };
     }

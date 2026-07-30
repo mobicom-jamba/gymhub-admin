@@ -5,28 +5,16 @@ import { safeUpdateBookingById } from "../_lib/bookings";
 import {
   createInvoice,
   getMonpayReceiver,
+  getMonpayRedirectUri,
   isMonpayConfigured,
+  resolveMonpayWebhookUrl,
 } from "@/lib/monpay";
 
-const MONPAY_WEBHOOK_PATH = "/api/payment/monpay/webhook";
-
-function resolveWebhookUrl(request: Request): string {
-  const explicit = (process.env.MONPAY_WEBHOOK_URL ?? "").trim();
-  if (explicit) return explicit;
-
-  const base = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "").trim();
-  if (base) return `${base.replace(/\/$/, "")}${MONPAY_WEBHOOK_PATH}`;
-
-  try {
-    const reqUrl = new URL(request.url);
-    return `${reqUrl.origin}${MONPAY_WEBHOOK_PATH}`;
-  } catch {
-    return "";
-  }
-}
-
 /**
- * POST /api/payment/monpay — Create MonPay invoice (mini-app user token required)
+ * POST /api/payment/monpay — Create MonPay P2B invoice (mini-app user token required)
+ *
+ * redirectUri      = MONPAY_REDIRECT_URI (registered return URL)
+ * clientServiceUrl = MONPAY_WEBHOOK_URL (server payment webhook)
  */
 export async function POST(request: Request) {
   try {
@@ -72,14 +60,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "amount тоо байх ёстой" }, { status: 400 });
     }
 
-    const webhookUrl = resolveWebhookUrl(request);
+    const webhookUrl = resolveMonpayWebhookUrl(request);
     if (!webhookUrl) {
-      return NextResponse.json({ error: "MonPay webhook URL тохируулаагүй" }, { status: 500 });
+      return NextResponse.json(
+        { error: "MonPay webhook URL тохируулаагүй (MONPAY_WEBHOOK_URL)" },
+        { status: 500 },
+      );
     }
 
     const invoice = await createInvoice(token, {
       amount: amountMnt,
-      redirectUri: webhookUrl,
+      redirectUri: getMonpayRedirectUri(),
       clientServiceUrl: webhookUrl,
       description: description?.trim() || "GymHub гишүүнчлэл",
       receiver: getMonpayReceiver(),
@@ -111,7 +102,7 @@ export async function POST(request: Request) {
       id: invoiceId,
       channel: "monpay",
       status: invoice.status ?? "NEW",
-      redirect_uri: invoice.redirectUri,
+      redirect_uri: invoice.redirectUri ?? getMonpayRedirectUri(),
       message: "MonPay нэхэмжлэл үүслээ. Апп дээрээ төлбөрөө баталгаажуулна уу.",
     });
   } catch (err: unknown) {

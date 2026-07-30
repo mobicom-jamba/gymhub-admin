@@ -7,10 +7,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  *   MONPAY_BASE_URL        – default https://z-wallet.monpay.mn
  *   MONPAY_CLIENT_ID
  *   MONPAY_CLIENT_SECRET
- *   MONPAY_REDIRECT_URI    – OAuth redirect (must match mini-app registration)
+ *   MONPAY_REDIRECT_URI    – OAuth + invoice redirectUri (must match mini-app registration)
  *   MONPAY_RECEIVER        – P2B branch name (dev: partnerBayas)
- *   MONPAY_WEBHOOK_SECRET  – HMAC key for X-MonPay-Signature
- *   MONPAY_WEBHOOK_URL     – optional; defaults to API /api/payment/monpay/webhook
+ *   MONPAY_WEBHOOK_URL     – clientServiceUrl / payment webhook (admin)
+ *   MONPAY_WEBHOOK_SECRET  – HMAC key for X-MonPay-Signature (required in production)
  */
 
 const MONPAY_BASE = (process.env.MONPAY_BASE_URL ?? "https://z-wallet.monpay.mn").replace(
@@ -22,6 +22,7 @@ const MONPAY_CLIENT_SECRET = process.env.MONPAY_CLIENT_SECRET ?? "";
 const MONPAY_REDIRECT_URI = (process.env.MONPAY_REDIRECT_URI ?? "").trim();
 const MONPAY_RECEIVER = (process.env.MONPAY_RECEIVER ?? "partnerBayas").trim();
 const MONPAY_WEBHOOK_SECRET = (process.env.MONPAY_WEBHOOK_SECRET ?? "").trim();
+const MONPAY_WEBHOOK_PATH = "/api/payment/monpay/webhook";
 
 /** Env names missing on the server (safe to expose in /api/payment/health). */
 export function getMonpayMissingEnvKeys(): string[] {
@@ -38,7 +39,13 @@ export function isMonpayConfigured(): boolean {
 
 export function monpayConfigStatusMessage(): string {
   const missing = getMonpayMissingEnvKeys();
-  if (missing.length === 0) return "MonPay тохиргоо бэлэн";
+  if (missing.length === 0) {
+    const prodHint =
+      process.env.NODE_ENV === "production" && !MONPAY_WEBHOOK_SECRET
+        ? " (MONPAY_WEBHOOK_SECRET дутуу — webhook татгалзана)"
+        : "";
+    return `MonPay тохиргоо бэлэн${prodHint}`;
+  }
   return `MonPay: Vercel дээр нэмнэ үү — ${missing.join(", ")}`;
 }
 
@@ -48,6 +55,28 @@ export function getMonpayRedirectUri(): string {
 
 export function getMonpayReceiver(): string {
   return MONPAY_RECEIVER;
+}
+
+export function getMonpayWebhookSecretConfigured(): boolean {
+  return Boolean(MONPAY_WEBHOOK_SECRET);
+}
+
+/** Resolve server webhook URL used as invoice clientServiceUrl. */
+export function resolveMonpayWebhookUrl(request?: Request): string {
+  const explicit = (process.env.MONPAY_WEBHOOK_URL ?? "").trim();
+  if (explicit) return explicit;
+
+  const base = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "").trim();
+  if (base) return `${base.replace(/\/$/, "")}${MONPAY_WEBHOOK_PATH}`;
+
+  if (request) {
+    try {
+      return `${new URL(request.url).origin}${MONPAY_WEBHOOK_PATH}`;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
 }
 
 type MonpayEnvelope<T> = {
@@ -93,21 +122,22 @@ async function parseJson(res: Response): Promise<MonpayEnvelope<unknown>> {
   }
 }
 
-/** Exchange OAuth authorization code (mini-app entry) for user access token. */
+/**
+ * Exchange OAuth authorization code for user access token.
+ * Always uses registered MONPAY_REDIRECT_URI (client-supplied URI is ignored).
+ */
 export async function exchangeAuthorizationCode(
   code: string,
-  redirectUri?: string,
 ): Promise<{ access_token: string; token_type?: string; expires_in?: number; scope?: string }> {
   if (!isMonpayConfigured()) {
     throw new Error("MonPay credentials are not configured");
   }
-  const redirect = (redirectUri ?? MONPAY_REDIRECT_URI).trim();
-  if (!redirect) {
+  if (!MONPAY_REDIRECT_URI) {
     throw new Error("MONPAY_REDIRECT_URI тохируулаагүй байна");
   }
 
   const body = new URLSearchParams({
-    redirect_uri: redirect,
+    redirect_uri: MONPAY_REDIRECT_URI,
     client_id: MONPAY_CLIENT_ID,
     client_secret: MONPAY_CLIENT_SECRET,
     code: code.trim(),
@@ -172,29 +202,41 @@ export type MonpayInvoice = {
   receiver?: string;
   invoiceType?: string;
   txnId?: string;
+  userId?: number;
+  miniAppId?: number;
+  createDate?: string;
+  updateDate?: string;
 };
 
 export async function createInvoice(
   accessToken: string,
   opts: {
     amount: number;
-    redirectUri: string;
-    clientServiceUrl?: string;
+    /** Registered OAuth redirect — defaults to MONPAY_REDIRECT_URI */
+    redirectUri?: string;
+    /** Backend payment webhook — defaults via resolveMonpayWebhookUrl */
+    clientServiceUrl: string;
     description: string;
     receiver?: string;
     invoiceType?: "P2B" | "P2P" | "B2B";
   },
 ): Promise<MonpayInvoice> {
+  const redirectUri = (opts.redirectUri ?? MONPAY_REDIRECT_URI).trim();
+  if (!redirectUri) {
+    throw new Error("MONPAY_REDIRECT_URI тохируулаагүй байна");
+  }
+  if (!opts.clientServiceUrl.trim()) {
+    throw new Error("MonPay webhook URL тохируулаагүй");
+  }
+
   const payload: Record<string, unknown> = {
     amount: opts.amount,
-    redirectUri: opts.redirectUri,
+    redirectUri,
+    clientServiceUrl: opts.clientServiceUrl.trim(),
     receiver: opts.receiver ?? MONPAY_RECEIVER,
     invoiceType: opts.invoiceType ?? "P2B",
     description: opts.description,
   };
-  if (opts.clientServiceUrl) {
-    payload.clientServiceUrl = opts.clientServiceUrl;
-  }
 
   const res = await fetch(`${MONPAY_BASE}/v2/api/oauth/invoice`, {
     method: "POST",
@@ -245,13 +287,27 @@ export async function checkInvoice(
   return { paid, status, message: msg, invoice: result };
 }
 
+/**
+ * Verify X-MonPay-Signature (HMAC-SHA256 of raw body).
+ * Production: secret required — missing secret or mismatch → false.
+ * Development: missing secret skips verification (local testing only).
+ */
 export function verifyWebhookSignature(rawBody: string, signatureHeader: string | null): boolean {
-  if (!MONPAY_WEBHOOK_SECRET) return true;
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (!MONPAY_WEBHOOK_SECRET) {
+    return !isProd;
+  }
   if (!signatureHeader?.trim()) return false;
+
   const expected = createHmac("sha256", MONPAY_WEBHOOK_SECRET).update(rawBody).digest("hex");
-  const received = signatureHeader.trim().toLowerCase();
+  const received = signatureHeader.trim().toLowerCase().replace(/^sha256=/, "");
+
   try {
-    return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(received, "hex"));
+    const a = Buffer.from(expected, "hex");
+    const b = Buffer.from(received, "hex");
+    if (a.length !== b.length) return false;
+    return timingSafeEqual(a, b);
   } catch {
     return expected === received;
   }
@@ -259,7 +315,7 @@ export function verifyWebhookSignature(rawBody: string, signatureHeader: string 
 
 export async function healthCheck(): Promise<{ ok: boolean; message: string }> {
   if (!isMonpayConfigured()) {
-    return { ok: false, message: "MonPay тохиргоо дутуу байна" };
+    return { ok: false, message: monpayConfigStatusMessage() };
   }
-  return { ok: true, message: "MonPay тохиргоо бэлэн" };
+  return { ok: true, message: monpayConfigStatusMessage() };
 }

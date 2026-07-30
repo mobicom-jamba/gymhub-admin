@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { isMonpayConfigured, verifyWebhookSignature } from "@/lib/monpay";
-import { safeFindBookingIdByInvoice, safeUpdateBookingById } from "../../_lib/bookings";
-import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
-import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
+import { activateMonpayPaidBooking } from "@/lib/monpay-settle";
 
 /**
- * POST /api/payment/monpay/webhook — MonPay payment notification (invoice.paid / invoice.expired)
+ * POST /api/payment/monpay/webhook
+ * MonPay payment notification (invoice.paid / invoice.expired).
+ * Verifies X-MonPay-Signature (HMAC-SHA256). Returns 200 OK on success.
  */
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -31,9 +31,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
 
+    const eventHeader = request.headers.get("x-monpay-event") ?? "";
     const event =
-      String(payload.event ?? request.headers.get("x-monpay-event") ?? "").trim() ||
-      "invoice.paid";
+      String(payload.event ?? eventHeader ?? "").trim() || "invoice.paid";
     const data = (payload.data ?? payload) as Record<string, unknown>;
     const invoiceId = String(data.id ?? data.invoiceId ?? "").trim();
     const status = String(data.status ?? "").toUpperCase();
@@ -60,50 +60,18 @@ export async function POST(request: Request) {
       auth: { persistSession: false },
     });
 
-    const bookingId = (await safeFindBookingIdByInvoice(supabase, invoiceId)) ?? "";
-
-    // Webhook has no user access token — mark paid from payload when PAID; client check completes activation.
-    if (status === "PAID" || event === "invoice.paid") {
-      if (bookingId) {
-        await safeUpdateBookingById(supabase, bookingId, {
-          payment_status: "paid",
-          payment_channel: "monpay",
-          paid_at: new Date().toISOString(),
-          qpay_invoice_id: invoiceId,
-        });
-
-        if (bookingId.startsWith("membership-")) {
-          try {
-            const { data: row } = await supabase
-              .from("bookings")
-              .select("user_id, amount")
-              .eq("id", bookingId)
-              .maybeSingle();
-            const userId = (row as { user_id?: string } | null)?.user_id?.trim() ?? "";
-            if (userId) {
-              await applyMembershipActivationForPaidBooking(supabase, {
-                userId,
-                bookingId,
-              });
-              const gross = Number((row as { amount?: number } | null)?.amount);
-              await recordSalesCommissionForPaidMembership(supabase, {
-                buyerUserId: userId,
-                bookingId,
-                grossAmountFallback: Number.isFinite(gross) && gross > 0 ? gross : null,
-              });
-            }
-          } catch (e) {
-            console.error("MonPay webhook membership activation:", e);
-          }
-        }
-      }
-    }
+    const amountRaw = Number(data.amount);
+    const activated = await activateMonpayPaidBooking(supabase, {
+      invoiceId,
+      amountFallback: Number.isFinite(amountRaw) && amountRaw > 0 ? amountRaw : null,
+    });
 
     return NextResponse.json({
       received: true,
-      paid: status === "PAID" || event === "invoice.paid",
+      paid: true,
       invoice_id: invoiceId,
-      booking_id: bookingId || undefined,
+      booking_id: activated.booking_id || undefined,
+      membership_activated: activated.membership_activated,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

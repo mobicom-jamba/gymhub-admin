@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
-import { isMonpayConfigured } from "@/lib/monpay";
+import { checkInvoice, isMonpayConfigured } from "@/lib/monpay";
 import { settleMonpayPayment } from "@/lib/monpay-settle";
 
 /**
- * POST /api/payment/monpay/check — Check MonPay invoice status
+ * POST /api/payment/monpay/check — Check MonPay invoice status and settle if PAID
  */
 export async function POST(request: Request) {
   try {
@@ -37,7 +37,6 @@ export async function POST(request: Request) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
     if (!serviceKey || !supabaseUrl) {
-      const { checkInvoice } = await import("@/lib/monpay");
       const result = await checkInvoice(token, invoiceId);
       return NextResponse.json({
         paid: result.paid,

@@ -13,29 +13,20 @@ export type MonpaySettleResult = {
   invoice_id: string;
   booking_id?: string;
   membership_activated?: boolean;
+  status?: string;
 };
 
-export async function settleMonpayPayment(
+/** Mark booking paid + activate membership from a confirmed MonPay PAID invoice. */
+export async function activateMonpayPaidBooking(
   supabase: SupabaseClient,
   opts: {
     invoiceId: string;
-    accessToken: string;
     bookingId?: string;
     userId?: string;
+    amountFallback?: number | null;
   },
-): Promise<MonpaySettleResult> {
+): Promise<{ booking_id: string; membership_activated: boolean }> {
   const invoice_id = String(opts.invoiceId).trim();
-  const check = await checkInvoice(opts.accessToken, invoice_id);
-
-  if (!check.paid) {
-    return {
-      paid: false,
-      message: check.message,
-      invoice_id,
-      booking_id: opts.bookingId,
-    };
-  }
-
   let bookingId = opts.bookingId?.trim() || "";
   let userId = opts.userId?.trim() || "";
 
@@ -68,21 +59,65 @@ export async function settleMonpayPayment(
         userId,
         bookingId,
       });
+      let gross = opts.amountFallback ?? null;
+      if (gross == null) {
+        const { data: row } = await supabase
+          .from("bookings")
+          .select("amount")
+          .eq("id", bookingId)
+          .maybeSingle();
+        const n = Number((row as { amount?: number } | null)?.amount);
+        gross = Number.isFinite(n) && n > 0 ? n : null;
+      }
       await recordSalesCommissionForPaidMembership(supabase, {
         buyerUserId: userId,
         bookingId,
-        grossAmountFallback: check.invoice.amount ?? null,
+        grossAmountFallback: gross,
       });
     } catch (e) {
       console.error("MonPay membership activation failed:", e);
     }
   }
 
+  return { booking_id: bookingId, membership_activated };
+}
+
+/** Verify invoice via MonPay API then settle booking if PAID. */
+export async function settleMonpayPayment(
+  supabase: SupabaseClient,
+  opts: {
+    invoiceId: string;
+    accessToken: string;
+    bookingId?: string;
+    userId?: string;
+  },
+): Promise<MonpaySettleResult> {
+  const invoice_id = String(opts.invoiceId).trim();
+  const check = await checkInvoice(opts.accessToken, invoice_id);
+
+  if (!check.paid) {
+    return {
+      paid: false,
+      message: check.message,
+      invoice_id,
+      booking_id: opts.bookingId,
+      status: check.status,
+    };
+  }
+
+  const activated = await activateMonpayPaidBooking(supabase, {
+    invoiceId: invoice_id,
+    bookingId: opts.bookingId,
+    userId: opts.userId,
+    amountFallback: check.invoice.amount ?? null,
+  });
+
   return {
     paid: true,
     message: check.message || "Төлбөр амжилттай төлөгдлөө.",
     invoice_id,
-    booking_id: bookingId || undefined,
-    membership_activated,
+    booking_id: activated.booking_id || opts.bookingId || undefined,
+    membership_activated: activated.membership_activated,
+    status: "PAID",
   };
 }
