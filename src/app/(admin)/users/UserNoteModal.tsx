@@ -11,12 +11,25 @@ export type UserSalesNote = {
   note: string;
   agent_id: string | null;
   updated_at: string;
+  agent_name?: string | null;
 };
 
 async function getAuthHeader(): Promise<string> {
   const supabase = createBrowserSupabaseClient();
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ? `Bearer ${session.access_token}` : "";
+}
+
+function fmtUbDateTime(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleString("mn-MN", {
+    timeZone: "Asia/Ulaanbaatar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function UserNoteModal({
@@ -51,7 +64,6 @@ export default function UserNoteModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [profile, onClose]);
 
-  // Focus textarea when modal opens
   useEffect(() => {
     if (profile) {
       setTimeout(() => textareaRef.current?.focus(), 50);
@@ -59,6 +71,9 @@ export default function UserNoteModal({
   }, [profile?.id]);
 
   if (!profile) return null;
+
+  const phoneDigits = (profile.phone ?? "").replace(/\D/g, "");
+  const lastCalledLabel = fmtUbDateTime(note?.called_at);
 
   const handleSave = async () => {
     setSaving(true);
@@ -71,7 +86,10 @@ export default function UserNoteModal({
         body: JSON.stringify({ user_id: profile.id, called, note: noteText }),
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Алдаа гарлаа."); return; }
+      if (!res.ok) {
+        setError(json.error ?? "Алдаа гарлаа.");
+        return;
+      }
       onSave(json.note);
       onClose();
     } catch {
@@ -83,28 +101,33 @@ export default function UserNoteModal({
 
   return createPortal(
     <div className="fixed inset-0 z-99999 flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Modal card */}
       <div className="relative w-full max-w-md rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-white/10 dark:bg-gray-900">
-
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-white/6">
-          <div>
+          <div className="min-w-0 pr-2">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-              Борлуулалтын тэмдэглэл
+              Дуудлагын тэмдэглэл
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
               {profile.full_name ?? "—"}
-              {profile.phone && (
-                <span className="ml-2 font-mono">{profile.phone}</span>
-              )}
+              {phoneDigits ? (
+                <a
+                  href={`tel:${phoneDigits}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="ml-2 font-mono text-brand-600 hover:underline dark:text-brand-400"
+                  title="Залгах"
+                >
+                  {profile.phone}
+                </a>
+              ) : null}
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/6 dark:hover:text-gray-200"
+            className="shrink-0 rounded-xl p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/6 dark:hover:text-gray-200"
           >
             <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -113,8 +136,7 @@ export default function UserNoteModal({
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-
+        <div className="space-y-4 px-6 py-5">
           {/* Called toggle */}
           <button
             type="button"
@@ -126,11 +148,13 @@ export default function UserNoteModal({
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className={`flex size-9 items-center justify-center rounded-full ${
-                called
-                  ? "bg-green-100 dark:bg-green-800/40"
-                  : "bg-gray-200 dark:bg-white/10"
-              }`}>
+              <div
+                className={`flex size-9 items-center justify-center rounded-full ${
+                  called
+                    ? "bg-green-100 dark:bg-green-800/40"
+                    : "bg-gray-200 dark:bg-white/10"
+                }`}
+              >
                 <svg
                   className={`size-4 ${called ? "text-green-600 dark:text-green-400" : "text-gray-400 dark:text-gray-500"}`}
                   fill="none"
@@ -138,20 +162,27 @@ export default function UserNoteModal({
                   stroke="currentColor"
                   strokeWidth={2}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
+                  />
                 </svg>
               </div>
               <div className="text-left">
-                <div className={`text-sm font-semibold ${called ? "text-green-700 dark:text-green-300" : "text-gray-700 dark:text-gray-200"}`}>
+                <div
+                  className={`text-sm font-semibold ${
+                    called ? "text-green-700 dark:text-green-300" : "text-gray-700 dark:text-gray-200"
+                  }`}
+                >
                   {called ? "Залгасан" : "Залгаагүй"}
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {called ? "Борлуулагч холбогдсон" : "Харилцаа холбоо хийгдээгүй"}
+                  {called ? "Оператор холбогдсон" : "Харилцаа холбоо хийгдээгүй"}
                 </div>
               </div>
             </div>
 
-            {/* Toggle switch */}
             <div
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
                 called ? "bg-green-500" : "bg-gray-300 dark:bg-gray-600"
@@ -165,7 +196,23 @@ export default function UserNoteModal({
             </div>
           </button>
 
-          {/* Note textarea */}
+          {(lastCalledLabel || note?.agent_name) && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-3.5 py-2.5 text-xs text-gray-600 dark:border-white/8 dark:bg-white/[0.03] dark:text-gray-300">
+              {lastCalledLabel && (
+                <p>
+                  <span className="text-gray-400">Сүүлд залгасан:</span>{" "}
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{lastCalledLabel}</span>
+                </p>
+              )}
+              {note?.agent_name && (
+                <p className={lastCalledLabel ? "mt-0.5" : undefined}>
+                  <span className="text-gray-400">Оператор:</span>{" "}
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{note.agent_name}</span>
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
               Тэмдэглэл
