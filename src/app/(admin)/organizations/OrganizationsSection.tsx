@@ -6,6 +6,7 @@ import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 import UserFormModal from "../users/UserFormModal";
 import UserNoteModal, { type UserSalesNote } from "../users/UserNoteModal";
 import { fetchUserSalesNotesByIds } from "@/lib/user-sales-notes";
+import { fetchAllPagesParallel } from "@/lib/fetch-all-pages";
 import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
@@ -160,20 +161,22 @@ export default function OrganizationsSection() {
 
   const fetchAllMemberPages = useCallback(async (): Promise<Member[]> => {
     const supabase = createBrowserSupabaseClient();
-    const all: Member[] = [];
-    const PAGE = 1000;
-    let from = 0;
-    while (true) {
-      const { data } = await supabase
-        .from("profiles")
-        .select(MEMBER_SELECT)
-        .order("full_name", { ascending: true })
-        .range(from, from + PAGE - 1);
-      all.push(...((data ?? []) as Member[]));
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
-    }
-    return all;
+    const { data } = await fetchAllPagesParallel<Member>({
+      pageSize: 1000,
+      getCount: async () => {
+        const res = await supabase.from("profiles").select("id", { count: "exact", head: true });
+        return { count: res.count, error: res.error };
+      },
+      fetchPage: async (from, to) => {
+        const res = await supabase
+          .from("profiles")
+          .select(MEMBER_SELECT)
+          .order("full_name", { ascending: true })
+          .range(from, to);
+        return { data: (res.data as Member[] | null) ?? null, error: res.error };
+      },
+    });
+    return data;
   }, []);
 
   const fetchAll = useCallback(async () => {

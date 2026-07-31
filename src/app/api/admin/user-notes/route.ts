@@ -68,15 +68,15 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
     let query = supabase
       .from("user_sales_notes")
-      .select("user_id, called, called_at, note, agent_id, updated_at", { count: "exact" })
-      .order("updated_at", { ascending: false })
+      .select("user_id, called, called_at, note, agent_id, updated_at")
+      .order("user_id", { ascending: true })
       .range(offset, offset + limit - 1);
 
     if (userIds.length > 0) {
       query = query.in("user_id", userIds);
     }
 
-    const { data, error, count } = await query;
+    const { data, error } = await query;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     let notes = (data ?? []) as UserSalesNote[];
@@ -84,13 +84,11 @@ export async function GET(request: Request) {
       notes = await attachAgentNames(supabase, notes);
     }
 
-    const total = count ?? notes.length;
     return NextResponse.json({
       notes,
-      total,
       offset,
       limit,
-      has_more: offset + notes.length < total,
+      has_more: notes.length >= limit,
     });
   } catch (err: unknown) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });

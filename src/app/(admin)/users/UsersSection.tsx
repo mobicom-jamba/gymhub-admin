@@ -6,7 +6,8 @@ import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
 import UserStatsPanel from "./UserStatsPanel";
 import UserNoteModal, { type UserSalesNote } from "./UserNoteModal";
-import { fetchAllUserSalesNotes } from "@/lib/user-sales-notes";
+import { fetchAllUserSalesNotes, patchUserSalesNotesCache } from "@/lib/user-sales-notes";
+import { fetchAllPagesParallel } from "@/lib/fetch-all-pages";
 import { fetchUserVisitStats, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UsersSortColumn } from "./users-sort";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -304,59 +305,63 @@ export default function UsersSection() {
 
   const fetchAllProfilePages = async (): Promise<{ data: Profile[]; error: string | null }> => {
     const supabase = createBrowserSupabaseClient();
-    const all: Profile[] = [];
     const PAGE = 1000;
-    let from = 0;
-    while (true) {
-      let { data, error: err } = await supabase
-        .from("profiles")
-        .select(PROFILE_SELECT)
-        .order("created_at", { ascending: false })
-        .range(from, from + PAGE - 1);
-      if (err && isMissingProfilesColumnError(err.message, "agreement_accepted_at")) {
-        const fallback = await supabase
-          .from("profiles")
-          .select(PROFILE_SELECT_BASE)
-          .order("created_at", { ascending: false })
-          .range(from, from + PAGE - 1);
-        data = ((fallback.data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => ({
-          ...row,
-          agreement_accepted_at: null,
-          agreement_version: null,
-        })) as unknown as typeof data;
-        err = fallback.error;
-      }
-      if (err) return { data: all, error: err.message };
-      const rows = (data ?? []) as Profile[];
-      all.push(
-        ...rows.map((p) => ({
-          ...p,
-          avatar_url: toAvatarUrl(supabase, (p as { avatar_path?: string | null }).avatar_path),
-        })),
-      );
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
+
+    const load = (select: string, omitAgreement: boolean) =>
+      fetchAllPagesParallel<Profile>({
+        pageSize: PAGE,
+        getCount: async () => {
+          const res = await supabase.from("profiles").select("id", { count: "exact", head: true });
+          return { count: res.count, error: res.error };
+        },
+        fetchPage: async (from, to) => {
+          const res = await supabase
+            .from("profiles")
+            .select(select)
+            .order("created_at", { ascending: false })
+            .range(from, to);
+          if (res.error) return { data: null, error: res.error };
+          const rows = ((res.data ?? []) as unknown as Array<Record<string, unknown>>).map((row) => {
+            const mapped = omitAgreement
+              ? { ...row, agreement_accepted_at: null, agreement_version: null }
+              : row;
+            return {
+              ...mapped,
+              avatar_url: toAvatarUrl(supabase, mapped.avatar_path as string | null | undefined),
+            } as Profile;
+          });
+          return { data: rows, error: null };
+        },
+      });
+
+    const first = await load(PROFILE_SELECT, false);
+    if (
+      first.error &&
+      isMissingProfilesColumnError(first.error, "agreement_accepted_at")
+    ) {
+      return load(PROFILE_SELECT_BASE, true);
     }
-    return { data: all, error: null };
+    return first;
   };
 
   const fetchAllOrganizationPages = async (): Promise<OrganizationOption[]> => {
     const supabase = createBrowserSupabaseClient();
-    const all: OrganizationOption[] = [];
-    const PAGE = 1000;
-
-    let from = 0;
-    while (true) {
-      const { data } = await supabase
-        .from("organizations")
-        .select(ORG_SELECT)
-        .order("name", { ascending: true })
-        .range(from, from + PAGE - 1);
-      all.push(...((data ?? []) as OrganizationOption[]));
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
-    }
-    return all;
+    const { data } = await fetchAllPagesParallel<OrganizationOption>({
+      pageSize: 1000,
+      getCount: async () => {
+        const res = await supabase.from("organizations").select("id", { count: "exact", head: true });
+        return { count: res.count, error: res.error };
+      },
+      fetchPage: async (from, to) => {
+        const res = await supabase
+          .from("organizations")
+          .select(ORG_SELECT)
+          .order("name", { ascending: true })
+          .range(from, to);
+        return { data: (res.data as OrganizationOption[] | null) ?? null, error: res.error };
+      },
+    });
+    return data;
   };
 
   const fetchProfiles = async () => {
@@ -403,9 +408,18 @@ export default function UsersSection() {
 
   useEffect(() => { fetchProfiles(); fetchNotes(); }, []);
 
-  // Load per-user visit stats once profiles are available (single RPC, cached).
+  // Visit stats зөвхөн багана/panel/sort хэрэгтэй үед — эхний load-ийг хөнгөлнө.
+  const needsVisitStats =
+    !!panelProfile ||
+    !!visibleColumns.totalVisits ||
+    !!visibleColumns.lastVisit ||
+    !!visibleColumns.streak ||
+    sortColumn === "totalVisits" ||
+    sortColumn === "lastVisit" ||
+    sortColumn === "streak";
+
   useEffect(() => {
-    if (profiles.length === 0) return;
+    if (profiles.length === 0 || !needsVisitStats) return;
     if (visitStatsCache && Date.now() - visitStatsCache.at < VISIT_STATS_CACHE_TTL_MS) {
       setStatsMap(visitStatsCache.stats);
       return;
@@ -424,7 +438,7 @@ export default function UsersSection() {
     return () => {
       cancelled = true;
     };
-  }, [profiles]);
+  }, [profiles, needsVisitStats]);
 
   useEffect(() => {
     if (loading || tab !== "user" || !paidDateInputRef.current) return;
@@ -1495,6 +1509,7 @@ export default function UsersSection() {
         note={noteProfile ? (notesMap[noteProfile.id] ?? null) : null}
         onClose={() => setNoteProfile(null)}
         onSave={(saved) => {
+          patchUserSalesNotesCache(saved);
           setNotesMap((prev) => ({ ...prev, [saved.user_id]: saved }));
           setNoteProfile(null);
         }}
