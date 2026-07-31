@@ -20,9 +20,15 @@ export async function GET(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const leadDate = new Date(now.getTime() + LEAD_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const ubDateString = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ulaanbaatar",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  const todayStr = ubDateString(new Date());
+  const leadDate = ubDateString(new Date(Date.now() + LEAD_DAYS * 86_400_000));
 
   const results = { invoiced: 0, overdue: 0, paused: 0, errors: [] as string[] };
 

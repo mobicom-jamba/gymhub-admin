@@ -10,6 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { TrashBinIcon } from "@/icons";
 import SearchInput from "@/components/common/SearchInput";
 import { canonicalPlanKey, planTierDisplayLabel } from "@/lib/membership-plan-label";
+import { parseLocalDateOnly } from "@/lib/installment-schedule";
 
 type Payment = {
   id: string;
@@ -115,17 +116,29 @@ function formatMnt(n: number): string {
   return `${n.toLocaleString("mn-MN")}₮`;
 }
 
+/** due_date = YYYY-MM-DD — UTC parse хийвэл өдөр ухрах тул локал parse. */
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("mn-MN");
+  if (/^\d{4}-\d{2}-\d{2}/.test(iso)) {
+    return parseLocalDateOnly(iso).toLocaleDateString("mn-MN");
+  }
+  return new Date(iso).toLocaleDateString("mn-MN", { timeZone: "Asia/Ulaanbaatar" });
 }
 
 function isSameLocalDay(iso: string): boolean {
-  const d = new Date(iso);
-  const now = new Date();
+  const todayUb = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ulaanbaatar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  if (/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso.slice(0, 10) === todayUb;
   return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ulaanbaatar",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(iso)) === todayUb
   );
 }
 
