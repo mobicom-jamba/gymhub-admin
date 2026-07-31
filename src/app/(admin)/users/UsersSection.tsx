@@ -6,6 +6,7 @@ import UsersTable from "./UsersTable";
 import UserFormModal from "./UserFormModal";
 import UserStatsPanel from "./UserStatsPanel";
 import UserNoteModal, { type UserSalesNote } from "./UserNoteModal";
+import { fetchAllUserSalesNotes } from "@/lib/user-sales-notes";
 import { fetchUserVisitStats, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UsersSortColumn } from "./users-sort";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -395,14 +396,7 @@ export default function UsersSection() {
 
   const fetchNotes = async () => {
     try {
-      const supabase = createBrowserSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : "";
-      const res = await fetch("/api/admin/user-notes", { headers: { Authorization: authHeader } });
-      if (!res.ok) return;
-      const json = await res.json();
-      const map: Record<string, UserSalesNote> = {};
-      for (const n of json.notes ?? []) map[n.user_id] = n;
+      const map = await fetchAllUserSalesNotes();
       setNotesMap(map);
     } catch { /* чимээгүй алдаа */ }
   };

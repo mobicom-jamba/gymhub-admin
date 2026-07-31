@@ -5,6 +5,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 import UserFormModal from "../users/UserFormModal";
 import UserNoteModal, { type UserSalesNote } from "../users/UserNoteModal";
+import { fetchUserSalesNotesByIds } from "@/lib/user-sales-notes";
 import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
@@ -197,27 +198,9 @@ export default function OrganizationsSection() {
     if (orgsRes.data) setOrgRecords(orgsRes.data as OrgRecord[]);
   }, [fetchAllMemberPages]);
 
-  const fetchNotes = useCallback(async () => {
-    if (!canNote) return;
-    try {
-      const supabase = createBrowserSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      const authHeader = session?.access_token ? `Bearer ${session.access_token}` : "";
-      const res = await fetch("/api/admin/user-notes", { headers: { Authorization: authHeader } });
-      if (!res.ok) return;
-      const json = await res.json();
-      const map: Record<string, UserSalesNote> = {};
-      for (const n of json.notes ?? []) map[n.user_id] = n;
-      setNotesMap(map);
-    } catch {
-      /* чимээгүй */
-    }
-  }, [canNote]);
-
   useEffect(() => {
     fetchAll();
-    fetchNotes();
-  }, [fetchAll, fetchNotes]);
+  }, [fetchAll]);
 
   const orgs: OrgGroup[] = useMemo(() => {
     const map: Record<string, Member[]> = {};
@@ -281,6 +264,25 @@ export default function OrganizationsSection() {
 
   const selectedOrg = selected ? orgs.find(o => o.name === selected) ?? null : null;
   const selectedRecord = selected ? orgRecords.find(r => r.name === selected) ?? null : null;
+
+  useEffect(() => {
+    if (!canNote) return;
+    const ids =
+      selected === "__unassigned__"
+        ? unassigned.map((m) => m.id)
+        : (selectedOrg?.members.map((m) => m.id) ?? []);
+    if (ids.length === 0) {
+      setNotesMap({});
+      return;
+    }
+    let cancelled = false;
+    void fetchUserSalesNotesByIds(ids).then((map) => {
+      if (!cancelled) setNotesMap(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canNote, selected, selectedOrg, unassigned]);
 
   const addCandidates = useMemo(() => {
     if (!addOrgTarget) return [];
