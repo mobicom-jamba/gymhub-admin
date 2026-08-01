@@ -142,6 +142,7 @@ export default function UsersTable({
   statsMap,
   statsLoading,
   paymentChannelByUser,
+  flexyProgressByUser,
   paidBookingIdByUser,
   onRowClick,
   notesMap,
@@ -170,6 +171,8 @@ export default function UsersTable({
   statsLoading?: boolean;
   /** Latest paid booking payment_channel keyed by profile id. */
   paymentChannelByUser?: Record<string, string>;
+  /** Flexy installment progress label keyed by profile id (e.g. 2/8). */
+  flexyProgressByUser?: Record<string, { label: string; title: string }>;
   /** Төлбөрийн өдөр шүүлт: тухайн өдрийн booking id (Early үлдэгдэл label). */
   paidBookingIdByUser?: Record<string, string>;
   /** Open the per-user stats detail panel. */
@@ -367,14 +370,19 @@ export default function UsersTable({
                     <TableCell className={`px-4 ${py}`}>
                       {(() => {
                         const raw = paymentChannelByUser?.[p.id];
-                        if (!raw) {
+                        const flexy = flexyProgressByUser?.[p.id];
+                        if (!raw && !flexy) {
                           return <span className="text-xs text-gray-300 dark:text-gray-600">—</span>;
                         }
-                        const ch = getPaymentChannelVisual(raw);
+                        const ch = getPaymentChannelVisual(raw ?? "gymfintech");
+                        const showFlexyProgress = ch.key === "gymfintech" && !!flexy;
+                        const label = showFlexyProgress
+                          ? `${ch.label} ${flexy.label}`
+                          : ch.label;
                         return (
                           <span
-                            title={ch.title}
-                            className={`inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2.5 text-[11px] font-bold leading-tight ${paymentChannelBadgeClass(ch.key)}`}
+                            title={showFlexyProgress ? flexy.title : ch.title}
+                            className={`inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-full py-0.5 pl-0.5 pr-2.5 text-[11px] font-bold leading-none ${paymentChannelBadgeClass(ch.key)}`}
                           >
                             {ch.logo ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -389,12 +397,16 @@ export default function UsersTable({
                               <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-amber-400/80 text-[10px]" aria-hidden>
                                 🎁
                               </span>
+                            ) : ch.key === "admin" ? (
+                              <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-orange-500/90 text-[9px] font-black text-white" aria-hidden>
+                                A
+                              </span>
                             ) : (
                               <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] text-white dark:bg-gray-600">
                                 ?
                               </span>
                             )}
-                            {ch.label}
+                            <span className="tabular-nums">{label}</span>
                           </span>
                         );
                       })()}

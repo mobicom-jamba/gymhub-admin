@@ -9,7 +9,11 @@ export type PaidDayRow = {
   created_at: string | null;
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
-  source: "booking" | "flexy" | "activation";
+  source: "booking" | "flexy" | "activation" | "admin";
+  /** Flexy: тухайн өдөр төлсөн хуваарийн дугаар */
+  installment_no?: number | null;
+  /** Flexy: нийт хуваарийн тоо */
+  installment_count?: number | null;
 };
 
 function requiredIso(url: URL, key: string): string | null {
@@ -22,7 +26,8 @@ function requiredIso(url: URL, key: string): string | null {
 
 /**
  * GET /api/admin/paid-day?start=ISO&end=ISO
- * Төлбөрийн өдөр шүүлтүүрт: paid bookings + Flexy installment payments.
+ * Төлбөрийн өдөр шүүлтүүрт: paid bookings + Flexy + payment activations +
+ * admin гараар идэвхжүүлсэн гишүүд.
  */
 export async function GET(request: Request) {
   try {
@@ -74,7 +79,7 @@ export async function GET(request: Request) {
     // Flexy: installment_payments.paid_at (membership-* booking rows often missing from bookings)
     const { data: flexyPays, error: flexyErr } = await admin
       .from("installment_payments")
-      .select("id, plan_id, paid_at, qpay_invoice_id")
+      .select("id, plan_id, installment_no, paid_at, qpay_invoice_id")
       .eq("status", "paid")
       .gte("paid_at", start)
       .lt("paid_at", end)
@@ -86,7 +91,7 @@ export async function GET(request: Request) {
       const planIds = Array.from(new Set(flexyPays!.map((p) => p.plan_id).filter(Boolean)));
       const { data: plans, error: plansErr } = await admin
         .from("installment_plans")
-        .select("id, user_id, booking_id, created_at")
+        .select("id, user_id, booking_id, created_at, installment_count")
         .in("id", planIds);
 
       if (plansErr) {
@@ -96,8 +101,31 @@ export async function GET(request: Request) {
         for (const pay of flexyPays!) {
           const plan = planMap.get(pay.plan_id);
           const userId = plan?.user_id ?? null;
-          if (userId && seenUsers.has(userId)) continue;
-          if (userId) seenUsers.add(userId);
+          if (!userId) continue;
+
+          const installmentNo =
+            typeof pay.installment_no === "number" ? pay.installment_no : null;
+          const installmentCount =
+            typeof plan?.installment_count === "number"
+              ? plan.installment_count
+              : null;
+
+          // Already have booking/activation for this user today — attach Flexy
+          // installment number instead of dropping the Flexy row.
+          const existing = rows.find((r) => r.user_id === userId);
+          if (existing) {
+            if (!existing.payment_channel) existing.payment_channel = "gymfintech";
+            if (existing.installment_no == null) {
+              existing.installment_no = installmentNo;
+              existing.installment_count = installmentCount;
+            }
+            if (existing.source !== "flexy" && !existing.qpay_invoice_id) {
+              existing.qpay_invoice_id = pay.qpay_invoice_id ?? null;
+            }
+            continue;
+          }
+
+          seenUsers.add(userId);
           rows.push({
             id: `flexy-${pay.id}`,
             user_id: userId,
@@ -106,6 +134,8 @@ export async function GET(request: Request) {
             payment_channel: "gymfintech",
             qpay_invoice_id: pay.qpay_invoice_id ?? null,
             source: "flexy",
+            installment_no: installmentNo,
+            installment_count: installmentCount,
           });
         }
       }
@@ -159,7 +189,47 @@ export async function GET(request: Request) {
       }
     }
 
-    // Drop unpaid/inactive profiles — admin-set dates must not appear on төлбөрийн өдөр.
+    // Admin гараар идэвхжүүлсэн (төлбөргүй) — audit log-оор тухайн өдөр active болгосон.
+    const { data: adminAudits, error: adminAuditErr } = await admin
+      .from("membership_audit_logs")
+      .select(
+        "id, profile_id, created_at, source, new_membership_status, new_membership_started_at, old_membership_status",
+      )
+      .eq("source", "admin")
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("created_at", { ascending: false });
+
+    if (adminAuditErr) {
+      console.warn("paid-day admin audits:", adminAuditErr.message);
+    } else {
+      for (const a of adminAudits ?? []) {
+        const userId = a.profile_id ?? null;
+        if (!userId || seenUsers.has(userId)) continue;
+        const newStatus = String(a.new_membership_status ?? "")
+          .trim()
+          .toLowerCase();
+        const oldStatus = String(a.old_membership_status ?? "")
+          .trim()
+          .toLowerCase();
+        // Зөвхөн идэвхжүүлсэн / дахин идэвхжүүлсэн үйлдэл
+        if (newStatus !== "active") continue;
+        if (oldStatus === "active") continue;
+
+        seenUsers.add(userId);
+        rows.push({
+          id: `admin-${a.id}`,
+          user_id: userId,
+          paid_at: a.created_at ?? a.new_membership_started_at ?? null,
+          created_at: a.created_at ?? null,
+          payment_channel: "admin",
+          qpay_invoice_id: null,
+          source: "admin",
+        });
+      }
+    }
+
+    // Drop inactive profiles (admin grant that day still keeps active members).
     const userIds = Array.from(seenUsers);
     if (userIds.length > 0) {
       const { data: profiles } = await admin

@@ -7,6 +7,7 @@ export type PaymentChannelKey =
   | "monpay"
   | "gymfintech"
   | "gift"
+  | "admin"
   | "other";
 
 export type PaymentChannelVisual = {
@@ -30,6 +31,7 @@ const LABELS: Record<
   monpay: { label: "MonPay", title: "MonPay мини апп", logo: "/logos/monpay.png" },
   gymfintech: { label: "Flexy", title: "Flexy хуваан төлөлт", logo: "/logos/flexy.png" },
   gift: { label: "Gift", title: "Урамшуулал / бэлэг", logo: null },
+  admin: { label: "Admin", title: "Админ гараар идэвхжүүлсэн", logo: null },
   other: { label: "Бусад", title: "Суваг тодорхойгүй", logo: null },
 };
 
@@ -53,6 +55,7 @@ export function normalizePaymentChannel(
     return "gymfintech";
   }
   if (raw === "gift") return "gift";
+  if (raw === "admin" || raw === "manual" || raw === "admin_grant") return "admin";
 
   const inv = String(invoiceId ?? "").trim();
   if (inv.startsWith("GH")) return "sono";
@@ -90,6 +93,8 @@ export function paymentChannelBadgeClass(key: PaymentChannelKey): string {
       return "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300";
     case "gift":
       return "bg-amber-50 text-amber-800 dark:bg-amber-900/25 dark:text-amber-300";
+    case "admin":
+      return "bg-orange-50 text-orange-800 dark:bg-orange-900/25 dark:text-orange-300";
     default:
       return "bg-gray-100 text-gray-600 dark:bg-white/[0.06] dark:text-gray-400";
   }

@@ -57,6 +57,14 @@ type PaidBookingRow = {
   created_at: string | null;
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
+  installment_no?: number | null;
+  installment_count?: number | null;
+};
+
+/** Flexy badge suffix, e.g. "2/8" or "2-р". */
+export type FlexyProgressLabel = {
+  label: string;
+  title: string;
 };
 
 /** Early төлбөрийн төрөл: 150k эхний сар / 330k үлдэгдэл */
@@ -270,6 +278,9 @@ export default function UsersSection() {
   const [paidBookingsLoading, setPaidBookingsLoading] = useState(false);
   const [paidBookingsError, setPaidBookingsError] = useState<string | null>(null);
   const [paymentChannelByUser, setPaymentChannelByUser] = useState<Record<string, string>>({});
+  const [flexyProgressByUser, setFlexyProgressByUser] = useState<
+    Record<string, FlexyProgressLabel>
+  >({});
   const [earlyPaymentFilter, setEarlyPaymentFilter] = useState<EarlyPaymentFilter>("");
   const [earlyPaymentUserIds, setEarlyPaymentUserIds] = useState<Set<string>>(new Set());
   const [earlyPaymentLoading, setEarlyPaymentLoading] = useState(false);
@@ -804,21 +815,42 @@ export default function UsersSection() {
   const pagedProfiles = sortedFilteredProfiles.slice((page - 1) * pageSize, page * pageSize);
   const pagedProfileIdsKey = pagedProfiles.map((p) => p.id).join(",");
 
-  // Latest paid payment channel for visible users (only after successful payment).
+  // Latest paid payment channel + Flexy progress for visible users.
   useEffect(() => {
     if (tab !== "user") {
       setPaymentChannelByUser({});
+      setFlexyProgressByUser({});
       return;
     }
 
     if (paidOnDate) {
       setPaymentChannelByUser(paidFilterChannelByUser);
+      // Төлбөрийн өдөр: нийт progress биш, ТУХАЙН ӨДӨР төлсөн хуваарийн дугаар.
+      const flexyMap: Record<string, FlexyProgressLabel> = {};
+      for (const booking of paidBookings) {
+        const uid = booking.user_id;
+        if (!uid || flexyMap[uid]) continue;
+        const no = booking.installment_no;
+        const total = booking.installment_count;
+        if (typeof no === "number" && no > 0) {
+          flexyMap[uid] = {
+            label:
+              typeof total === "number" && total > 0 ? `${no}/${total}` : `${no}`,
+            title:
+              typeof total === "number" && total > 0
+                ? `Энэ өдөр: Flexy ${no}-р төлөлт (${total}-аас)`
+                : `Энэ өдөр: Flexy ${no}-р төлөлт`,
+          };
+        }
+      }
+      setFlexyProgressByUser(flexyMap);
       return;
     }
 
     const ids = pagedProfileIdsKey ? pagedProfileIdsKey.split(",") : [];
     if (ids.length === 0) {
       setPaymentChannelByUser({});
+      setFlexyProgressByUser({});
       return;
     }
 
@@ -868,7 +900,42 @@ export default function UsersSection() {
         error = fb.error;
       }
 
-      if (cancelled || error) return;
+      // Flexy plans may not appear in bookings — still show channel + progress.
+      const { data: flexyPlans } = await supabase
+        .from("installment_plans")
+        .select("id, user_id, installment_count, status, created_at")
+        .in("user_id", ids)
+        .in("status", ["active", "completed"])
+        .order("created_at", { ascending: false });
+
+      const planByUser = new Map<
+        string,
+        { id: string; installment_count: number }
+      >();
+      for (const plan of flexyPlans ?? []) {
+        if (!plan.user_id || planByUser.has(plan.user_id)) continue;
+        planByUser.set(plan.user_id, {
+          id: plan.id,
+          installment_count: Number(plan.installment_count) || 0,
+        });
+      }
+
+      const planIds = Array.from(planByUser.values()).map((p) => p.id);
+      let paidByPlan = new Map<string, number>();
+      if (planIds.length > 0) {
+        const { data: pays } = await supabase
+          .from("installment_payments")
+          .select("plan_id, status")
+          .in("plan_id", planIds)
+          .eq("status", "paid");
+        paidByPlan = new Map<string, number>();
+        for (const pay of pays ?? []) {
+          paidByPlan.set(pay.plan_id, (paidByPlan.get(pay.plan_id) ?? 0) + 1);
+        }
+      }
+
+      if (cancelled) return;
+      if (error) return;
 
       const map: Record<string, string> = {};
       for (const row of rows ?? []) {
@@ -879,14 +946,29 @@ export default function UsersSection() {
         if (ch) map[uid] = ch;
         else if (inv) map[uid] = "qpay";
       }
+      for (const [uid] of planByUser) {
+        if (!map[uid]) map[uid] = "gymfintech";
+      }
       setPaymentChannelByUser(map);
+
+      const flexyMap: Record<string, FlexyProgressLabel> = {};
+      for (const [uid, plan] of planByUser) {
+        const paid = paidByPlan.get(plan.id) ?? 0;
+        const total = plan.installment_count;
+        if (total <= 0) continue;
+        flexyMap[uid] = {
+          label: `${paid}/${total}`,
+          title: `Flexy ${paid} төлөгдсөн / ${total} хуваарь`,
+        };
+      }
+      setFlexyProgressByUser(flexyMap);
     };
 
     loadChannels();
     return () => {
       cancelled = true;
     };
-  }, [tab, paidOnDate, paidFilterChannelByUser, pagedProfileIdsKey]);
+  }, [tab, paidOnDate, paidFilterChannelByUser, paidBookings, pagedProfileIdsKey]);
 
   const resetPage = () => setPage(1);
 
@@ -1396,7 +1478,7 @@ export default function UsersSection() {
           )}
           {tab === "user" && paidOnDate && !paidBookingsLoading && !paidBookingsError && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-              {paidDayLabel}: {paidUsersCount} гишүүн · {paidCount} бичилт (төлбөр / Flexy / идэвхжүүлэлт).
+              {paidDayLabel}: {paidUsersCount} гишүүн · {paidCount} бичилт (төлбөр / Flexy / идэвхжүүлэлт / Admin).
             </div>
           )}
           {tab === "user" && paidBookingsError && (
@@ -1434,6 +1516,7 @@ export default function UsersSection() {
           statsMap={statsMap ?? undefined}
           statsLoading={statsLoading}
           paymentChannelByUser={paymentChannelByUser}
+          flexyProgressByUser={flexyProgressByUser}
           paidBookingIdByUser={paidOnDate ? paidBookingIdByUser : undefined}
           onRowClick={(p) => setPanelProfile(p)}
           notesMap={notesMap}
