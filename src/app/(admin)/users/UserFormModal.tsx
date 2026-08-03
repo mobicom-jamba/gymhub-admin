@@ -842,11 +842,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 ))}
               </div>
               <p className="mb-3 text-[10px] leading-relaxed text-gray-400 dark:text-gray-500">
+                Админ эндээс идэвхжүүлбэл <span className="font-semibold text-amber-600 dark:text-amber-400">Бэлэг</span> гэж бүртгэгдэнэ.
+                Төлбөртэй эрх QPay / Carepay / Flexy гэх мэт төлбөрөөр автоматаар орно.
                 Хуучин Early хэрэглэгчид Early-ээр үлдэнэ. Шинэ багц: Standard, Premium 1/2, GymCore.
-                Жагсаалт дээр хугацаагаар автоматаар ялгагдана (жнь.{" "}
-                <span className="font-semibold text-sky-600 dark:text-sky-400">Early</span>,{" "}
-                <span className="font-semibold text-blue-600 dark:text-blue-400">Standard · 6 сар</span>,{" "}
-                <span className="font-semibold text-violet-600 dark:text-violet-400">Premium 1 · 1 жил</span>).
               </p>
 
               <div className="grid grid-cols-2 gap-3">

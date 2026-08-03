@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
 
-    const [totalRes, qpayRes, sonoRes, pocketRes, giftRes, recentRes] =
+    const [totalRes, qpayRes, sonoRes, pocketRes, carepayRes, giftRes, recentRes] =
       await Promise.all([
         supabase
           .from("bookings")
@@ -31,7 +31,12 @@ export async function GET() {
           .from("bookings")
           .select("id", { count: "exact", head: true })
           .eq("payment_status", "paid")
-          .eq("payment_channel", "gift"),
+          .eq("payment_channel", "carepay"),
+        supabase
+          .from("bookings")
+          .select("id", { count: "exact", head: true })
+          .eq("payment_status", "paid")
+          .in("payment_channel", ["gift", "admin"]),
         supabase
           .from("bookings")
           .select("id, amount, payment_channel, payment_status, created_at, paid_at")
@@ -46,6 +51,7 @@ export async function GET() {
         qpay: qpayRes.count ?? 0,
         sono: sonoRes.count ?? 0,
         pocket: pocketRes.count ?? 0,
+        carepay: carepayRes.count ?? 0,
         gift: giftRes.count ?? 0,
       },
       recent_payments: recentRes.data ?? [],

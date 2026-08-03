@@ -43,22 +43,36 @@ export async function settleCarepayPayment(
     bookingId = (await safeFindBookingIdByInvoice(supabase, invoice_id)) ?? "";
   }
 
+  // Resolve user_id before upsert so insert path works when row is missing.
+  if (bookingId && !userId) {
+    const { data: row } = await supabase
+      .from("bookings")
+      .select("user_id")
+      .eq("id", bookingId)
+      .maybeSingle();
+    userId = (row as { user_id?: string } | null)?.user_id?.trim() ?? "";
+  }
+
   if (bookingId) {
-    await safeUpdateBookingById(supabase, bookingId, {
+    const patch: Record<string, unknown> = {
       payment_status: "paid",
       payment_channel: "carepay",
       paid_at: new Date().toISOString(),
       qpay_invoice_id: invoice_id,
-    });
+    };
+    if (userId) patch.user_id = userId;
 
-    if (!userId) {
-      const { data: row } = await supabase
-        .from("bookings")
-        .select("user_id")
-        .eq("id", bookingId)
-        .maybeSingle();
-      userId = (row as { user_id?: string } | null)?.user_id?.trim() ?? "";
+    const bookingErr = await safeUpdateBookingById(supabase, bookingId, patch);
+    if (bookingErr) {
+      console.error("[carepay-settle] booking update failed:", bookingErr);
     }
+  } else {
+    console.warn(
+      "[carepay-settle] paid invoice without booking:",
+      invoice_id,
+      "user:",
+      userId || "(none)",
+    );
   }
 
   let membership_activated = false;

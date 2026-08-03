@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
 import { revokeAllUserSessions } from "@/lib/auth-sessions";
+import { recordGiftMembershipGrant } from "@/lib/gift-membership";
 import { attributeMembershipAudit } from "@/lib/membership-audit";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
@@ -124,10 +125,11 @@ export async function PATCH(
         membership_started_at !== undefined ||
         membership_expires_at !== undefined;
 
+      let prevMembershipStatus: string | null = null;
       if (membershipTouched) {
         const { data: currentProfile, error: currentProfileError } = await admin
           .from("profiles")
-          .select("membership_started_at, membership_expires_at")
+          .select("membership_started_at, membership_expires_at, membership_status")
           .eq("id", id)
           .maybeSingle();
 
@@ -139,6 +141,10 @@ export async function PATCH(
             currentProfileError.message,
           );
         }
+
+        prevMembershipStatus = String(currentProfile?.membership_status ?? "")
+          .trim()
+          .toLowerCase();
 
         const nextMembershipStartedAt =
           membership_started_at !== undefined
@@ -167,7 +173,23 @@ export async function PATCH(
       }
 
       if (membershipTouched) {
-        await attributeMembershipAudit(admin, id, auth.userId, "admin");
+        const nextStatus = String(patch.membership_status ?? "")
+          .trim()
+          .toLowerCase();
+        const becameActive = nextStatus === "active" && prevMembershipStatus !== "active";
+        if (becameActive) {
+          await recordGiftMembershipGrant(admin, {
+            profileId: id,
+            actorId: auth.userId,
+            createBooking: true,
+          });
+        } else {
+          await attributeMembershipAudit(admin, id, {
+            actorId: auth.userId,
+            source: "admin",
+            paymentChannel: "gift",
+          });
+        }
       }
     }
 

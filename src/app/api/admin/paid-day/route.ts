@@ -9,7 +9,7 @@ export type PaidDayRow = {
   created_at: string | null;
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
-  source: "booking" | "flexy" | "activation" | "admin";
+  source: "booking" | "flexy" | "activation" | "gift";
   /** Flexy: тухайн өдөр төлсөн хуваарийн дугаар */
   installment_no?: number | null;
   /** Flexy: нийт хуваарийн тоо */
@@ -27,7 +27,7 @@ function requiredIso(url: URL, key: string): string | null {
 /**
  * GET /api/admin/paid-day?start=ISO&end=ISO
  * Төлбөрийн өдөр шүүлтүүрт: paid bookings + Flexy + payment activations +
- * admin гараар идэвхжүүлсэн гишүүд.
+ * Gift (админ бэлэг / гараар идэвхжүүлсэн).
  */
 export async function GET(request: Request) {
   try {
@@ -166,10 +166,12 @@ export async function GET(request: Request) {
           .select("id, payment_channel, qpay_invoice_id")
           .in("id", bookingIds);
         for (const b of actBookings ?? []) {
-          channelByBooking.set(
-            b.id,
-            b.payment_channel ?? (b.qpay_invoice_id ? "qpay" : null),
-          );
+          const ch = (b.payment_channel ?? "").trim();
+          const inv = String(b.qpay_invoice_id ?? "").trim();
+          let resolved: string | null = ch || null;
+          if (!resolved && /^\d{8}-\d+-\d+-\d+$/.test(inv)) resolved = "carepay";
+          else if (!resolved && inv) resolved = "qpay";
+          channelByBooking.set(b.id, resolved);
         }
       }
       for (const a of activations ?? []) {
@@ -189,47 +191,107 @@ export async function GET(request: Request) {
       }
     }
 
-    // Admin гараар идэвхжүүлсэн (төлбөргүй) — audit log-оор тухайн өдөр active болгосон.
-    const { data: adminAudits, error: adminAuditErr } = await admin
-      .from("membership_audit_logs")
-      .select(
-        "id, profile_id, created_at, source, new_membership_status, new_membership_started_at, old_membership_status",
-      )
-      .eq("source", "admin")
-      .gte("created_at", start)
-      .lt("created_at", end)
-      .order("created_at", { ascending: false });
+    // Gift: админ гараар идэвхжүүлсэн (төлбөргүй) — audit log.
+    // created_at эсвэл membership эхлэх өдрөөр тухайн өдөрт орно.
+    type GiftAudit = {
+      id: string;
+      profile_id: string | null;
+      created_at: string | null;
+      source: string | null;
+      payment_channel: string | null;
+      new_membership_status: string | null;
+      new_membership_started_at: string | null;
+      old_membership_status: string | null;
+    };
 
-    if (adminAuditErr) {
-      console.warn("paid-day admin audits:", adminAuditErr.message);
+    const giftById = new Map<string, GiftAudit>();
+    const mergeGiftAudits = (list: GiftAudit[] | null | undefined) => {
+      for (const a of list ?? []) {
+        if (!a?.id || giftById.has(a.id)) continue;
+        giftById.set(a.id, a);
+      }
+    };
+
+    const giftSelect =
+      "id, profile_id, created_at, source, payment_channel, new_membership_status, new_membership_started_at, old_membership_status";
+
+    const [giftByCreated, giftByStart] = await Promise.all([
+      admin
+        .from("membership_audit_logs")
+        .select(giftSelect)
+        .eq("source", "admin")
+        .gte("created_at", start)
+        .lt("created_at", end)
+        .order("created_at", { ascending: false }),
+      admin
+        .from("membership_audit_logs")
+        .select(giftSelect)
+        .eq("source", "admin")
+        .gte("new_membership_started_at", start)
+        .lt("new_membership_started_at", end)
+        .order("new_membership_started_at", { ascending: false }),
+    ]);
+
+    if (giftByCreated.error) {
+      console.warn("paid-day gift audits (created):", giftByCreated.error.message);
     } else {
-      for (const a of adminAudits ?? []) {
-        const userId = a.profile_id ?? null;
-        if (!userId || seenUsers.has(userId)) continue;
-        const newStatus = String(a.new_membership_status ?? "")
-          .trim()
-          .toLowerCase();
-        const oldStatus = String(a.old_membership_status ?? "")
-          .trim()
-          .toLowerCase();
-        // Зөвхөн идэвхжүүлсэн / дахин идэвхжүүлсэн үйлдэл
-        if (newStatus !== "active") continue;
-        if (oldStatus === "active") continue;
+      mergeGiftAudits(giftByCreated.data as GiftAudit[] | null);
+    }
+    if (giftByStart.error) {
+      console.warn("paid-day gift audits (started):", giftByStart.error.message);
+    } else {
+      mergeGiftAudits(giftByStart.data as GiftAudit[] | null);
+    }
 
-        seenUsers.add(userId);
-        rows.push({
-          id: `admin-${a.id}`,
-          user_id: userId,
-          paid_at: a.created_at ?? a.new_membership_started_at ?? null,
-          created_at: a.created_at ?? null,
-          payment_channel: "admin",
-          qpay_invoice_id: null,
-          source: "admin",
-        });
+    for (const a of giftById.values()) {
+      const userId = a.profile_id ?? null;
+      if (!userId) continue;
+      const newStatus = String(a.new_membership_status ?? "")
+        .trim()
+        .toLowerCase();
+      const oldStatus = String(a.old_membership_status ?? "")
+        .trim()
+        .toLowerCase();
+      // Идэвхжүүлсэн / бэлэглэсэн (шинээр active)
+      if (newStatus !== "active") continue;
+      if (oldStatus === "active") continue;
+
+      const paidAt = a.created_at ?? a.new_membership_started_at ?? null;
+
+      // Аль хэдийн төлбөр/activation-аар орсон бол сувгийг Бэлэг болгож тэмдэглэнэ
+      // (жнь. Carepay pending + admin gift).
+      const existing = rows.find((r) => r.user_id === userId);
+      if (existing) {
+        const ch = String(existing.payment_channel ?? "").trim().toLowerCase();
+        if (!ch || ch === "other" || ch === "admin") {
+          existing.payment_channel = "gift";
+          existing.source = "gift";
+        }
+        continue;
+      }
+
+      seenUsers.add(userId);
+      rows.push({
+        id: `gift-${a.id}`,
+        user_id: userId,
+        paid_at: paidAt,
+        created_at: a.created_at ?? null,
+        payment_channel: "gift",
+        qpay_invoice_id: null,
+        source: "gift",
+      });
+    }
+
+    // Gift booking мөрүүд — payment_channel-ийг нэг мөр болго
+    for (const r of rows) {
+      const ch = String(r.payment_channel ?? "").trim().toLowerCase();
+      if (ch === "gift" || ch === "admin" || r.source === "gift") {
+        r.payment_channel = "gift";
+        r.source = "gift";
       }
     }
 
-    // Drop inactive profiles (admin grant that day still keeps active members).
+    // Drop inactive profiles (gift grant that day still keeps active members).
     const userIds = Array.from(seenUsers);
     if (userIds.length > 0) {
       const { data: profiles } = await admin

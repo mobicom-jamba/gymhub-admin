@@ -393,13 +393,9 @@ export default function UsersTable({
                                 height={18}
                                 className="size-[18px] shrink-0 rounded-full object-cover ring-1 ring-black/5 dark:ring-white/10"
                               />
-                            ) : ch.key === "gift" ? (
+                            ) : ch.key === "gift" || ch.key === "admin" ? (
                               <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-amber-400/80 text-[10px]" aria-hidden>
                                 🎁
-                              </span>
-                            ) : ch.key === "admin" ? (
-                              <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-orange-500/90 text-[9px] font-black text-white" aria-hidden>
-                                A
                               </span>
                             ) : (
                               <span className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] text-white dark:bg-gray-600">

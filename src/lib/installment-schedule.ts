@@ -44,15 +44,29 @@ function startOfLocalDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function calendarDaysBetween(a: Date, b: Date): number {
-  const ms = startOfLocalDay(b).getTime() - startOfLocalDay(a).getTime();
-  return Math.round(ms / 86_400_000);
+/** `from`-оос хойш `intervalDays` хоног тутам N огноо (жишээ: 15 хоногт нэг). */
+export function everyNDaysDates(
+  from: Date,
+  count: number,
+  intervalDays = 15,
+): Date[] {
+  const dates: Date[] = [];
+  if (count <= 0) return dates;
+  let cursor = startOfLocalDay(from);
+  for (let i = 0; i < count; i++) {
+    cursor = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate() + intervalDays,
+    );
+    dates.push(cursor);
+  }
+  return dates;
 }
 
 /**
+ * @deprecated Use everyNDaysDates — kept for any callers expecting 1/15 calendar days.
  * Сар бүрийн тогтмол өдрүүд (1, 15) дээр `from`-оос хойших ирэх N огноо.
- * Хоёр хуваарийн хооронд хамгийн багадаа `minGapDays` хоног байх ёстой —
- * эс бөгөөс сарын сүүлээр төлөхөд 2-р төлбөр маргааш (1-нд) болдог байсан.
  */
 export function nextFixedDayDates(
   from: Date,
@@ -62,6 +76,11 @@ export function nextFixedDayDates(
 ): Date[] {
   const dates: Date[] = [];
   if (count <= 0) return dates;
+
+  function calendarDaysBetween(a: Date, b: Date): number {
+    const ms = startOfLocalDay(b).getTime() - startOfLocalDay(a).getTime();
+    return Math.round(ms / 86_400_000);
+  }
 
   let after = startOfLocalDay(from);
   let year = after.getFullYear();
@@ -104,19 +123,22 @@ export type InstallmentScheduleItem = {
 
 /**
  * Бусад бүх хуваарийг мянгаас нааш тэгшилж (жишээ нь 111,000₮), үлдэгдлийг эхний хуваарьт
- * нэмнэ. Эхний хуваарь өнөөдөр (UB), дараагийнх сар бүрийн 1 / 15 — хамгийн багадаа ~14 хоногийн зайтай.
+ * нэмнэ. Эхний хуваарь өнөөдөр (UB), дараагийнх 15 хоног тутам.
  */
 export function buildInstallmentSchedule(args: {
   totalAmount: number;
   installmentCount: number;
   startDate?: Date;
+  /** Хоёр хуваарийн хоорондын хоног (default 15). */
+  intervalDays?: number;
 }): InstallmentScheduleItem[] {
   const { totalAmount, installmentCount } = args;
+  const intervalDays = args.intervalDays ?? 15;
   const start = startOfLocalDay(args.startDate ?? todayInUlaanbaatar());
   const rawBase = Math.floor(totalAmount / installmentCount);
   const base = Math.floor(rawBase / 1000) * 1000;
   const firstAmount = totalAmount - base * (installmentCount - 1);
-  const restDates = nextFixedDayDates(start, installmentCount - 1);
+  const restDates = everyNDaysDates(start, installmentCount - 1, intervalDays);
   const dueDates = [start, ...restDates];
 
   return Array.from({ length: installmentCount }, (_, i) => {

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { errorResponse, successResponse } from "@/lib/api-response";
-import { attributeMembershipAudit } from "@/lib/membership-audit";
+import { recordGiftMembershipGrant } from "@/lib/gift-membership";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
@@ -138,7 +138,20 @@ export async function POST(request: Request) {
           profileUpdateError.message,
         );
       }
-      await attributeMembershipAudit(admin, authData.user.id, auth.userId, "admin");
+      if (computedMembershipStatus === "active") {
+        await recordGiftMembershipGrant(admin, {
+          profileId: authData.user.id,
+          actorId: auth.userId,
+          createBooking: true,
+        });
+      } else {
+        const { attributeMembershipAudit } = await import("@/lib/membership-audit");
+        await attributeMembershipAudit(admin, authData.user.id, {
+          actorId: auth.userId,
+          source: "admin",
+          paymentChannel: "gift",
+        });
+      }
     }
     return successResponse({ id: authData.user?.id });
   } catch (e) {

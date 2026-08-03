@@ -60,7 +60,7 @@ async function bookingsColumnExists(
 function classifyPaymentChannel(row: {
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
-}): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "other" {
+}): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "admin" | "other" {
   const raw = (row.payment_channel ?? "").trim().toLowerCase();
   if (raw === "qpay" || raw === "q_pay" || raw === "q-pay") return "qpay";
   if (raw === "sono") return "sono";
@@ -68,14 +68,17 @@ function classifyPaymentChannel(row: {
   if (raw === "carepay" || raw === "care_pay") return "carepay";
   if (raw === "monpay" || raw === "mon_pay") return "monpay";
   if (raw === "gymfintech" || raw === "flexy" || raw === "gym_fintech") return "gymfintech";
-  if (raw === "gift") return "gift";
+  if (raw === "gift" || raw === "admin" || raw === "manual" || raw === "admin_grant") {
+    return "gift";
+  }
   const inv = String(row.qpay_invoice_id ?? "").trim();
   if (inv.startsWith("GH")) return "sono";
+  if (/^\d{8}-\d+-\d+-\d+$/.test(inv)) return "carepay";
   if (inv.length > 0) return "qpay";
   return "other";
 }
 
-function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "other" {
+function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "admin" | "other" {
   const raw = channel.trim().toLowerCase();
   if (raw === "qpay" || raw === "q_pay" || raw === "q-pay") return "qpay";
   if (raw === "sono") return "sono";
@@ -83,7 +86,9 @@ function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "
   if (raw === "carepay" || raw === "care_pay") return "carepay";
   if (raw === "monpay" || raw === "mon_pay") return "monpay";
   if (raw === "gymfintech" || raw === "flexy") return "gymfintech";
-  if (raw === "gift") return "gift";
+  if (raw === "gift" || raw === "admin" || raw === "manual" || raw === "admin_grant") {
+    return "gift";
+  }
   return "other";
 }
 
@@ -93,7 +98,17 @@ function isLendingPaidStatus(status: string): boolean {
 }
 
 function emptyChannels() {
-  return { qpay: 0, sono: 0, pocket: 0, carepay: 0, monpay: 0, gymfintech: 0, gift: 0, other: 0 };
+  return {
+    qpay: 0,
+    sono: 0,
+    pocket: 0,
+    carepay: 0,
+    monpay: 0,
+    gymfintech: 0,
+    gift: 0,
+    admin: 0,
+    other: 0,
+  };
 }
 
 type RecentPayment = {
@@ -234,6 +249,7 @@ async function aggregateBookingsSinglePass(
     monpay: number;
     gymfintech: number;
     gift: number;
+    admin: number;
     other: number;
   };
 }> {
@@ -319,6 +335,7 @@ async function aggregateFromLendingRecords(
     monpay: number;
     gymfintech: number;
     gift: number;
+    admin: number;
     other: number;
   };
   byMonth: MonthPoint[];

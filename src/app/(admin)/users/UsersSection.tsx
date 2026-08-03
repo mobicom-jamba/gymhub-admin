@@ -25,6 +25,11 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import flatpickr from "flatpickr";
 import { Mongolian } from "flatpickr/dist/l10n/mn.js";
 import { useAuth } from "@/context/AuthContext";
+import {
+  getPaymentChannelVisual,
+  normalizePaymentChannel,
+  type PaymentChannelKey,
+} from "@/lib/payment-channel-label";
 
 export type Profile = {
   id: string;
@@ -57,6 +62,7 @@ type PaidBookingRow = {
   created_at: string | null;
   payment_channel?: string | null;
   qpay_invoice_id?: string | null;
+  source?: "booking" | "flexy" | "activation" | "gift" | "admin";
   installment_no?: number | null;
   installment_count?: number | null;
 };
@@ -70,12 +76,73 @@ export type FlexyProgressLabel = {
 /** Early төлбөрийн төрөл: 150k эхний сар / 330k үлдэгдэл */
 type EarlyPaymentFilter = "" | "early_first" | "early_rest";
 
+/** Төлбөртэй үйлчилгээ vs Gift (бэлэг) */
+type EntitlementFilter = "" | "paid" | "gift";
+
+/** Төлбөрийн төрөл (суваг) шүүлт */
+type PaymentChannelFilter = "" | PaymentChannelKey;
+
+const PAYMENT_CHANNEL_FILTER_OPTIONS: PaymentChannelKey[] = [
+  "qpay",
+  "sono",
+  "pocket",
+  "carepay",
+  "monpay",
+  "gymfintech",
+  "gift",
+  "other",
+];
+
 function isEarlyFirstBookingId(id: string): boolean {
   return id.startsWith("membership-early-first-");
 }
 
 function isEarlyRestBookingId(id: string): boolean {
   return id.startsWith("membership-early-rest-");
+}
+
+function isGiftChannel(channel: string | null | undefined): boolean {
+  const ch = String(channel ?? "").trim().toLowerCase();
+  return ch === "gift" || ch === "admin";
+}
+
+function resolveRowChannel(row: {
+  payment_channel?: string | null;
+  qpay_invoice_id?: string | null;
+  source?: string | null;
+}): string {
+  const source = String(row.source ?? "").trim().toLowerCase();
+  if (source === "gift" || source === "admin") return "gift";
+  const ch = String(row.payment_channel ?? "").trim();
+  if (ch) return isGiftChannel(ch) ? "gift" : ch;
+  const inv = String(row.qpay_invoice_id ?? "").trim();
+  if (/^\d{8}-\d+-\d+-\d+$/.test(inv)) return "carepay";
+  if (inv) return "qpay";
+  return "";
+}
+
+function resolveNormalizedChannel(row: {
+  payment_channel?: string | null;
+  qpay_invoice_id?: string | null;
+  source?: string | null;
+}): PaymentChannelKey {
+  const source = String(row.source ?? "").trim().toLowerCase();
+  if (source === "flexy") return "gymfintech";
+  if (source === "gift" || source === "admin") return "gift";
+  const raw = resolveRowChannel(row);
+  const key = normalizePaymentChannel(raw || null, row.qpay_invoice_id);
+  return key === "admin" ? "gift" : key;
+}
+
+function channelMatchesFilter(
+  row: {
+    payment_channel?: string | null;
+    qpay_invoice_id?: string | null;
+    source?: string | null;
+  },
+  filter: PaymentChannelKey,
+): boolean {
+  return resolveNormalizedChannel(row) === filter;
 }
 
 function buildOrganizationOptions(
@@ -284,6 +351,12 @@ export default function UsersSection() {
   const [earlyPaymentFilter, setEarlyPaymentFilter] = useState<EarlyPaymentFilter>("");
   const [earlyPaymentUserIds, setEarlyPaymentUserIds] = useState<Set<string>>(new Set());
   const [earlyPaymentLoading, setEarlyPaymentLoading] = useState(false);
+  const [entitlementFilter, setEntitlementFilter] = useState<EntitlementFilter>("");
+  const [entitlementUserIds, setEntitlementUserIds] = useState<Set<string> | null>(null);
+  const [entitlementLoading, setEntitlementLoading] = useState(false);
+  const [paymentChannelFilter, setPaymentChannelFilter] = useState<PaymentChannelFilter>("");
+  const [paymentChannelUserIds, setPaymentChannelUserIds] = useState<Set<string> | null>(null);
+  const [paymentChannelLoading, setPaymentChannelLoading] = useState(false);
   const toast = useToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -291,6 +364,7 @@ export default function UsersSection() {
   const initializedFromQuery = useRef(false);
   const paidDateInputRef = useRef<HTMLInputElement | null>(null);
   const paidDatePickerRef = useRef<flatpickr.Instance | null>(null);
+  const frozenProfilesRef = useRef<Profile[] | null>(null);
 
   const PROFILE_SELECT_BASE = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), avatar_path, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
   const PROFILE_SELECT = `${PROFILE_SELECT_BASE}, agreement_accepted_at, agreement_version`;
@@ -466,7 +540,11 @@ export default function UsersSection() {
       monthSelectorType: "static",
       position: "auto left",
       onChange: (_selectedDates, dateStr) => {
-        setPaidOnDate((prev) => (prev === dateStr ? prev : dateStr));
+        setPaidOnDate((prev) => {
+          if (prev === dateStr) return prev;
+          setPaidBookingsLoading(true);
+          return dateStr;
+        });
         setPage(1);
         setSelectedIds(new Set());
       },
@@ -499,12 +577,19 @@ export default function UsersSection() {
     const role = searchParams.get("role");
     const paidOn = searchParams.get("paidOn");
     const earlyPay = searchParams.get("earlyPay");
+    const payChannel = searchParams.get("payChannel");
     if (q) setSearch(q);
     if (status) setStatusFilter(status);
     if (org) setOrgFilter(org);
     if (paidOn) setPaidOnDate(paidOn);
     if (earlyPay === "first") setEarlyPaymentFilter("early_first");
     if (earlyPay === "rest") setEarlyPaymentFilter("early_rest");
+    if (
+      payChannel &&
+      (PAYMENT_CHANNEL_FILTER_OPTIONS as string[]).includes(payChannel)
+    ) {
+      setPaymentChannelFilter(payChannel as PaymentChannelKey);
+    }
     if (role === "user" || role === "admin" || role === "moderator" || role === "sales") setTab(role);
     initializedFromQuery.current = true;
   }, [searchParams]);
@@ -519,13 +604,15 @@ export default function UsersSection() {
     if (earlyPaymentFilter === "early_first") params.set("earlyPay", "first");
     else if (earlyPaymentFilter === "early_rest") params.set("earlyPay", "rest");
     else params.delete("earlyPay");
+    if (paymentChannelFilter) params.set("payChannel", paymentChannelFilter);
+    else params.delete("payChannel");
     if (tab && tab !== "user") params.set("role", tab); else params.delete("role");
     params.delete("page");
     const next = params.toString();
     const current = searchParams.toString();
     if (next === current) return;
     router.replace(next ? `${pathname}?${next}` : pathname);
-  }, [search, statusFilter, orgFilter, paidOnDate, earlyPaymentFilter, tab, pathname, router, searchParams]);
+  }, [search, statusFilter, orgFilter, paidOnDate, earlyPaymentFilter, paymentChannelFilter, tab, pathname, router, searchParams]);
 
   const organizations = useMemo(() => {
     const orgs = [...new Set(
@@ -648,9 +735,8 @@ export default function UsersSection() {
     const map: Record<string, string> = {};
     for (const booking of paidBookings) {
       if (!booking.user_id || map[booking.user_id]) continue;
-      const ch = (booking.payment_channel ?? "").trim();
+      const ch = resolveRowChannel(booking);
       if (ch) map[booking.user_id] = ch;
-      else if (booking.qpay_invoice_id) map[booking.user_id] = "qpay";
     }
     return map;
   }, [paidBookings]);
@@ -726,11 +812,166 @@ export default function UsersSection() {
     };
   }, [tab, earlyPaymentFilter, paidOnDate]);
 
+  // Төлбөртэй vs Gift шүүлт — user id багц
+  useEffect(() => {
+    if (tab !== "user" || !entitlementFilter) {
+      setEntitlementUserIds(null);
+      setEntitlementLoading(false);
+      return;
+    }
+
+    // Төлбөрийн өдөр ачаалагдахыг хүлээнэ — хоосон/хуучин өгөгдлөөр бүү шүү
+    if (paidOnDate && paidBookingsLoading) {
+      setEntitlementLoading(true);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setEntitlementLoading(true);
+      const supabase = createBrowserSupabaseClient();
+      const paidIds = new Set<string>();
+      const giftIds = new Set<string>();
+
+      if (paidOnDate) {
+        for (const row of paidBookings) {
+          if (!row.user_id) continue;
+          const ch = resolveRowChannel(row);
+          if (isGiftChannel(ch) || row.source === "gift" || row.source === "admin") {
+            giftIds.add(row.user_id);
+          } else {
+            paidIds.add(row.user_id);
+          }
+        }
+      } else {
+        const { data: bookings } = await supabase
+          .from("bookings")
+          .select("user_id, payment_channel, qpay_invoice_id")
+          .eq("payment_status", "paid");
+        for (const row of bookings ?? []) {
+          if (!row.user_id) continue;
+          const ch = resolveRowChannel(row);
+          if (isGiftChannel(ch)) giftIds.add(row.user_id);
+          else if (ch) paidIds.add(row.user_id);
+        }
+
+        const { data: flexyPlans } = await supabase
+          .from("installment_plans")
+          .select("user_id")
+          .in("status", ["active", "completed"]);
+        for (const plan of flexyPlans ?? []) {
+          if (plan.user_id) paidIds.add(plan.user_id);
+        }
+
+        const { data: audits } = await supabase
+          .from("membership_audit_logs")
+          .select("profile_id, payment_channel, new_membership_status, old_membership_status")
+          .eq("source", "admin");
+        for (const a of audits ?? []) {
+          if (!a.profile_id) continue;
+          if (String(a.new_membership_status ?? "").toLowerCase() !== "active") continue;
+          if (String(a.old_membership_status ?? "").toLowerCase() === "active") continue;
+          if (paidIds.has(a.profile_id)) continue;
+          giftIds.add(a.profile_id);
+        }
+      }
+
+      if (cancelled) return;
+      setEntitlementUserIds(entitlementFilter === "gift" ? giftIds : paidIds);
+      setEntitlementLoading(false);
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, entitlementFilter, paidOnDate, paidBookings, paidBookingsLoading]);
+
+  /** Төлбөрийн төрөл шүүлт — төлбөрийн өдөртэй үед paidBookings-оос */
+  const paidChannelFilteredUserIds = useMemo(() => {
+    if (!paymentChannelFilter || !paidOnDate) return null;
+    const ids = new Set<string>();
+    for (const booking of paidBookings) {
+      if (!booking.user_id) continue;
+      if (channelMatchesFilter(booking, paymentChannelFilter)) {
+        ids.add(booking.user_id);
+      }
+    }
+    return ids;
+  }, [paymentChannelFilter, paidOnDate, paidBookings]);
+
+  // Төлбөрийн төрөл шүүлт — өдөргүй үед бүх paid booking / Flexy / gift-аас
+  useEffect(() => {
+    if (tab !== "user" || !paymentChannelFilter || paidOnDate) {
+      if (!paymentChannelFilter) setPaymentChannelUserIds(null);
+      setPaymentChannelLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      setPaymentChannelLoading(true);
+      // Хоосон Set бүү тавь — ачааллын үед жагсаалт анивчихгүй
+      const supabase = createBrowserSupabaseClient();
+      const ids = new Set<string>();
+      const filter = paymentChannelFilter;
+
+      const { data: bookings } = await supabase
+        .from("bookings")
+        .select("user_id, payment_channel, qpay_invoice_id")
+        .eq("payment_status", "paid");
+      for (const row of bookings ?? []) {
+        if (!row.user_id) continue;
+        if (channelMatchesFilter(row, filter)) ids.add(row.user_id);
+      }
+
+      if (filter === "gymfintech") {
+        const { data: flexyPlans } = await supabase
+          .from("installment_plans")
+          .select("user_id")
+          .in("status", ["active", "completed"]);
+        for (const plan of flexyPlans ?? []) {
+          if (plan.user_id) ids.add(plan.user_id);
+        }
+      }
+
+      if (filter === "gift") {
+        const { data: audits } = await supabase
+          .from("membership_audit_logs")
+          .select("profile_id, payment_channel, new_membership_status, old_membership_status")
+          .eq("source", "admin");
+        for (const a of audits ?? []) {
+          if (!a.profile_id) continue;
+          if (String(a.new_membership_status ?? "").toLowerCase() !== "active") continue;
+          if (String(a.old_membership_status ?? "").toLowerCase() === "active") continue;
+          ids.add(a.profile_id);
+        }
+      }
+
+      if (cancelled) return;
+      setPaymentChannelUserIds(ids);
+      setPaymentChannelLoading(false);
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, paymentChannelFilter, paidOnDate]);
+
+  const channelFilteredUserIds = paidOnDate
+    ? paidChannelFilteredUserIds
+    : paymentChannelFilter
+      ? paymentChannelUserIds
+      : null;
+
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
       if ((p.role ?? "user") !== tab) return false;
       if (tab === "user" && paidOnDate && !paidUserIds.has(p.id)) return false;
       if (tab === "user" && earlyFilteredUserIds && !earlyFilteredUserIds.has(p.id)) return false;
+      if (tab === "user" && entitlementUserIds && !entitlementUserIds.has(p.id)) return false;
+      if (tab === "user" && channelFilteredUserIds && !channelFilteredUserIds.has(p.id)) return false;
       const orgName = profileOrgName(p);
       if (orgFilter && orgName !== orgFilter) return false;
       if (statusFilter && profileStatus(p) !== statusFilter) return false;
@@ -746,7 +987,18 @@ export default function UsersSection() {
       }
       return true;
     });
-  }, [profiles, search, tab, orgFilter, statusFilter, paidOnDate, paidUserIds, earlyFilteredUserIds]);
+  }, [
+    profiles,
+    search,
+    tab,
+    orgFilter,
+    statusFilter,
+    paidOnDate,
+    paidUserIds,
+    earlyFilteredUserIds,
+    entitlementUserIds,
+    channelFilteredUserIds,
+  ]);
 
   const sortedFilteredProfiles = useMemo(() => {
     if (!sortColumn) return filteredProfiles;
@@ -811,8 +1063,29 @@ export default function UsersSection() {
     setPage(1);
   };
 
-  const totalPages = Math.max(1, Math.ceil(sortedFilteredProfiles.length / pageSize));
-  const pagedProfiles = sortedFilteredProfiles.slice((page - 1) * pageSize, page * pageSize);
+  /** Async шүүлт ачаалж байгаа эсэх — жагсаалтыг freeze + overlay */
+  const filtersLoading =
+    tab === "user" &&
+    ((Boolean(paidOnDate) && paidBookingsLoading) ||
+      (Boolean(entitlementFilter) && entitlementLoading) ||
+      (Boolean(earlyPaymentFilter) && !paidOnDate && earlyPaymentLoading) ||
+      (Boolean(paymentChannelFilter) && !paidOnDate && paymentChannelLoading));
+
+  // Ачааллын үед өмнөх жагсаалтыг freeze — хоосон анивчилтгүй
+  if (filtersLoading) {
+    if (frozenProfilesRef.current === null) {
+      frozenProfilesRef.current = sortedFilteredProfiles;
+    }
+  } else {
+    frozenProfilesRef.current = null;
+  }
+  const displayProfiles =
+    filtersLoading && frozenProfilesRef.current
+      ? frozenProfilesRef.current
+      : sortedFilteredProfiles;
+
+  const totalPages = Math.max(1, Math.ceil(displayProfiles.length / pageSize));
+  const pagedProfiles = displayProfiles.slice((page - 1) * pageSize, page * pageSize);
   const pagedProfileIdsKey = pagedProfiles.map((p) => p.id).join(",");
 
   // Latest paid payment channel + Flexy progress for visible users.
@@ -941,14 +1214,29 @@ export default function UsersSection() {
       for (const row of rows ?? []) {
         const uid = row.user_id;
         if (!uid || map[uid]) continue;
-        const ch = String(row.payment_channel ?? "").trim();
-        const inv = String(row.qpay_invoice_id ?? "").trim();
+        const ch = resolveRowChannel(row);
         if (ch) map[uid] = ch;
-        else if (inv) map[uid] = "qpay";
       }
       for (const [uid] of planByUser) {
         if (!map[uid]) map[uid] = "gymfintech";
       }
+
+      // Gift: no paid booking yet — fall back to admin grant audit
+      const missing = ids.filter((id) => !map[id]);
+      if (missing.length > 0) {
+        const { data: audits } = await supabase
+          .from("membership_audit_logs")
+          .select("profile_id, payment_channel, source, created_at")
+          .in("profile_id", missing)
+          .eq("source", "admin")
+          .order("created_at", { ascending: false });
+        for (const a of audits ?? []) {
+          if (!a.profile_id || map[a.profile_id]) continue;
+          map[a.profile_id] = "gift";
+        }
+      }
+
+      if (cancelled) return;
       setPaymentChannelByUser(map);
 
       const flexyMap: Record<string, FlexyProgressLabel> = {};
@@ -1157,6 +1445,16 @@ export default function UsersSection() {
         }
       : null,
     orgFilter ? { key: "org", label: `Байгууллага: ${orgFilter}`, clear: () => setOrgFilter("") } : null,
+    entitlementFilter
+      ? {
+          key: "entitlement",
+          label:
+            entitlementFilter === "paid"
+              ? "Эрх: Төлбөртэй"
+              : "Эрх: Бэлэг",
+          clear: () => setEntitlementFilter(""),
+        }
+      : null,
     earlyPaymentFilter
       ? {
           key: "earlyPay",
@@ -1165,6 +1463,13 @@ export default function UsersSection() {
               ? "Early 150k (эхний сар)"
               : "Early 330k (үлдэгдэл)",
           clear: () => setEarlyPaymentFilter(""),
+        }
+      : null,
+    paymentChannelFilter
+      ? {
+          key: "payChannel",
+          label: `Төлбөр: ${getPaymentChannelVisual(paymentChannelFilter).label}`,
+          clear: () => setPaymentChannelFilter(""),
         }
       : null,
   ].filter(Boolean) as Array<{ key: string; label: string; clear: () => void }>;
@@ -1185,6 +1490,8 @@ export default function UsersSection() {
                 if (r !== "user") {
                   setPaidOnDate("");
                   setEarlyPaymentFilter("");
+                  setEntitlementFilter("");
+                  setPaymentChannelFilter("");
                 }
                 setPage(1);
                 setPageSize(25);
@@ -1208,286 +1515,396 @@ export default function UsersSection() {
       </div>
 
       <ComponentCard
-        title={`${usersTabLabel(tab)} — ${sortedFilteredProfiles.length.toLocaleString()}`}
+        title={`${usersTabLabel(tab)} — ${
+          filtersLoading ? "…" : displayProfiles.length.toLocaleString()
+        }`}
       >
-        {/* ── Filters row ── */}
-        <div className="mb-4 space-y-2">
-          {/* Row 1: search + filters + actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput
-              value={search}
-              onChange={(v) => { setSearch(v); resetPage(); }}
-              placeholder="Нэр, утас, байгууллага..."
-              className="w-56"
-            />
-
-            <select
-              value={orgFilter}
-              onChange={(e) => { setOrgFilter(e.target.value); resetPage(); }}
-              className="h-10 max-w-[200px] rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
-            >
-              <option value="">🏢 Байгууллага: бүгд</option>
-              {organizations.map((o) => (
-                <option key={o} value={o}>{o}</option>
-              ))}
-            </select>
-
-            <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
-              {([
-                ["", "Бүгд"],
-                ["active", "✅ Идэвх"],
-                ["paused", "⏸ Түдгэлзүүлсэн"],
-                ["inactive", "Идэвхгүй"],
-                ["expired", "⛔ Дууссан"],
-              ] as const).map(([v, label]) => (
-                <button key={v} type="button"
-                  onClick={() => { setStatusFilter(v); resetPage(); }}
-                  className={`h-8 rounded-lg px-3 text-xs font-medium transition-all ${
-                    statusFilter === v
-                      ? v === "active" ? "bg-emerald-500 text-white shadow-sm"
-                        : v === "paused" ? "bg-orange-500 text-white shadow-sm"
-                        : v === "inactive" ? "bg-amber-500 text-white shadow-sm"
-                        : v === "expired" ? "bg-red-500 text-white shadow-sm"
-                        : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
-                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  }`}>{label}
-                </button>
-              ))}
+        {/* ── Filter toolbar ── */}
+        <div className="relative mb-5 overflow-hidden rounded-2xl border border-gray-200/80 bg-gradient-to-b from-slate-50 to-white shadow-sm dark:border-white/[0.08] dark:from-gray-900/80 dark:to-gray-900/40">
+          {filtersLoading && (
+            <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden bg-brand-100 dark:bg-brand-900/50">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-brand-500" />
             </div>
+          )}
 
-            {tab === "user" && (
-              <div className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-all ${
-                paidBookingsLoading
-                  ? "border-brand-300 bg-brand-50/70 shadow-sm dark:border-brand-700 dark:bg-brand-900/20"
-                  : "border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800/60"
-              }`}>
-                <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">Төлбөрийн өдөр</span>
-                <div className="relative">
-                  <input
-                    ref={paidDateInputRef}
-                    placeholder="YYYY-MM-DD"
-                    onFocus={() => paidDatePickerRef.current?.open()}
-                    onClick={() => paidDatePickerRef.current?.open()}
-                    readOnly
-                    className="h-9 rounded-lg border border-gray-200 bg-white px-3 pr-9 text-sm text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white/90"
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">
-                    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-13 9h16a1 1 0 001-1V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a1 1 0 001 1z" />
-                    </svg>
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaidOnDate(getTodayDateStringUB());
-                    setPage(1);
-                    setSelectedIds(new Set());
-                  }}
-                  disabled={paidBookingsLoading}
-                  className="inline-flex h-8 items-center gap-2 rounded-lg border border-gray-200 px-3 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-70 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/[0.04]"
-                >
-                  {paidBookingsLoading && (
-                    <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  )}
-                  Өнөөдөр
-                </button>
-                {paidOnDate && (
+          <div className="space-y-3 p-3 sm:p-4">
+            {/* Search + actions */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <SearchInput
+                value={search}
+                onChange={(v) => { setSearch(v); resetPage(); }}
+                placeholder="Нэр, утас, байгууллага..."
+                className="min-w-[220px] flex-1 sm:max-w-sm"
+              />
+
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {canManageUsers && selectedIds.size > 0 && (
+                  <div className="flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 ring-1 ring-amber-200/80 dark:bg-amber-900/20 dark:ring-amber-800">
+                    <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                      {selectedIds.size} сонгосон
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-full bg-red-500 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+                      onClick={() => setConfirmBulk(true)}
+                      disabled={bulkDeleting}
+                    >
+                      {bulkDeleting ? "..." : "Устгах"}
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center rounded-xl bg-white p-0.5 shadow-sm ring-1 ring-gray-200/80 dark:bg-gray-800 dark:ring-gray-700">
                   <button
                     type="button"
-                    onClick={() => {
-                      setPaidOnDate("");
+                    onClick={() => setDensity("comfortable")}
+                    title="Тэлэгдсэн"
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                      density === "comfortable"
+                        ? "bg-brand-500 text-white shadow-sm"
+                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDensity("compact")}
+                    title="Нягтаралсан"
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all ${
+                      density === "compact"
+                        ? "bg-brand-500 text-white shadow-sm"
+                        : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6h16.5M3.75 9.75h16.5M3.75 13.5h16.5M3.75 17.25h16.5M3.75 21h16.5" />
+                    </svg>
+                  </button>
+                </div>
+
+                <ColumnToggle
+                  options={[
+                    { key: "member", label: "Гишүүн" },
+                    { key: "phone", label: "Утас" },
+                    { key: "organization", label: "Байгууллага" },
+                    { key: "tier", label: "Тариф · төрөл" },
+                    { key: "paymentChannel", label: "Төлбөрийн хэрэгсэл" },
+                    { key: "agreement", label: "Гэрээ" },
+                    { key: "startDate", label: "Эхлэх огноо" },
+                    { key: "expireDate", label: "Дуусах огноо" },
+                    { key: "totalVisits", label: "Нийт ирц" },
+                    { key: "lastVisit", label: "Сүүлд ирсэн" },
+                    { key: "streak", label: "Streak" },
+                  ]}
+                  visible={visibleColumns}
+                  onChange={setVisibleColumns}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => exportToCsv("users", filteredProfiles, [
+                    { key: "full_name", label: "Нэр" },
+                    { key: "phone", label: "Утас" },
+                    { key: "organization", label: "Байгууллага" },
+                    { key: "membership_status", label: "Төлөв" },
+                    { key: "membership_expires_at", label: "Дуусах огноо" },
+                  ])}
+                  className="flex h-9 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-medium text-gray-600 shadow-sm ring-1 ring-gray-200/80 transition hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-white/[0.06]"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                  </svg>
+                  CSV
+                </button>
+
+                {canManageUsers && (
+                  <button
+                    type="button"
+                    onClick={() => setFormProfile("new")}
+                    className="flex h-9 items-center gap-1.5 rounded-xl bg-brand-500 px-3.5 text-sm font-semibold text-white shadow-sm shadow-brand-500/25 transition hover:bg-brand-600"
+                  >
+                    <PlusIcon className="size-4" />
+                    Нэмэх
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Filter fields */}
+            <div
+              className={`grid gap-2 ${
+                tab === "user"
+                  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
+                  : "grid-cols-2 sm:grid-cols-3"
+              }`}
+            >
+              <label className="group flex min-w-0 flex-col gap-1">
+                <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Байгууллага
+                </span>
+                <select
+                  value={orgFilter}
+                  onChange={(e) => { setOrgFilter(e.target.value); resetPage(); }}
+                  className={`h-9 w-full rounded-xl border-0 bg-white px-2.5 text-sm shadow-sm ring-1 transition focus:outline-none focus:ring-2 focus:ring-brand-400/50 dark:bg-gray-800 dark:text-white/90 ${
+                    orgFilter
+                      ? "font-medium text-brand-700 ring-brand-300 dark:text-brand-300 dark:ring-brand-700"
+                      : "text-gray-700 ring-gray-200/90 dark:ring-gray-700"
+                  }`}
+                >
+                  <option value="">Бүгд</option>
+                  {organizations.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="group flex min-w-0 flex-col gap-1">
+                <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Төлөв
+                </span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); resetPage(); }}
+                  className={`h-9 w-full rounded-xl border-0 bg-white px-2.5 text-sm shadow-sm ring-1 transition focus:outline-none focus:ring-2 focus:ring-brand-400/50 dark:bg-gray-800 dark:text-white/90 ${
+                    statusFilter
+                      ? "font-medium text-brand-700 ring-brand-300 dark:text-brand-300 dark:ring-brand-700"
+                      : "text-gray-700 ring-gray-200/90 dark:ring-gray-700"
+                  }`}
+                >
+                  <option value="">Бүгд</option>
+                  <option value="active">✅ Идэвх</option>
+                  <option value="paused">⏸ Түдгэлзүүлсэн</option>
+                  <option value="inactive">Идэвхгүй</option>
+                  <option value="expired">⛔ Дууссан</option>
+                </select>
+              </label>
+
+              {tab === "user" && (
+                <label className="group flex min-w-0 flex-col gap-1">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Эрх
+                  </span>
+                  <select
+                    value={entitlementFilter}
+                    onChange={(e) => {
+                      const v = e.target.value as EntitlementFilter;
+                      if (v) setEntitlementLoading(true);
+                      setEntitlementFilter(v);
                       setPage(1);
                       setSelectedIds(new Set());
                     }}
-                    disabled={paidBookingsLoading}
-                    className="h-8 rounded-lg border border-red-200 px-3 text-xs font-medium text-red-500 hover:bg-red-50 disabled:cursor-wait disabled:opacity-70 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                    className={`h-9 w-full rounded-xl border-0 bg-white px-2.5 text-sm shadow-sm ring-1 transition focus:outline-none focus:ring-2 focus:ring-brand-400/50 dark:bg-gray-800 dark:text-white/90 ${
+                      entitlementFilter
+                        ? "font-medium text-brand-700 ring-brand-300 dark:text-brand-300 dark:ring-brand-700"
+                        : "text-gray-700 ring-gray-200/90 dark:ring-gray-700"
+                    }`}
                   >
-                    Арилгах
-                  </button>
-                )}
-                {paidOnDate && (
-                  <span className={`text-xs ${paidBookingsLoading ? "font-semibold text-brand-600 dark:text-brand-300" : "text-gray-500 dark:text-gray-400"}`}>
-                    {paidBookingsLoading
-                      ? "Төлбөрийн мэдээлэл ачаалж байна..."
-                      : `${paidUsersCount} хэрэглэгч · ${paidCount} төлбөр`}
-                  </span>
-                )}
-              </div>
-            )}
+                    <option value="">Бүгд</option>
+                    <option value="paid">Төлбөртэй</option>
+                    <option value="gift">Бэлэг</option>
+                  </select>
+                </label>
+              )}
 
-            {tab === "user" && (
-              <div className={`flex items-center gap-1 rounded-xl border p-1 transition-all ${
-                earlyPaymentLoading
-                  ? "border-teal-300 bg-teal-50/70 dark:border-teal-700 dark:bg-teal-900/20"
-                  : "border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/60"
-              }`}>
-                {([
-                  ["", "Бүгд"],
-                  ["early_first", "Early 150k"],
-                  ["early_rest", "Early 330k"],
-                ] as const).map(([v, label]) => (
-                  <button
-                    key={v || "all"}
-                    type="button"
-                    title={
-                      v === "early_first"
-                        ? "Early эхний сарын төлбөр (150k)"
-                        : v === "early_rest"
-                          ? "Early 11 сар үлдэгдэл (330k)"
-                          : "Early төлбөрийн шүүлтгүй"
-                    }
-                    onClick={() => {
+              {tab === "user" && (
+                <label className="group flex min-w-0 flex-col gap-1">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Early
+                  </span>
+                  <select
+                    value={earlyPaymentFilter}
+                    onChange={(e) => {
+                      const v = e.target.value as EarlyPaymentFilter;
+                      if (v && !paidOnDate) setEarlyPaymentLoading(true);
                       setEarlyPaymentFilter(v);
                       setPage(1);
                       setSelectedIds(new Set());
                     }}
-                    disabled={earlyPaymentLoading}
-                    className={`h-8 rounded-lg px-3 text-xs font-medium transition-all disabled:opacity-70 ${
-                      earlyPaymentFilter === v
-                        ? v === "early_first"
-                          ? "bg-teal-500 text-white shadow-sm"
-                          : v === "early_rest"
-                            ? "bg-sky-500 text-white shadow-sm"
-                            : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
-                        : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    className={`h-9 w-full rounded-xl border-0 bg-white px-2.5 text-sm shadow-sm ring-1 transition focus:outline-none focus:ring-2 focus:ring-brand-400/50 dark:bg-gray-800 dark:text-white/90 ${
+                      earlyPaymentFilter
+                        ? "font-medium text-brand-700 ring-brand-300 dark:text-brand-300 dark:ring-brand-700"
+                        : "text-gray-700 ring-gray-200/90 dark:ring-gray-700"
                     }`}
                   >
-                    {label}
+                    <option value="">Бүгд</option>
+                    <option value="early_first">150k</option>
+                    <option value="early_rest">330k</option>
+                  </select>
+                </label>
+              )}
+
+              {tab === "user" && (
+                <label className="group flex min-w-0 flex-col gap-1">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Төлбөрийн төрөл
+                  </span>
+                  <select
+                    value={paymentChannelFilter}
+                    onChange={(e) => {
+                      const v = e.target.value as PaymentChannelFilter;
+                      if (v && !paidOnDate) setPaymentChannelLoading(true);
+                      setPaymentChannelFilter(v);
+                      setPage(1);
+                      setSelectedIds(new Set());
+                    }}
+                    className={`h-9 w-full rounded-xl border-0 bg-white px-2.5 text-sm shadow-sm ring-1 transition focus:outline-none focus:ring-2 focus:ring-brand-400/50 dark:bg-gray-800 dark:text-white/90 ${
+                      paymentChannelFilter
+                        ? "font-medium text-brand-700 ring-brand-300 dark:text-brand-300 dark:ring-brand-700"
+                        : "text-gray-700 ring-gray-200/90 dark:ring-gray-700"
+                    }`}
+                  >
+                    <option value="">Бүгд</option>
+                    {PAYMENT_CHANNEL_FILTER_OPTIONS.map((key) => (
+                      <option key={key} value={key}>
+                        {getPaymentChannelVisual(key).label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {tab === "user" && (
+                <div className="col-span-2 flex min-w-0 flex-col gap-1 sm:col-span-1 lg:col-span-1">
+                  <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                    Төлбөрийн өдөр
+                  </span>
+                  <div
+                    className={`flex h-9 items-center gap-1 rounded-xl bg-white px-1.5 shadow-sm ring-1 transition dark:bg-gray-800 ${
+                      paidOnDate
+                        ? "ring-brand-300 dark:ring-brand-700"
+                        : "ring-gray-200/90 dark:ring-gray-700"
+                    }`}
+                  >
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        ref={paidDateInputRef}
+                        placeholder="Огноо"
+                        onFocus={() => paidDatePickerRef.current?.open()}
+                        onClick={() => paidDatePickerRef.current?.open()}
+                        readOnly
+                        className="h-7 w-full truncate bg-transparent px-1.5 pr-6 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none dark:text-white/90"
+                      />
+                      <span className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10m-13 9h16a1 1 0 001-1V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a1 1 0 001 1z" />
+                        </svg>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getTodayDateStringUB();
+                        if (paidOnDate !== today) setPaidBookingsLoading(true);
+                        setPaidOnDate(today);
+                        setPage(1);
+                        setSelectedIds(new Set());
+                      }}
+                      className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold transition ${
+                        paidOnDate === getTodayDateStringUB()
+                          ? "bg-brand-500 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                    >
+                      Өнөөдөр
+                    </button>
+                    {paidOnDate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaidOnDate("");
+                          setPaidBookings([]);
+                          setPaidBookingsLoading(false);
+                          setPage(1);
+                          setSelectedIds(new Set());
+                        }}
+                        className="flex size-7 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                        title="Огноо арилгах"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Active chips + status */}
+            {(filterChips.length > 0 || filtersLoading || (tab === "user" && paidOnDate && !paidBookingsError)) && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
+                {filtersLoading && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-medium text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">
+                    <span className="size-3 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+                    Шүүлт ачаалж байна…
+                  </span>
+                )}
+
+                {tab === "user" && paidOnDate && !filtersLoading && !paidBookingsError && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-900/25 dark:text-emerald-300">
+                    <span className="size-1.5 rounded-full bg-emerald-500" />
+                    {paidDayLabel}: {paidUsersCount} гишүүн · {paidCount} бичилт
+                  </span>
+                )}
+
+                {filterChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={chip.clear}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-gray-600 shadow-sm ring-1 ring-gray-200/90 transition hover:ring-brand-300 hover:text-brand-700 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
+                  >
+                    {chip.label}
+                    <span className="text-gray-400">✕</span>
                   </button>
                 ))}
-                {earlyPaymentLoading && (
-                  <span className="mx-1 size-3 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+
+                {filterChips.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setOrgFilter("");
+                      setStatusFilter("");
+                      setPaidOnDate("");
+                      setPaidBookings([]);
+                      setEarlyPaymentFilter("");
+                      setEntitlementFilter("");
+                      setPaymentChannelFilter("");
+                      setSelectedIds(new Set());
+                      resetPage();
+                    }}
+                    className="text-[11px] font-medium text-red-500 transition hover:text-red-600 dark:text-red-400"
+                  >
+                    Бүгдийг цэвэрлэх
+                  </button>
                 )}
               </div>
             )}
 
-            {(search || orgFilter || statusFilter || paidOnDate || earlyPaymentFilter) && (
-              <button
-                onClick={() => {
-                  setSearch("");
-                  setOrgFilter("");
-                  setStatusFilter("");
-                  setPaidOnDate("");
-                  setEarlyPaymentFilter("");
-                  setSelectedIds(new Set());
-                  resetPage();
-                }}
-                className="h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-400 hover:border-red-300 hover:bg-red-50 hover:text-red-500 dark:border-gray-700 dark:hover:bg-red-900/20 dark:hover:text-red-400"
-              >
-                ✕ Цэвэрлэх
-              </button>
-            )}
-
-            <div className="flex-1" />
-
-            {canManageUsers && selectedIds.size > 0 && (
-              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 dark:border-amber-800 dark:bg-amber-900/20">
-                <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">{selectedIds.size} сонгосон</span>
-                <button
-                  className="rounded-lg bg-red-500 px-3 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-50"
-                  onClick={() => setConfirmBulk(true)}
-                  disabled={bulkDeleting}
-                >
-                  {bulkDeleting ? "..." : "Устгах"}
-                </button>
+            {tab === "user" && paidBookingsError && (
+              <div className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                Төлбөрийн огнооны шүүлтүүр ачаалахад алдаа: {paidBookingsError}
               </div>
             )}
-
-            {/* Density toggle */}
-            <div className="flex items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
-              <button type="button" onClick={() => setDensity("comfortable")} title="Тэлэгдсэн"
-                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${density === "comfortable" ? "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-400 hover:text-gray-600"}`}>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
-              </button>
-              <button type="button" onClick={() => setDensity("compact")} title="Нягтаралсан"
-                className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${density === "compact" ? "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white" : "text-gray-400 hover:text-gray-600"}`}>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6h16.5M3.75 9.75h16.5M3.75 13.5h16.5M3.75 17.25h16.5M3.75 21h16.5"/></svg>
-              </button>
-            </div>
-            <ColumnToggle
-              options={[
-                { key: "member", label: "Гишүүн" },
-                { key: "phone", label: "Утас" },
-                { key: "organization", label: "Байгууллага" },
-                { key: "tier", label: "Тариф · төрөл" },
-                { key: "paymentChannel", label: "Төлбөрийн хэрэгсэл" },
-                { key: "agreement", label: "Гэрээ" },
-                { key: "startDate", label: "Эхлэх огноо" },
-                { key: "expireDate", label: "Дуусах огноо" },
-                { key: "totalVisits", label: "Нийт ирц" },
-                { key: "lastVisit", label: "Сүүлд ирсэн" },
-                { key: "streak", label: "Streak" },
-              ]}
-              visible={visibleColumns}
-              onChange={setVisibleColumns}
-            />
-
-            {canManageUsers && (
-              <button onClick={() => setFormProfile("new")}
-                className="flex h-10 items-center gap-2 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white hover:bg-brand-600 transition-colors">
-                <PlusIcon className="size-4" />
-                Нэмэх
-              </button>
-            )}
-            <button
-              onClick={() => exportToCsv("users", filteredProfiles, [
-                { key: "full_name", label: "Нэр" },
-                { key: "phone", label: "Утас" },
-                { key: "organization", label: "Байгууллага" },
-                { key: "membership_status", label: "Төлөв" },
-                { key: "membership_expires_at", label: "Дуусах огноо" },
-              ])}
-              className="flex h-10 items-center gap-1.5 rounded-xl border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/[0.04]"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-              CSV
-            </button>
           </div>
-          {filterChips.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              {filterChips.map((chip) => (
-                <button
-                  key={chip.key}
-                  onClick={chip.clear}
-                  className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                >
-                  {chip.label} ✕
-                </button>
-              ))}
-              <button
-                onClick={() => {
-                  setSearch("");
-                  setOrgFilter("");
-                  setStatusFilter("");
-                  setPaidOnDate("");
-                  setEarlyPaymentFilter("");
-                  setSelectedIds(new Set());
-                  resetPage();
-                }}
-                className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
-              >
-                Бүгдийг цэвэрлэх
-              </button>
-            </div>
-          )}
-          {tab === "user" && paidOnDate && paidBookingsLoading && (
-            <div className="flex justify-center py-4">
-              <div className="size-8 animate-spin rounded-full border-2 border-brand-500 border-t-transparent dark:border-brand-400" />
-            </div>
-          )}
-          {tab === "user" && paidOnDate && !paidBookingsLoading && !paidBookingsError && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-              {paidDayLabel}: {paidUsersCount} гишүүн · {paidCount} бичилт (төлбөр / Flexy / идэвхжүүлэлт / Admin).
-            </div>
-          )}
-          {tab === "user" && paidBookingsError && (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
-              Төлбөрийн огнооны шүүлтүүр ачаалахад алдаа гарлаа: {paidBookingsError}
-            </div>
-          )}
         </div>
 
+        <div className="relative">
+          {filtersLoading && (
+            <div className="absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-white/55 pt-16 backdrop-blur-[1px] dark:bg-gray-900/50">
+              <div className="flex items-center gap-2.5 rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                <span className="size-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+                Шүүлтүүр шинэчилж байна…
+              </div>
+            </div>
+          )}
+          <div
+            className={`transition-opacity duration-200 ${
+              filtersLoading ? "pointer-events-none opacity-40" : "opacity-100"
+            }`}
+          >
         <UsersTable
           profiles={pagedProfiles}
           error={error ?? undefined}
@@ -1522,16 +1939,18 @@ export default function UsersSection() {
           notesMap={notesMap}
           onNoteClick={(p) => setNoteProfile(p)}
         />
+          </div>
+        </div>
 
         {/* ── Pagination ── */}
-        {(totalPages > 1 || sortedFilteredProfiles.length > 25) && (
-          <div className="mt-5 flex items-center justify-between">
+        {(totalPages > 1 || displayProfiles.length > 25) && (
+          <div className={`mt-5 flex items-center justify-between transition-opacity duration-200 ${filtersLoading ? "opacity-40" : "opacity-100"}`}>
             {/* Left: count + page size */}
             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
               <span className="tabular-nums">
-                {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, sortedFilteredProfiles.length)}
+                {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, displayProfiles.length)}
                 <span className="mx-1 text-gray-300">/</span>
-                {sortedFilteredProfiles.length.toLocaleString()}
+                {displayProfiles.length.toLocaleString()}
               </span>
               <select
                 value={pageSize}

@@ -16,6 +16,7 @@ type Props = {
     monpay?: number;
     gymfintech?: number;
     gift: number;
+    admin?: number;
     other?: number;
   };
 };
@@ -38,8 +39,11 @@ function countFor(
   if (key === "carepay") return channels.carepay ?? 0;
   if (key === "monpay") return channels.monpay ?? 0;
   if (key === "gymfintech") return channels.gymfintech ?? 0;
+  if (key === "gift" || key === "admin") {
+    return (channels.gift ?? 0) + (channels.admin ?? 0);
+  }
   if (key === "other") return channels.other ?? 0;
-  return channels[key];
+  return channels[key] ?? 0;
 }
 
 export default function PaymentChannelsCard({ channels }: Props) {
@@ -47,7 +51,12 @@ export default function PaymentChannelsCard({ channels }: Props) {
     const visual = getPaymentChannelVisual(key);
     return { key, visual, count: countFor(channels, key) };
   }).filter((row) => {
-    if (row.key === "other" || row.key === "carepay" || row.key === "monpay" || row.key === "gymfintech") {
+    if (
+      row.key === "other" ||
+      row.key === "carepay" ||
+      row.key === "monpay" ||
+      row.key === "gymfintech"
+    ) {
       return row.count > 0;
     }
     return true;
