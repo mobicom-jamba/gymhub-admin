@@ -32,8 +32,15 @@ function formatMnt(n: number): string {
 
 function flexyDaysLabel(daysUntil: number): string {
   if (daysUntil === 0) return "Өнөөдөр";
+  if (daysUntil === 1) return "Маргааш";
   if (daysUntil > 0) return `${daysUntil} хоног үлдлээ`;
   return `${Math.abs(daysUntil)} хоног хэтэрсэн`;
+}
+
+function formatDueDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!m) return iso;
+  return `${m[2]}.${m[3]}`;
 }
 
 function fmtUbDateTime(iso: string | null | undefined): string | null {
@@ -60,7 +67,9 @@ export default function FlexyCallPanel({
   onPeopleChange,
 }: {
   people: FlexyCallPerson[];
-  onPeopleChange: (next: FlexyCallPerson[]) => void;
+  onPeopleChange: (
+    next: FlexyCallPerson[] | ((prev: FlexyCallPerson[]) => FlexyCallPerson[]),
+  ) => void;
 }) {
   const [active, setActive] = useState<FlexyCallPerson | null>(null);
   const [logs, setLogs] = useState<CallLog[]>([]);
@@ -103,8 +112,8 @@ export default function FlexyCallPanel({
   }, [active?.payment_id, loadHistory]);
 
   const applySummary = (paymentId: string, callCount: number, lastCalledAt: string | null) => {
-    onPeopleChange(
-      people.map((p) =>
+    onPeopleChange((prev) =>
+      prev.map((p) =>
         p.payment_id === paymentId
           ? { ...p, call_count: callCount, last_called_at: lastCalledAt }
           : p,
@@ -160,121 +169,119 @@ export default function FlexyCallPanel({
 
   return (
     <>
-      <div className="max-h-[28rem] space-y-1 overflow-y-auto">
+      <div className="max-h-[28rem] space-y-1.5 overflow-y-auto">
         {people.map((p) => {
           const phoneDigits = (p.user_phone ?? "").replace(/\D/g, "");
           const called = p.call_count > 0;
           const lastLabel = fmtUbDateTime(p.last_called_at);
+          const logging = loggingId === p.payment_id;
           return (
             <div
               key={p.payment_id}
               className={[
-                "flex items-center justify-between gap-2 rounded-lg px-2 py-2.5",
-                p.days_until < 0
-                  ? "bg-rose-50/50 dark:bg-rose-950/15"
-                  : p.days_until === 0
-                    ? "bg-brand-50/60 dark:bg-brand-500/10"
-                    : "hover:bg-gray-50 dark:hover:bg-white/[0.03]",
+                "rounded-xl px-2.5 py-2.5",
+                called
+                  ? "bg-emerald-50/70 ring-1 ring-emerald-100 dark:bg-emerald-950/20 dark:ring-emerald-900/40"
+                  : p.days_until < 0
+                    ? "bg-rose-50/50 dark:bg-rose-950/15"
+                    : p.days_until === 0
+                      ? "bg-brand-50/60 dark:bg-brand-500/10"
+                      : "hover:bg-gray-50 dark:hover:bg-white/[0.03]",
               ].join(" ")}
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
-                  {p.user_name?.trim() || "—"}
-                </p>
-                <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                  {p.user_phone?.trim() || "—"}
-                  {p.installment_no > 0 ? (
-                    <span className="text-gray-400 dark:text-gray-500">
-                      {" "}
-                      · {p.installment_no}-р төлөлт
-                    </span>
-                  ) : null}
-                </p>
-                {called ? (
-                  <button
-                    type="button"
-                    onClick={() => setActive(p)}
-                    className="mt-1 text-left text-[11px] font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
+                    {p.user_name?.trim() || "—"}
+                  </p>
+                  <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                    {p.user_phone?.trim() || "—"}
+                    {p.installment_no > 0 ? (
+                      <span className="text-gray-400 dark:text-gray-500">
+                        {" "}
+                        · {p.installment_no}-р төлөлт
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <p
+                    className={`text-sm font-bold tabular-nums ${
+                      p.days_until < 0
+                        ? "text-error-600 dark:text-error-400"
+                        : p.days_until === 0
+                          ? "text-brand-600 dark:text-brand-400"
+                          : "text-indigo-600 dark:text-indigo-400"
+                    }`}
                   >
-                    Залгасан {p.call_count} удаа
-                    {lastLabel ? ` · ${lastLabel}` : ""}
-                  </button>
-                ) : null}
+                    {formatMnt(p.amount)}
+                  </p>
+                  <p
+                    className={`mt-0.5 text-[11px] font-medium ${
+                      p.days_until < 0
+                        ? "text-error-500 dark:text-error-400"
+                        : p.days_until === 0
+                          ? "text-brand-500 dark:text-brand-300"
+                          : "text-gray-400 dark:text-gray-500"
+                    }`}
+                  >
+                    {flexyDaysLabel(p.days_until)}
+                    <span className="text-gray-300 dark:text-gray-600"> · </span>
+                    {formatDueDate(p.due_date)}
+                  </p>
+                </div>
               </div>
 
-              <div className="shrink-0 text-right">
-                <p
-                  className={`text-sm font-bold tabular-nums ${
-                    p.days_until < 0
-                      ? "text-error-600 dark:text-error-400"
-                      : p.days_until === 0
-                        ? "text-brand-600 dark:text-brand-400"
-                        : "text-indigo-600 dark:text-indigo-400"
-                  }`}
-                >
-                  {formatMnt(p.amount)}
-                </p>
-                <p
-                  className={`mt-0.5 text-[11px] font-medium ${
-                    p.days_until < 0
-                      ? "text-error-500 dark:text-error-400"
-                      : p.days_until === 0
-                        ? "text-brand-500 dark:text-brand-300"
-                        : "text-gray-400 dark:text-gray-500"
-                  }`}
-                >
-                  {flexyDaysLabel(p.days_until)}
-                </p>
-              </div>
-
-              <div className="flex shrink-0 flex-col gap-1">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {phoneDigits ? (
                   <a
                     href={`tel:${phoneDigits}`}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-brand-600 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-brand-300"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 hover:border-brand-300 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200"
                     title="Залгах"
                   >
-                    <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
                       />
                     </svg>
+                    Залгах
                   </a>
                 ) : null}
+
                 <button
                   type="button"
-                  disabled={loggingId === p.payment_id}
+                  disabled={logging}
                   onClick={() => void logCall(p, "")}
                   title={called ? "Дахин залгасан гэж тэмдэглэх" : "Залгасан гэж тэмдэглэх"}
-                  className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition disabled:opacity-50 ${
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition disabled:opacity-50 ${
                     called
-                      ? "text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
-                      : "text-amber-500 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/25"
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200"
                   }`}
                 >
-                  <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
+                  <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
+                  {logging
+                    ? "..."
+                    : called
+                      ? `Залгасан · ${p.call_count}`
+                      : "Залгасан"}
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setActive(p)}
                   title="Дуудлагын түүх / тэмдэглэл"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10 dark:hover:text-gray-200"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300"
                 >
-                  <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
-                    />
-                  </svg>
+                  Түүх
+                  {called && lastLabel ? (
+                    <span className="text-gray-400 dark:text-gray-500">{lastLabel}</span>
+                  ) : null}
                 </button>
               </div>
             </div>
