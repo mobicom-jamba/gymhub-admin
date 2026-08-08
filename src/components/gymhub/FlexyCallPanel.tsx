@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import { useToast } from "@/components/ui/Toast";
 
 export type FlexyCallPerson = {
   payment_id: string;
@@ -31,7 +32,7 @@ function formatMnt(n: number): string {
 
 function flexyDaysLabel(daysUntil: number): string {
   if (daysUntil === 0) return "Өнөөдөр";
-  if (daysUntil > 0) return `${daysUntil} хоног дутуу`;
+  if (daysUntil > 0) return `${daysUntil} хоног үлдлээ`;
   return `${Math.abs(daysUntil)} хоног хэтэрсэн`;
 }
 
@@ -68,6 +69,7 @@ export default function FlexyCallPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loggingId, setLoggingId] = useState<string | null>(null);
+  const { show: showToast } = useToast();
 
   const loadHistory = useCallback(async (paymentId: string) => {
     setLoadingHistory(true);
@@ -141,12 +143,15 @@ export default function FlexyCallPanel({
         last_called_at: string | null;
       };
       applySummary(person.payment_id, summary.call_count, summary.last_called_at);
+      showToast("Залгасан гэж тэмдэглэлээ", "success");
       if (active?.payment_id === person.payment_id) {
         setNote("");
         await loadHistory(person.payment_id);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Алдаа");
+      const msg = e instanceof Error ? e.message : "Алдаа";
+      setError(msg);
+      showToast(msg, "error");
     } finally {
       setSaving(false);
       setLoggingId(null);

@@ -32,7 +32,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-/** Sales UI: үлдэгдэл 2 болбол 9 болгож харуулна. */
+/** Sales UI: үлдэгдэл 1–2 болбол 9 болгож харуулна. */
 function withDisplayFloor(payload: {
   limit: number;
   claimed: number;
@@ -40,7 +40,7 @@ function withDisplayFloor(payload: {
   sold_out: boolean;
   [key: string]: unknown;
 }) {
-  if (payload.remaining !== 2) return payload;
+  if (payload.remaining <= 0 || payload.remaining > 2) return payload;
   const remaining = 9;
   return {
     ...payload,

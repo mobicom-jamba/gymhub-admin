@@ -534,7 +534,8 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "private, max-age=60, stale-while-revalidate=120",
+          // Flexy call marks must not stick behind a stale browser cache.
+          "Cache-Control": "private, no-store",
         },
       },
     );
