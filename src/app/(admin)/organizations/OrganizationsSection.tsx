@@ -5,7 +5,10 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import OrgFormModal, { type OrgRecord } from "./OrgFormModal";
 import UserFormModal from "../users/UserFormModal";
 import UserNoteModal, { type UserSalesNote } from "../users/UserNoteModal";
-import { fetchUserSalesNotesByIds } from "@/lib/user-sales-notes";
+import {
+  fetchUserSalesNotesByIds,
+  peekUserSalesNotesCache,
+} from "@/lib/user-sales-notes";
 import { fetchAllPagesParallel } from "@/lib/fetch-all-pages";
 import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -18,6 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   canonicalPlanKey,
   getMembershipPlanVisual,
+  isUnpaidMembership,
   membershipPlanBadgeClass,
 } from "@/lib/membership-plan-label";
 
@@ -35,6 +39,13 @@ type Member = {
   organizations?: { id: string; name: string | null } | Array<{ id: string; name: string | null }> | null;
   created_at: string;
 };
+
+/** Төлбөр төлсөн: active / expired / paused. Бусад = төлөөгүй. */
+function isPaidMember(m: Member): boolean {
+  const s = (m.membership_status ?? "inactive").trim().toLowerCase();
+  if (s === "paused") return true;
+  return !isUnpaidMembership(m.membership_status);
+}
 
 type OrgGroup = {
   name: string;
@@ -151,6 +162,7 @@ export default function OrganizationsSection() {
   const [formOrg, setFormOrg] = useState<OrgRecord | "new" | null>(null);
   const [editProfile, setEditProfile] = useState<Profile | null>(null);
   const [notesMap, setNotesMap] = useState<Record<string, UserSalesNote>>({});
+  const [notesLoading, setNotesLoading] = useState(false);
   const [noteMember, setNoteMember] = useState<Member | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<{ memberId: string; name: string } | null>(null);
   const [confirmDeleteOrg, setConfirmDeleteOrg] = useState<{ orgName: string; recordId: string | null } | null>(null);
@@ -268,24 +280,52 @@ export default function OrganizationsSection() {
   const selectedOrg = selected ? orgs.find(o => o.name === selected) ?? null : null;
   const selectedRecord = selected ? orgRecords.find(r => r.name === selected) ?? null : null;
 
-  useEffect(() => {
-    if (!canNote) return;
+  const selectedMemberIdsKey = useMemo(() => {
+    if (!canNote || !selected) return "";
     const ids =
       selected === "__unassigned__"
         ? unassigned.map((m) => m.id)
         : (selectedOrg?.members.map((m) => m.id) ?? []);
-    if (ids.length === 0) {
+    return ids.join(",");
+  }, [canNote, selected, selectedOrg, unassigned]);
+
+  useEffect(() => {
+    if (!canNote || !selected) {
       setNotesMap({});
+      setNotesLoading(false);
       return;
     }
+    const ids = selectedMemberIdsKey ? selectedMemberIdsKey.split(",") : [];
+    if (ids.length === 0) {
+      setNotesMap({});
+      setNotesLoading(false);
+      return;
+    }
+
     let cancelled = false;
-    void fetchUserSalesNotesByIds(ids).then((map) => {
-      if (!cancelled) setNotesMap(map);
-    });
+    const cached = peekUserSalesNotesCache(ids);
+    if (cached) {
+      setNotesMap(cached);
+      setNotesLoading(false);
+    } else {
+      setNotesMap({});
+      setNotesLoading(true);
+    }
+
+    void fetchUserSalesNotesByIds(ids)
+      .then((map) => {
+        if (cancelled) return;
+        setNotesMap(map);
+        setNotesLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setNotesLoading(false);
+      });
+
     return () => {
       cancelled = true;
     };
-  }, [canNote, selected, selectedOrg, unassigned]);
+  }, [canNote, selected, selectedMemberIdsKey]);
 
   const addCandidates = useMemo(() => {
     if (!addOrgTarget) return [];
@@ -566,6 +606,7 @@ export default function OrganizationsSection() {
             onEditMember={canManageUsers ? (m) => setEditProfile(m as unknown as Profile) : undefined}
             onNoteClick={canNote ? (m) => setNoteMember(m) : undefined}
             notesMap={notesMap}
+            notesLoading={notesLoading}
             onOpenAdd={canManageOrgs ? () => { setAddOrgTarget(selectedOrg.name); setAddOpen(true); setAddSearch(""); } : undefined}
             onCloseAdd={() => { setAddOpen(false); setAddSearch(""); }}
             onAddSearchChange={setAddSearch}
@@ -627,7 +668,7 @@ function OrgDetailPanel({
   org, record, removeLoading,
   canManageOrgs, canManageUsers,
   addOpen, addSearch, addCandidates,
-  onEdit, onDelete, onRemove, onEditMember, onNoteClick, notesMap,
+  onEdit, onDelete, onRemove, onEditMember, onNoteClick, notesMap, notesLoading,
   onOpenAdd, onCloseAdd, onAddSearchChange, onAddMember, avatarColors,
 }: {
   org: OrgGroup;
@@ -642,6 +683,7 @@ function OrgDetailPanel({
   onEditMember?: (m: Member) => void;
   onNoteClick?: (m: Member) => void;
   notesMap?: Record<string, UserSalesNote>;
+  notesLoading?: boolean;
   onOpenAdd?: () => void; onCloseAdd: () => void;
   onAddSearchChange: (v: string) => void;
   onAddMember: (id: string) => void;
@@ -651,6 +693,7 @@ function OrgDetailPanel({
   const [tierFilter, setTierFilter]     = useState<"" | "early" | "standard" | "premium1" | "premium2" | "gymcore">("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
   const [callFilter, setCallFilter]     = useState<"" | "called" | "not_called">("");
+  const [payFilter, setPayFilter]       = useState<"" | "paid" | "unpaid">("");
   const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("organizations.members.visibleColumns", {
     member: true, phone: true, tier: true, expires: true, call: true,
@@ -664,6 +707,14 @@ function OrgDetailPanel({
     return { called, notCalled: org.members.length - called };
   }, [org.members, notesMap]);
 
+  const paymentStats = useMemo(() => {
+    let paid = 0;
+    for (const m of org.members) {
+      if (isPaidMember(m)) paid += 1;
+    }
+    return { paid, unpaid: org.members.length - paid };
+  }, [org.members]);
+
   const filteredMembers = useMemo(() => {
     let list = org.members;
     if (memberSearch)
@@ -676,10 +727,14 @@ function OrgDetailPanel({
       list = list.filter(m => m.membership_expires_at && new Date(m.membership_expires_at) >= new Date());
     if (statusFilter === "expired")
       list = list.filter(m => !m.membership_expires_at || new Date(m.membership_expires_at) < new Date());
-    if (callFilter === "called")
+    if (!notesLoading && callFilter === "called")
       list = list.filter(m => !!notesMap?.[m.id]?.called);
-    if (callFilter === "not_called")
+    if (!notesLoading && callFilter === "not_called")
       list = list.filter(m => !notesMap?.[m.id]?.called);
+    if (payFilter === "paid")
+      list = list.filter((m) => isPaidMember(m));
+    if (payFilter === "unpaid")
+      list = list.filter((m) => !isPaidMember(m));
     return [...list].sort((a, b) => {
       if (sortBy === "name")
         return (a.full_name ?? "").localeCompare(b.full_name ?? "");
@@ -687,7 +742,7 @@ function OrgDetailPanel({
       const db = b.membership_expires_at ? new Date(b.membership_expires_at).getTime() : Infinity;
       return sortBy === "expires_asc" ? da - db : db - da;
     });
-  }, [org.members, memberSearch, tierFilter, statusFilter, callFilter, sortBy, notesMap]);
+  }, [org.members, memberSearch, tierFilter, statusFilter, callFilter, payFilter, sortBy, notesMap, notesLoading]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -741,36 +796,71 @@ function OrgDetailPanel({
                   GymCore {org.gymcoreCount}
                 </span>
               )}
-              {onNoteClick && org.members.length > 0 && (
+              {org.members.length > 0 && (
                 <>
                   <button
                     type="button"
-                    onClick={() => setCallFilter((v) => (v === "called" ? "" : "called"))}
-                    title="Залгасан гишүүдээр шүүх"
+                    onClick={() => setPayFilter((v) => (v === "paid" ? "" : "paid"))}
+                    title="Төлбөр төлсөн гишүүдээр шүүх"
                     className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
-                      callFilter === "called"
-                        ? "bg-emerald-500 text-white ring-2 ring-emerald-500/30"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                      payFilter === "paid"
+                        ? "bg-teal-600 text-white ring-2 ring-teal-500/30"
+                        : "bg-teal-50 text-teal-700 hover:bg-teal-100 dark:bg-teal-900/20 dark:text-teal-300 dark:hover:bg-teal-900/40"
                     }`}
                   >
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-                    </svg>
-                    Залгасан {callStats.called}
+                    Төлсөн {paymentStats.paid}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCallFilter((v) => (v === "not_called" ? "" : "not_called"))}
-                    title="Залгаагүй гишүүдээр шүүх"
+                    onClick={() => setPayFilter((v) => (v === "unpaid" ? "" : "unpaid"))}
+                    title="Төлбөр төлөөгүй гишүүдээр шүүх"
                     className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
-                      callFilter === "not_called"
-                        ? "bg-slate-600 text-white ring-2 ring-slate-500/30 dark:bg-slate-500"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.1]"
+                      payFilter === "unpaid"
+                        ? "bg-rose-500 text-white ring-2 ring-rose-500/30"
+                        : "bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/40"
                     }`}
                   >
-                    Залгаагүй {callStats.notCalled}
+                    Төлөөгүй {paymentStats.unpaid}
                   </button>
                 </>
+              )}
+              {onNoteClick && org.members.length > 0 && (
+                notesLoading ? (
+                  <>
+                    <span className="inline-flex h-5 w-[7.5rem] animate-pulse rounded-full bg-emerald-100/80 dark:bg-emerald-900/30" />
+                    <span className="inline-flex h-5 w-[7rem] animate-pulse rounded-full bg-slate-100 dark:bg-white/[0.06]" />
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setCallFilter((v) => (v === "called" ? "" : "called"))}
+                      title="Залгасан гишүүдээр шүүх"
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
+                        callFilter === "called"
+                          ? "bg-emerald-500 text-white ring-2 ring-emerald-500/30"
+                          : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                      }`}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                      </svg>
+                      Залгасан {callStats.called}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCallFilter((v) => (v === "not_called" ? "" : "not_called"))}
+                      title="Залгаагүй гишүүдээр шүүх"
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
+                        callFilter === "not_called"
+                          ? "bg-slate-600 text-white ring-2 ring-slate-500/30 dark:bg-slate-500"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.1]"
+                      }`}
+                    >
+                      Залгаагүй {callStats.notCalled}
+                    </button>
+                  </>
+                )
               )}
             </div>
           </div>
@@ -945,6 +1035,20 @@ function OrgDetailPanel({
           ))}
         </div>
 
+        {/* Payment filter */}
+        <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
+          {([["", "Төлбөр"], ["paid", "Төлсөн"], ["unpaid", "Төлөөгүй"]] as const).map(([v, label]) => (
+            <button key={v || "pay-all"} type="button" onClick={() => setPayFilter(v)}
+              className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-all ${
+                payFilter === v
+                  ? v === "paid" ? "bg-teal-600 text-white shadow-sm"
+                    : v === "unpaid" ? "bg-rose-500 text-white shadow-sm"
+                    : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
+                  : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              }`}>{label}</button>
+          ))}
+        </div>
+
         {/* Call filter */}
         {onNoteClick && (
           <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
@@ -983,8 +1087,8 @@ function OrgDetailPanel({
           onChange={setVisibleColumns}
         />
 
-        {(memberSearch || tierFilter || statusFilter || callFilter) && (
-          <button onClick={() => { setMemberSearch(""); setTierFilter(""); setStatusFilter(""); setCallFilter(""); }}
+        {(memberSearch || tierFilter || statusFilter || callFilter || payFilter) && (
+          <button onClick={() => { setMemberSearch(""); setTierFilter(""); setStatusFilter(""); setCallFilter(""); setPayFilter(""); }}
             className="h-7 rounded-lg border border-gray-200 px-2 text-xs text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-gray-700">
             ✕
           </button>
@@ -1068,15 +1172,19 @@ function OrgDetailPanel({
                     </td>}
                     {onNoteClick && (visibleColumns.call ?? true) && (
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                            called
-                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                              : "bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"
-                          }`}
-                        >
-                          {called ? "Залгасан" : "Залгаагүй"}
-                        </span>
+                        {notesLoading ? (
+                          <span className="inline-flex h-5 w-16 animate-pulse rounded-full bg-slate-100 dark:bg-white/[0.06]" />
+                        ) : (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                              called
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                                : "bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"
+                            }`}
+                          >
+                            {called ? "Залгасан" : "Залгаагүй"}
+                          </span>
+                        )}
                       </td>
                     )}
                     {(canManageOrgs || canManageUsers || onNoteClick) && (

@@ -67,6 +67,22 @@ export function patchUserSalesNotesCache(note: UserSalesNote): void {
   };
 }
 
+/** Cache-ээс өгөгдсөн id-уудыг шууд авна (flicker багасгах). */
+export function peekUserSalesNotesCache(
+  userIds: string[],
+): Record<string, UserSalesNote> | null {
+  if (!notesCache || userIds.length === 0) return null;
+  const map: Record<string, UserSalesNote> = {};
+  let hits = 0;
+  for (const id of userIds) {
+    const row = notesCache.map[id];
+    if (!row) continue;
+    map[id] = row;
+    hits += 1;
+  }
+  return hits > 0 ? map : null;
+}
+
 /** Зөвхөн өгөгдсөн user_id-уудын notes (ж: нэг org-ийн гишүүд). */
 export async function fetchUserSalesNotesByIds(
   userIds: string[],
@@ -91,5 +107,14 @@ export async function fetchUserSalesNotesByIds(
       }
     }),
   );
+
+  if (notesCache) {
+    notesCache = {
+      at: Date.now(),
+      map: { ...notesCache.map, ...map },
+    };
+  } else {
+    notesCache = { at: Date.now(), map: { ...map } };
+  }
   return map;
 }
