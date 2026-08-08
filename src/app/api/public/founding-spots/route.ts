@@ -32,6 +32,24 @@ function json(body: unknown, status = 200) {
   });
 }
 
+/** Sales UI: үлдэгдэл 2 болбол 9 болгож харуулна. */
+function withDisplayFloor(payload: {
+  limit: number;
+  claimed: number;
+  remaining: number;
+  sold_out: boolean;
+  [key: string]: unknown;
+}) {
+  if (payload.remaining !== 2) return payload;
+  const remaining = 9;
+  return {
+    ...payload,
+    remaining,
+    claimed: Math.max(0, payload.limit - remaining),
+    sold_out: false,
+  };
+}
+
 export async function GET() {
   try {
     const supabase = createAdminClient();
@@ -49,13 +67,15 @@ export async function GET() {
     if (error) {
       console.warn("[founding-spots]", error.message);
       const claimed = SEED_CLAIMED;
-      return json({
-        limit: LIMIT,
-        claimed,
-        remaining: Math.max(0, LIMIT - claimed),
-        sold_out: claimed >= LIMIT,
-        source: "seed_fallback",
-      });
+      return json(
+        withDisplayFloor({
+          limit: LIMIT,
+          claimed,
+          remaining: Math.max(0, LIMIT - claimed),
+          sold_out: claimed >= LIMIT,
+          source: "seed_fallback",
+        }),
+      );
     }
 
     const startMs = Date.parse(CAMPAIGN_START);
@@ -73,27 +93,29 @@ export async function GET() {
     const claimed = Math.min(LIMIT, SEED_CLAIMED + afterStart.size);
     const remaining = Math.max(0, LIMIT - claimed);
 
-    return json({
-      limit: LIMIT,
-      claimed,
-      remaining,
-      sold_out: remaining === 0,
-      campaign_start: CAMPAIGN_START,
-      new_paid_since_start: afterStart.size,
-      source: "bookings",
-    });
+    return json(
+      withDisplayFloor({
+        limit: LIMIT,
+        claimed,
+        remaining,
+        sold_out: remaining === 0,
+        campaign_start: CAMPAIGN_START,
+        new_paid_since_start: afterStart.size,
+        source: "bookings",
+      }),
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     const claimed = SEED_CLAIMED;
     return json(
-      {
+      withDisplayFloor({
         limit: LIMIT,
         claimed,
         remaining: Math.max(0, LIMIT - claimed),
         sold_out: claimed >= LIMIT,
         error: msg,
         source: "error_fallback",
-      },
+      }),
       200,
     );
   }
