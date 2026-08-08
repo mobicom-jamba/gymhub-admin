@@ -1,5 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabaseEnv } from "@/lib/supabase-env";
 
 let client: SupabaseClient | null = null;
 
@@ -9,8 +10,8 @@ export function createBrowserSupabaseClient() {
   }
 
   client = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    supabaseEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       auth: {
         flowType: "pkce",

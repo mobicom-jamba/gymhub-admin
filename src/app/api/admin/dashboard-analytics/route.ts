@@ -3,8 +3,35 @@ import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase";
+import {
+  parseLocalDateOnly,
+  todayInUlaanbaatar,
+  toLocalDateString,
+} from "@/lib/installment-schedule";
 
 type MonthPoint = { month: string; count: number };
+
+/** Flexy: due_date-аар нэгтгэсэн төлөгдөөгүй хуваарь (график) */
+type FlexyDuePoint = {
+  due_date: string; // YYYY-MM-DD
+  amount: number;
+  count: number;
+  /** 0 = өнөөдөр, сөрөг = хэтэрсэн */
+  days_until: number;
+};
+
+/** Flexy: төлөвлөгөө бүрийн дараагийн төлөлт + хэрэглэгч */
+type FlexyUpcomingPerson = {
+  payment_id: string;
+  plan_id: string;
+  user_id: string;
+  user_name: string | null;
+  user_phone: string | null;
+  amount: number;
+  due_date: string;
+  days_until: number;
+  installment_no: number;
+};
 
 const PAID_STATUS = ["paid", "PAID", "Paid"] as const;
 
@@ -413,6 +440,121 @@ async function paginateMembershipStarts(
     .map(([month, count]) => ({ month, count }));
 }
 
+/**
+ * Сар бүрт Flexy-ээс орох ёстой НИЙТ дүн.
+ * Жишээ: 8-р сар 800,000₮, 9-р сар 900,000₮, 10-р сар 1,000,000₮…
+ * Идэвхтэй төлөвлөгөөний бүх төлөгдөөгүй хуваарийг due_date-ийн сараар нийлнэ.
+ * `count` = төгрөгийн дүн.
+ */
+async function aggregateFlexyDueAmountByMonth(
+  _supabase: SupabaseClient,
+): Promise<MonthPoint[]> {
+  // RLS-ээс хамааралгүй — fitness counts-тай адил service role
+  const supabase = createAdminClient();
+
+  const { data: plans, error: plansErr } = await supabase
+    .from("installment_plans")
+    .select("id")
+    .eq("status", "active");
+
+  if (plansErr) {
+    if (plansErr.code === "42P01") return [];
+    console.warn("[dashboard-analytics] flexy due by month plans:", plansErr.message);
+    return [];
+  }
+  if (!plans?.length) return [];
+
+  const planIds = plans.map((p) => p.id);
+  const monthMap: Record<string, number> = {};
+  const CHUNK = 200;
+
+  for (let i = 0; i < planIds.length; i += CHUNK) {
+    const chunk = planIds.slice(i, i + CHUNK);
+    const { data: payments, error: payErr } = await supabase
+      .from("installment_payments")
+      .select("amount, due_date, status")
+      .in("plan_id", chunk)
+      .in("status", ["pending", "invoice_created", "overdue"]);
+
+    if (payErr) {
+      // status filter алдаатай бол neq paid-руу ухраа
+      const fallback = await supabase
+        .from("installment_payments")
+        .select("amount, due_date, status")
+        .in("plan_id", chunk)
+        .neq("status", "paid");
+      if (fallback.error) {
+        if (fallback.error.code === "42P01") return [];
+        console.warn("[dashboard-analytics] flexy due by month payments:", payErr.message);
+        continue;
+      }
+      for (const row of fallback.data ?? []) {
+        addFlexyDueMonthAmount(monthMap, row);
+      }
+      continue;
+    }
+
+    for (const row of payments ?? []) {
+      addFlexyDueMonthAmount(monthMap, row);
+    }
+  }
+
+  const today = todayInUlaanbaatar();
+  const startMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const monthsWithData = Object.keys(monthMap).sort();
+  if (monthsWithData.length === 0) return [];
+
+  // Өнгөрсөн сарын хэтэрсэнийг тусад нь хадгалаад, одоогийн+ирээдүйн саруудыг due_date-аар үлдээнэ
+  let overdueTotal = 0;
+  for (const [m, amt] of Object.entries(monthMap)) {
+    if (m < startMonth) overdueTotal += amt;
+  }
+
+  const futureKeys = monthsWithData.filter((m) => m >= startMonth);
+  const endMonth =
+    futureKeys.length > 0
+      ? futureKeys[futureKeys.length - 1]
+      : startMonth;
+
+  const out: MonthPoint[] = [];
+  if (overdueTotal > 0) {
+    // Тусгай түлхүүр — UI "Хэтэрсэн" гэж харуулна
+    out.push({ month: "overdue", count: overdueTotal });
+  }
+
+  let y = Number(startMonth.slice(0, 4));
+  let mo = Number(startMonth.slice(5, 7));
+  const endY = Number(endMonth.slice(0, 4));
+  const endMo = Number(endMonth.slice(5, 7));
+
+  while (y < endY || (y === endY && mo <= endMo)) {
+    const key = `${y}-${String(mo).padStart(2, "0")}`;
+    out.push({ month: key, count: monthMap[key] ?? 0 });
+    mo += 1;
+    if (mo > 12) {
+      mo = 1;
+      y += 1;
+    }
+    if (out.length > 36) break;
+  }
+
+  return out;
+}
+
+function addFlexyDueMonthAmount(
+  monthMap: Record<string, number>,
+  row: { amount?: unknown; due_date?: unknown },
+) {
+  const dueRaw = String(row.due_date ?? "").trim();
+  if (!dueRaw) return;
+  const due = /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
+    ? dueRaw.slice(0, 10)
+    : toLocalDateString(parseLocalDateOnly(dueRaw));
+  const month = due.slice(0, 7);
+  if (month.length !== 7) return;
+  monthMap[month] = (monthMap[month] ?? 0) + (Number(row.amount) || 0);
+}
+
 async function aggregateCommissionsByMonth(
   supabase: SupabaseClient,
   startIso: string,
@@ -481,7 +623,12 @@ async function aggregateVisitsByMonth(
     .map(([month, count]) => ({ month, count }));
 }
 
-type FitnessMonthCount = { gym_id: string; gym_name: string | null; count: number };
+type FitnessMonthCount = {
+  gym_id: string;
+  gym_name: string | null;
+  image_url: string | null;
+  count: number;
+};
 
 // gym-visit-counts route-тай яг ижил хэлбэр: createAdminClient() шууд → RLS bypass
 async function aggregateThisMonthFitnessCounts(
@@ -489,7 +636,10 @@ async function aggregateThisMonthFitnessCounts(
   startIso: string,
 ): Promise<FitnessMonthCount[]> {
   const supabase = createAdminClient();
-  const map = new Map<string, { gym_id: string; gym_name: string | null; count: number }>();
+  const map = new Map<
+    string,
+    { gym_id: string; gym_name: string | null; image_url: string | null; count: number }
+  >();
   const PAGE = 1000;
   let from = 0;
 
@@ -514,7 +664,12 @@ async function aggregateThisMonthFitnessCounts(
         existing.count += 1;
         if (!existing.gym_name && r.gym_name) existing.gym_name = r.gym_name;
       } else {
-        map.set(gymId, { gym_id: gymId, gym_name: r.gym_name ?? null, count: 1 });
+        map.set(gymId, {
+          gym_id: gymId,
+          gym_name: r.gym_name ?? null,
+          image_url: null,
+          count: 1,
+        });
       }
     }
 
@@ -522,7 +677,174 @@ async function aggregateThisMonthFitnessCounts(
     from += PAGE;
   }
 
+  const rows = [...map.values()];
+  const gymIds = rows.map((r) => r.gym_id);
+  const CHUNK = 200;
+  for (let i = 0; i < gymIds.length; i += CHUNK) {
+    const chunk = gymIds.slice(i, i + CHUNK);
+    const { data: gyms } = await supabase
+      .from("gyms")
+      .select("id, name, image_url")
+      .in("id", chunk);
+    for (const g of (gyms ?? []) as {
+      id: string;
+      name: string | null;
+      image_url: string | null;
+    }[]) {
+      const row = map.get(g.id);
+      if (!row) continue;
+      if (g.image_url) row.image_url = g.image_url;
+      if (!row.gym_name && g.name) row.gym_name = g.name;
+    }
+  }
+
   return [...map.values()].sort((a, b) => b.count - a.count);
+}
+
+function calendarDaysUntil(dueDate: string, today: Date): number {
+  const due = parseLocalDateOnly(dueDate);
+  const ms = due.getTime() - today.getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+/**
+ * Flexy идэвхтэй төлөвлөгөө бүрийн дараагийн (хамгийн ойрын) төлөгдөөгүй хуваарь + profile.
+ * due_date өсөхөөр эрэмбэлнэ (хэтэрсэн эхэнд).
+ */
+async function fetchFlexyUpcomingPeople(
+  supabase: SupabaseClient,
+  limit = 40,
+): Promise<{ people: FlexyUpcomingPerson[]; byDue: FlexyDuePoint[] }> {
+  const empty = { people: [] as FlexyUpcomingPerson[], byDue: [] as FlexyDuePoint[] };
+
+  const { data: plans, error: plansErr } = await supabase
+    .from("installment_plans")
+    .select("id, user_id")
+    .eq("status", "active");
+
+  if (plansErr) {
+    if (plansErr.code === "42P01") return empty;
+    console.warn("[dashboard-analytics] flexy plans:", plansErr.message);
+    return empty;
+  }
+  if (!plans?.length) return empty;
+
+  const planById = new Map(plans.map((p) => [p.id, p]));
+  const planIds = plans.map((p) => p.id);
+  const today = todayInUlaanbaatar();
+
+  /** plan_id → хамгийн ойрын unpaid payment */
+  const nextByPlan = new Map<
+    string,
+    {
+      id: string;
+      amount: number;
+      due_date: string;
+      installment_no: number;
+    }
+  >();
+
+  const CHUNK = 200;
+  for (let i = 0; i < planIds.length; i += CHUNK) {
+    const chunk = planIds.slice(i, i + CHUNK);
+    const { data: payments, error: payErr } = await supabase
+      .from("installment_payments")
+      .select("id, plan_id, amount, due_date, status, installment_no")
+      .in("plan_id", chunk)
+      .neq("status", "paid")
+      .order("due_date", { ascending: true });
+
+    if (payErr) {
+      if (payErr.code === "42P01") return empty;
+      console.warn("[dashboard-analytics] flexy payments:", payErr.message);
+      continue;
+    }
+
+    for (const row of payments ?? []) {
+      const planId = String(row.plan_id ?? "");
+      if (!planId || nextByPlan.has(planId)) continue;
+      const dueRaw = String(row.due_date ?? "").trim();
+      if (!dueRaw) continue;
+      const due = /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
+        ? dueRaw.slice(0, 10)
+        : toLocalDateString(parseLocalDateOnly(dueRaw));
+      nextByPlan.set(planId, {
+        id: String(row.id),
+        amount: Number(row.amount) || 0,
+        due_date: due,
+        installment_no: Number(row.installment_no) || 0,
+      });
+    }
+  }
+
+  const nextRows = [...nextByPlan.entries()]
+    .map(([plan_id, pay]) => {
+      const plan = planById.get(plan_id);
+      return {
+        payment_id: pay.id,
+        plan_id,
+        user_id: String(plan?.user_id ?? ""),
+        amount: pay.amount,
+        due_date: pay.due_date,
+        installment_no: pay.installment_no,
+      };
+    })
+    .filter((r) => r.user_id)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+  const userIds = [...new Set(nextRows.map((r) => r.user_id))];
+  const profById = new Map<string, { full_name: string | null; phone: string | null }>();
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    const chunk = userIds.slice(i, i + CHUNK);
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone")
+      .in("id", chunk);
+    for (const p of (profs ?? []) as {
+      id: string;
+      full_name: string | null;
+      phone: string | null;
+    }[]) {
+      profById.set(p.id, { full_name: p.full_name, phone: p.phone });
+    }
+  }
+
+  const people: FlexyUpcomingPerson[] = nextRows.slice(0, limit).map((r) => {
+    const prof = profById.get(r.user_id);
+    return {
+      payment_id: r.payment_id,
+      plan_id: r.plan_id,
+      user_id: r.user_id,
+      user_name: prof?.full_name ?? null,
+      user_phone: prof?.phone ?? null,
+      amount: r.amount,
+      due_date: r.due_date,
+      days_until: calendarDaysUntil(r.due_date, today),
+      installment_no: r.installment_no,
+    };
+  });
+
+  const byDueMap = new Map<string, { amount: number; count: number }>();
+  for (const p of nextRows) {
+    const prev = byDueMap.get(p.due_date);
+    if (prev) {
+      prev.amount += p.amount;
+      prev.count += 1;
+    } else {
+      byDueMap.set(p.due_date, { amount: p.amount, count: 1 });
+    }
+  }
+  const byDue: FlexyDuePoint[] = [...byDueMap.entries()]
+    .map(([due_date, v]) => ({
+      due_date,
+      amount: v.amount,
+      count: v.count,
+      days_until: calendarDaysUntil(due_date, today),
+    }))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .slice(0, 12);
+
+  return { people, byDue };
 }
 
 /** GET — aggregated dashboard chart + payment channel data. */
@@ -551,14 +873,27 @@ export async function GET() {
     const thisMonthStartIso = currentMonthStartUtc8Iso();
     const PAGE = 1000;
 
-    const [usersByMonth, useBookingsPayments, commissionsByMonth, visitsByMonth, thisMonthFitnessCounts, recentPayments] = await Promise.all([
+    const [
+      usersByMonth,
+      useBookingsPayments,
+      commissionsByMonth,
+      visitsByMonth,
+      thisMonthFitnessCounts,
+      recentPayments,
+      flexyUpcoming,
+      flexyByMonth,
+    ] = await Promise.all([
       paginateMembershipStarts(supabase, windowStartIso, nowIso, PAGE),
       bookingsHasPaymentAnalyticsColumns(supabase),
       aggregateCommissionsByMonth(supabase, windowStartIso),
       aggregateVisitsByMonth(supabase, windowStartIso),
       aggregateThisMonthFitnessCounts(supabase, thisMonthStartIso),
       fetchRecentPayments(supabase),
+      fetchFlexyUpcomingPeople(supabase),
+      aggregateFlexyDueAmountByMonth(supabase),
     ]);
+    const flexyUpcomingByDue = flexyUpcoming.byDue;
+    const flexyUpcomingPeople = flexyUpcoming.people;
 
     let paymentsByMonth: MonthPoint[];
     let channelCounts: ReturnType<typeof emptyChannels>;
@@ -596,6 +931,9 @@ export async function GET() {
         paymentsMonthsSource,
         analyticsLookbackMonths: ANALYTICS_LOOKBACK_MONTHS,
         thisMonthFitnessCounts,
+        flexyByMonth,
+        flexyUpcomingByDue,
+        flexyUpcomingPeople,
         paymentChannels: {
           qpay: channelCounts.qpay,
           sono: channelCounts.sono,

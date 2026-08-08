@@ -15,6 +15,17 @@ import { t } from "@/lib/i18n";
 import { featureFlags } from "@/lib/feature-flags";
 
 type MonthPoint = { month: string; count: number };
+type FlexyUpcomingPerson = {
+  payment_id: string;
+  plan_id: string;
+  user_id: string;
+  user_name: string | null;
+  user_phone: string | null;
+  amount: number;
+  due_date: string;
+  days_until: number;
+  installment_no: number;
+};
 type UserRow = {
   id: string;
   full_name: string | null;
@@ -27,8 +38,23 @@ type UserRow = {
   membership_expires_at?: string | null;
 };
 type GymRow = { id: string; name: string | null; address: string | null; phone?: string | null; image_url?: string | null; created_at?: string };
-type PaymentsMonthsSource = "bookings" | "lending" | "membership_starts";
-type FitnessMonthCount = { gym_id: string; gym_name: string | null; count: number };
+type FitnessMonthCount = {
+  gym_id: string;
+  gym_name: string | null;
+  image_url?: string | null;
+  count: number;
+};
+
+function formatMnt(n: number): string {
+  return `${n.toLocaleString("mn-MN")}₮`;
+}
+
+/** 0 = өнөөдөр; эерэг = үлдсэн хоног; сөрөг = хэтэрсэн */
+function flexyDaysLabel(daysUntil: number): string {
+  if (daysUntil === 0) return "Өнөөдөр";
+  if (daysUntil > 0) return `${daysUntil} хоног дутуу`;
+  return `${Math.abs(daysUntil)} хоног хэтэрсэн`;
+}
 
 export default function DashboardSection() {
   const [userCount, setUserCount] = useState(0);
@@ -36,13 +62,12 @@ export default function DashboardSection() {
   const [companyCount, setCompanyCount] = useState(0);
   const [fitnessCount, setFitnessCount] = useState(0);
   const [yogaCount, setYogaCount] = useState(0);
-  const [usersByMonth, setUsersByMonth] = useState<MonthPoint[]>([]);
-  const [paymentsByMonth, setPaymentsByMonth] = useState<MonthPoint[]>([]);
+  const [flexyByMonth, setFlexyByMonth] = useState<MonthPoint[]>([]);
+  const [flexyUpcomingPeople, setFlexyUpcomingPeople] = useState<FlexyUpcomingPerson[]>([]);
   const [commissionsByMonth, setCommissionsByMonth] = useState<MonthPoint[]>([]);
   const [visitsByMonth, setVisitsByMonth] = useState<MonthPoint[]>([]);
   const [thisMonthFitnessCounts, setThisMonthFitnessCounts] = useState<FitnessMonthCount[]>([]);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
-  const [paymentsMonthsSource, setPaymentsMonthsSource] = useState<PaymentsMonthsSource>("bookings");
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,11 +169,10 @@ export default function DashboardSection() {
         headers,
       });
       const body = (await res.json().catch(() => ({}))) as {
-        usersByMonth?: MonthPoint[];
-        paymentsByMonth?: MonthPoint[];
+        flexyByMonth?: MonthPoint[];
+        flexyUpcomingPeople?: FlexyUpcomingPerson[];
         commissionsByMonth?: MonthPoint[];
         visitsByMonth?: MonthPoint[];
-        paymentsMonthsSource?: PaymentsMonthsSource;
         thisMonthFitnessCounts?: FitnessMonthCount[];
         error?: string;
       };
@@ -167,20 +191,11 @@ export default function DashboardSection() {
         console.warn("[dashboard] dashboard-analytics:", body.error);
         return;
       }
-      if (Array.isArray(body.usersByMonth)) setUsersByMonth(body.usersByMonth);
-      if (Array.isArray(body.paymentsByMonth)) setPaymentsByMonth(body.paymentsByMonth);
+      if (Array.isArray(body.flexyByMonth)) setFlexyByMonth(body.flexyByMonth);
+      if (Array.isArray(body.flexyUpcomingPeople)) setFlexyUpcomingPeople(body.flexyUpcomingPeople);
       if (Array.isArray(body.commissionsByMonth)) setCommissionsByMonth(body.commissionsByMonth);
       if (Array.isArray(body.visitsByMonth)) setVisitsByMonth(body.visitsByMonth);
       if (Array.isArray(body.thisMonthFitnessCounts)) setThisMonthFitnessCounts(body.thisMonthFitnessCounts);
-      if (
-        body.paymentsMonthsSource === "bookings" ||
-        body.paymentsMonthsSource === "lending" ||
-        body.paymentsMonthsSource === "membership_starts"
-      ) {
-        setPaymentsMonthsSource(body.paymentsMonthsSource);
-      } else {
-        setPaymentsMonthsSource("bookings");
-      }
     } catch (e) {
       setAnalyticsError("Сүлжээний алдаа. Дахин оролдоно уу.");
       console.warn("[dashboard] dashboard-analytics", e);
@@ -252,50 +267,143 @@ export default function DashboardSection() {
 
       {/* ── Charts Row ───────────────────────────────────────── */}
       <div className="col-span-12 xl:col-span-4">
-        <ComponentCard title="Гишүүнчлэл эхэлсэн огноо" subtitle="Гишүүнчлэл эхэлсэн сараар">
-          <MemberGrowthChart data={usersByMonth.map((d) => ({ date: d.month, count: d.count }))} />
+        <ComponentCard
+          title={
+            <span className="inline-flex items-center gap-2.5">
+              <img
+                src="/logos/flexy.png"
+                alt="Flexy"
+                className="size-8 shrink-0 rounded-lg object-cover"
+              />
+              <span>Flexy — сарын төлбөр</span>
+            </span>
+          }
+          subtitle="Сар бүрт нийт хэдэн төгрөг орох ёстой"
+        >
+          <MemberGrowthChart
+            data={flexyByMonth
+              .filter((d) => d.month !== "overdue")
+              .map((d) => ({ date: d.month, count: d.count }))}
+            seriesName="Орох ёстой"
+            valueUnit="amount"
+          />
           <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
-            {usersByMonth.slice(-3).reverse().map((m) => (
-              <div key={m.month} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-2 w-2 rounded-sm bg-violet-500" />
-                  <span className="text-gray-600 dark:text-gray-400">{m.month.slice(0,4)}он {Number(m.month.slice(5,7))}-р сар</span>
+            {flexyByMonth.map((m) => {
+              const isOverdue = m.month === "overdue";
+              const label = isOverdue
+                ? "Хугацаа хэтэрсэн"
+                : `${Number(m.month.slice(5, 7))}-р сар`;
+              return (
+                <div key={m.month} className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={`inline-block h-2 w-2 shrink-0 rounded-sm ${
+                        isOverdue ? "bg-error-500" : "bg-violet-500"
+                      }`}
+                    />
+                    <span
+                      className={
+                        isOverdue
+                          ? "text-error-600 dark:text-error-400"
+                          : "text-gray-600 dark:text-gray-400"
+                      }
+                    >
+                      {label}
+                      {!isOverdue ? (
+                        <span className="text-gray-400 dark:text-gray-500"> орох ёстой</span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <span
+                    className={`shrink-0 font-bold tabular-nums ${
+                      isOverdue
+                        ? "text-error-600 dark:text-error-400"
+                        : "text-violet-600 dark:text-violet-400"
+                    }`}
+                  >
+                    {formatMnt(m.count)}
+                  </span>
                 </div>
-                <span className="font-bold text-violet-600 dark:text-violet-400">{m.count}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ComponentCard>
       </div>
 
       <div className="col-span-12 xl:col-span-4">
         <ComponentCard
-          title="Төлбөр төлсөн огноо"
-          subtitle={
-            paymentsMonthsSource === "membership_starts"
-              ? "Захиалгын төлбөрийн багц олдсонгүй — гишүүнчлэл эхэлсэн сараар (илэрхийлэл)"
-              : paymentsMonthsSource === "lending"
-                ? "Lending бүртгэл — төлөгдсөн сараар"
-                : "Төлбөр баталгаажсан сараар (захиалга)"
+          title={
+            <span className="inline-flex items-center gap-2.5">
+              <img
+                src="/logos/flexy.png"
+                alt="Flexy"
+                className="size-8 shrink-0 rounded-lg object-cover"
+              />
+              <span>Flexy — ойрын төлбөр</span>
+            </span>
           }
+          subtitle="Хамгийн ойрын төлөх хүмүүс (утас · дүн · хоног)"
         >
-          <BookingsChart
-            data={paymentsByMonth.map((d) => ({ date: d.month, count: d.count }))}
-            seriesName={
-              paymentsMonthsSource === "membership_starts" ? "Гишүүнчлэл эхэлсэн" : "Төлбөр"
-            }
-          />
-          <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
-            {paymentsByMonth.slice(-3).reverse().map((m) => (
-              <div key={m.month} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-2 w-2 rounded-sm bg-indigo-500" />
-                  <span className="text-gray-600 dark:text-gray-400">{m.month.slice(0, 4)}он {Number(m.month.slice(5, 7))}-р сар</span>
+          {flexyUpcomingPeople.length === 0 ? (
+            <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+              Төлөх Flexy хуваарь байхгүй
+            </div>
+          ) : (
+            <div className="max-h-[28rem] space-y-1 overflow-y-auto">
+              {flexyUpcomingPeople.map((p) => (
+                <div
+                  key={p.payment_id}
+                  className={[
+                    "flex items-center justify-between gap-3 rounded-lg px-2 py-2.5",
+                    p.days_until < 0
+                      ? "bg-rose-50/50 dark:bg-rose-950/15"
+                      : p.days_until === 0
+                        ? "bg-brand-50/60 dark:bg-brand-500/10"
+                        : "hover:bg-gray-50 dark:hover:bg-white/[0.03]",
+                  ].join(" ")}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
+                      {p.user_name?.trim() || "—"}
+                    </p>
+                    <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                      {p.user_phone?.trim() || "—"}
+                      {p.installment_no > 0 ? (
+                        <span className="text-gray-400 dark:text-gray-500">
+                          {" "}
+                          · {p.installment_no}-р төлөлт
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={`text-sm font-bold tabular-nums ${
+                        p.days_until < 0
+                          ? "text-error-600 dark:text-error-400"
+                          : p.days_until === 0
+                            ? "text-brand-600 dark:text-brand-400"
+                            : "text-indigo-600 dark:text-indigo-400"
+                      }`}
+                    >
+                      {formatMnt(p.amount)}
+                    </p>
+                    <p
+                      className={`mt-0.5 text-[11px] font-medium ${
+                        p.days_until < 0
+                          ? "text-error-500 dark:text-error-400"
+                          : p.days_until === 0
+                            ? "text-brand-500 dark:text-brand-300"
+                            : "text-gray-400 dark:text-gray-500"
+                      }`}
+                    >
+                      {flexyDaysLabel(p.days_until)}
+                    </p>
+                  </div>
                 </div>
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">{m.count}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </ComponentCard>
       </div>
 
@@ -315,7 +423,11 @@ export default function DashboardSection() {
               <FitnessCountsChart
                 data={thisMonthFitnessCounts
                   .slice(0, 10)
-                  .map((r) => ({ gym: r.gym_name || r.gym_id, count: r.count }))}
+                  .map((r) => ({
+                    gym: r.gym_name || r.gym_id,
+                    count: r.count,
+                    image_url: r.image_url ?? null,
+                  }))}
                 height={360}
               />
               {thisMonthFitnessCounts.length > 10 && (
@@ -393,9 +505,20 @@ export default function DashboardSection() {
             {thisMonthFitnessCounts.map((row, idx) => (
               <div
                 key={row.gym_id}
-                className="flex items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]"
+                className="flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-white/[0.03]"
               >
-                <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-3">
+                  {row.image_url ? (
+                    <img
+                      src={row.image_url}
+                      alt={row.gym_name || "Gym"}
+                      className="size-9 shrink-0 rounded-full object-cover ring-1 ring-gray-200 dark:ring-gray-700"
+                    />
+                  ) : (
+                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                      {(row.gym_name || "?").trim().charAt(0).toUpperCase()}
+                    </span>
+                  )}
                   <p className="truncate text-sm font-bold text-gray-800 dark:text-white/90">
                     {idx + 1}. {row.gym_name || row.gym_id}
                   </p>

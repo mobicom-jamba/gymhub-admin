@@ -1,11 +1,41 @@
 "use client";
 
 import React from "react";
-import dynamic from "next/dynamic";
 
-const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
+type Row = { gym: string; count: number; image_url?: string | null };
 
-type Row = { gym: string; count: number };
+const BAR_COLORS = [
+  "#6366F1",
+  "#10B981",
+  "#F59E0B",
+  "#EC4899",
+  "#22C55E",
+  "#3B82F6",
+  "#A855F7",
+  "#EF4444",
+  "#14B8A6",
+  "#F97316",
+  "#0EA5E9",
+  "#84CC16",
+];
+
+function GymAvatar({ name, imageUrl }: { name: string; imageUrl?: string | null }) {
+  if (imageUrl) {
+    return (
+      <img
+        src={imageUrl}
+        alt={name}
+        className="size-7 shrink-0 rounded-full object-cover ring-1 ring-gray-200 dark:ring-gray-700"
+      />
+    );
+  }
+  const initial = (name.trim()[0] || "?").toUpperCase();
+  return (
+    <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600 ring-1 ring-gray-200 dark:bg-white/10 dark:text-slate-300 dark:ring-gray-700">
+      {initial}
+    </span>
+  );
+}
 
 export default function FitnessCountsChart({
   data,
@@ -22,102 +52,40 @@ export default function FitnessCountsChart({
     );
   }
 
-  // Sort descending so the largest bar sits on top
   const sorted = [...data].sort((a, b) => b.count - a.count);
-  const truncate = (s: string, n = 24) =>
-    s.length > n ? s.slice(0, n - 1) + "…" : s;
-
-  const points = sorted.map((d) => ({ x: truncate(d.gym), y: d.count }));
-
-  // Auto-size: ~32px per bar + padding so labels never overlap
-  const computedHeight = Math.max(height, sorted.length * 32 + 48);
-
-  const options: ApexCharts.ApexOptions = {
-    chart: {
-      type: "bar",
-      toolbar: { show: false },
-      fontFamily: "inherit",
-      background: "transparent",
-      animations: { enabled: true, speed: 600 },
-    },
-    plotOptions: {
-      bar: {
-        horizontal: true,
-        barHeight: "68%",
-        borderRadius: 6,
-        borderRadiusApplication: "end",
-        dataLabels: { position: "top" }, // value at the end of the bar
-        distributed: true,
-      },
-    },
-    colors: [
-      "#6366F1", // indigo
-      "#10B981", // emerald
-      "#F59E0B", // amber
-      "#EC4899", // pink
-      "#22C55E", // green
-      "#3B82F6", // blue
-      "#A855F7", // purple
-      "#EF4444", // red
-      "#14B8A6", // teal
-      "#F97316", // orange
-      "#0EA5E9", // sky
-      "#84CC16", // lime
-    ],
-    grid: {
-      strokeDashArray: 4,
-      borderColor: "rgba(148,163,184,0.18)",
-      padding: { left: 0, right: 36, top: -4, bottom: -4 },
-      xaxis: { lines: { show: true } },
-      yaxis: { lines: { show: false } },
-    },
-    dataLabels: {
-      enabled: true,
-      textAnchor: "start",
-      offsetX: 6,
-      style: {
-        fontSize: "12px",
-        fontWeight: 600,
-        colors: ["#475569"],
-      },
-      formatter: (val) => String(val),
-      background: { enabled: false },
-    },
-    xaxis: {
-      axisBorder: { show: false },
-      axisTicks: { show: false },
-      labels: {
-        style: { fontSize: "11px", colors: "#94A3B8" },
-        formatter: (v) => String(Math.round(Number(v))),
-      },
-    },
-    yaxis: {
-      labels: {
-        style: { fontSize: "12px", colors: "#64748B", fontWeight: 500 },
-        maxWidth: 220,
-      },
-    },
-    legend: { show: false }, // redundant with y-axis labels
-    tooltip: {
-      theme: "light",
-      y: { formatter: (v) => `${v} ирц` },
-      // Show full (non-truncated) gym name in tooltip
-      x: {
-        formatter: (_, opts) =>
-          sorted[opts?.dataPointIndex ?? 0]?.gym ?? "",
-      },
-    },
-    states: {
-      hover: { filter: { type: "darken" } },
-      active: { filter: { type: "none" } },
-    },
-  };
-
-  const series: ApexAxisChartSeries = [{ name: "Ирц", data: points }];
+  const max = Math.max(...sorted.map((d) => d.count), 1);
+  const minHeight = Math.max(height, sorted.length * 36 + 16);
 
   return (
-    <div style={{ height: computedHeight }} className="w-full">
-      <Chart options={options} series={series} type="bar" height="100%" />
+    <div style={{ minHeight }} className="flex w-full flex-col justify-center gap-2.5">
+      {sorted.map((d, i) => {
+        const pct = Math.max(4, Math.round((d.count / max) * 100));
+        const color = BAR_COLORS[i % BAR_COLORS.length];
+        return (
+          <div key={`${d.gym}-${i}`} className="flex items-center gap-2.5">
+            <div className="flex w-[11.5rem] shrink-0 items-center justify-start gap-2 sm:w-56">
+              <GymAvatar name={d.gym} imageUrl={d.image_url} />
+              <span
+                className="min-w-0 truncate text-left text-xs font-medium text-slate-600 dark:text-slate-400"
+                title={d.gym}
+              >
+                {d.gym}
+              </span>
+            </div>
+            <div className="relative min-w-0 flex-1">
+              <div className="h-6 overflow-hidden rounded-md bg-slate-100/80 dark:bg-white/[0.04]">
+                <div
+                  className="h-full rounded-md transition-[width] duration-500 ease-out"
+                  style={{ width: `${pct}%`, backgroundColor: color }}
+                />
+              </div>
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold tabular-nums text-slate-600 dark:text-slate-300">
+                {d.count}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
