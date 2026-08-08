@@ -56,6 +56,27 @@ function flexyDaysLabel(daysUntil: number): string {
   return `${Math.abs(daysUntil)} хоног хэтэрсэн`;
 }
 
+function AnalyticsCardSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="flex h-64 flex-col justify-center gap-3 px-1" aria-busy="true" aria-label="Ачаалж байна">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="h-3 flex-1 animate-pulse rounded-full bg-gray-100 dark:bg-gray-800" />
+          <div className="h-3 w-16 shrink-0 animate-pulse rounded-full bg-gray-100 dark:bg-gray-800" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AnalyticsErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+      {message}
+    </div>
+  );
+}
+
 export default function DashboardSection() {
   const [userCount, setUserCount] = useState(0);
   const [activeCount, setActiveCount] = useState(0);
@@ -68,6 +89,7 @@ export default function DashboardSection() {
   const [visitsByMonth, setVisitsByMonth] = useState<MonthPoint[]>([]);
   const [thisMonthFitnessCounts, setThisMonthFitnessCounts] = useState<FitnessMonthCount[]>([]);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [newUsers, setNewUsers] = useState<UserRow[]>([]);
   const [newGyms, setNewGyms] = useState<GymRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,9 +177,10 @@ export default function DashboardSection() {
     setLoading(false);
   }, []);
 
-  /** Charts + payment channels: service-role API so booking aggregates work under RLS. */
+  /** Charts: service-role API so aggregates work under RLS. */
   const fetchAnalytics = useCallback(async () => {
     try {
+      setAnalyticsLoading(true);
       setAnalyticsError(null);
       const supabase = createBrowserSupabaseClient();
       const {
@@ -199,6 +222,8 @@ export default function DashboardSection() {
     } catch (e) {
       setAnalyticsError("Сүлжээний алдаа. Дахин оролдоно уу.");
       console.warn("[dashboard] dashboard-analytics", e);
+    } finally {
+      setAnalyticsLoading(false);
     }
   }, []);
 
@@ -280,53 +305,60 @@ export default function DashboardSection() {
           }
           subtitle="Сар бүрт нийт хэдэн төгрөг орох ёстой"
         >
-          <MemberGrowthChart
-            data={flexyByMonth
-              .filter((d) => d.month !== "overdue")
-              .map((d) => ({ date: d.month, count: d.count }))}
-            seriesName="Орох ёстой"
-            valueUnit="amount"
-          />
-          <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
-            {flexyByMonth.map((m) => {
-              const isOverdue = m.month === "overdue";
-              const label = isOverdue
-                ? "Хугацаа хэтэрсэн"
-                : `${Number(m.month.slice(5, 7))}-р сар`;
-              return (
-                <div key={m.month} className="flex items-center justify-between gap-3 text-sm">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span
-                      className={`inline-block h-2 w-2 shrink-0 rounded-sm ${
-                        isOverdue ? "bg-error-500" : "bg-violet-500"
-                      }`}
-                    />
-                    <span
-                      className={
-                        isOverdue
-                          ? "text-error-600 dark:text-error-400"
-                          : "text-gray-600 dark:text-gray-400"
-                      }
-                    >
-                      {label}
-                      {!isOverdue ? (
-                        <span className="text-gray-400 dark:text-gray-500"> орох ёстой</span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <span
-                    className={`shrink-0 font-bold tabular-nums ${
-                      isOverdue
-                        ? "text-error-600 dark:text-error-400"
-                        : "text-violet-600 dark:text-violet-400"
-                    }`}
-                  >
-                    {formatMnt(m.count)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {analyticsError ? <AnalyticsErrorBanner message={analyticsError} /> : null}
+          {analyticsLoading ? (
+            <AnalyticsCardSkeleton />
+          ) : (
+            <>
+              <MemberGrowthChart
+                data={flexyByMonth
+                  .filter((d) => d.month !== "overdue")
+                  .map((d) => ({ date: d.month, count: d.count }))}
+                seriesName="Орох ёстой"
+                valueUnit="amount"
+              />
+              <div className="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-white/[0.06]">
+                {flexyByMonth.map((m) => {
+                  const isOverdue = m.month === "overdue";
+                  const label = isOverdue
+                    ? "Хугацаа хэтэрсэн"
+                    : `${Number(m.month.slice(5, 7))}-р сар`;
+                  return (
+                    <div key={m.month} className="flex items-center justify-between gap-3 text-sm">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <span
+                          className={`inline-block h-2 w-2 shrink-0 rounded-sm ${
+                            isOverdue ? "bg-error-500" : "bg-violet-500"
+                          }`}
+                        />
+                        <span
+                          className={
+                            isOverdue
+                              ? "text-error-600 dark:text-error-400"
+                              : "text-gray-600 dark:text-gray-400"
+                          }
+                        >
+                          {label}
+                          {!isOverdue ? (
+                            <span className="text-gray-400 dark:text-gray-500"> орох ёстой</span>
+                          ) : null}
+                        </span>
+                      </div>
+                      <span
+                        className={`shrink-0 font-bold tabular-nums ${
+                          isOverdue
+                            ? "text-error-600 dark:text-error-400"
+                            : "text-violet-600 dark:text-violet-400"
+                        }`}
+                      >
+                        {formatMnt(m.count)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </ComponentCard>
       </div>
 
@@ -344,7 +376,10 @@ export default function DashboardSection() {
           }
           subtitle="Хамгийн ойрын төлөх хүмүүс (утас · дүн · хоног)"
         >
-          {flexyUpcomingPeople.length === 0 ? (
+          {analyticsError ? <AnalyticsErrorBanner message={analyticsError} /> : null}
+          {analyticsLoading ? (
+            <AnalyticsCardSkeleton rows={6} />
+          ) : flexyUpcomingPeople.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-sm text-gray-500 dark:text-gray-400">
               Төлөх Flexy хуваарь байхгүй
             </div>
@@ -409,12 +444,10 @@ export default function DashboardSection() {
 
       <div className="col-span-12 xl:col-span-4">
         <ComponentCard title="Энэ сарын фитнесүүд оролтуудын тоо" subtitle="Фитнес тус бүрээр (тоо)">
-          {analyticsError && (
-            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              {analyticsError}
-            </div>
-          )}
-          {thisMonthFitnessCounts.length === 0 ? (
+          {analyticsError ? <AnalyticsErrorBanner message={analyticsError} /> : null}
+          {analyticsLoading ? (
+            <AnalyticsCardSkeleton rows={8} />
+          ) : thisMonthFitnessCounts.length === 0 ? (
             <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
               Энэ сард ирц бүртгэгдээгүй байна.
             </div>
@@ -466,13 +499,21 @@ export default function DashboardSection() {
         <>
           <div className="col-span-12 xl:col-span-6">
             <ComponentCard title="Сараар ирц" subtitle="Татгалзсан хүсэлт ороогүй">
-              <BookingsChart data={visitsByMonth.map((d) => ({ date: d.month, count: d.count }))} seriesName="Ирц" />
+              {analyticsLoading ? (
+                <AnalyticsCardSkeleton />
+              ) : (
+                <BookingsChart data={visitsByMonth.map((d) => ({ date: d.month, count: d.count }))} seriesName="Ирц" />
+              )}
             </ComponentCard>
           </div>
 
           <div className="col-span-12 xl:col-span-6">
             <ComponentCard title="Сараар комисс" subtitle="Борлуулалтын комиссын дүн (₮)">
-              <BookingsChart data={commissionsByMonth.map((d) => ({ date: d.month, count: d.count }))} seriesName="Комисс" />
+              {analyticsLoading ? (
+                <AnalyticsCardSkeleton />
+              ) : (
+                <BookingsChart data={commissionsByMonth.map((d) => ({ date: d.month, count: d.count }))} seriesName="Комисс" />
+              )}
             </ComponentCard>
           </div>
         </>

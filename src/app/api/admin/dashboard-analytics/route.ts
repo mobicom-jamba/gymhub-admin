@@ -33,8 +33,6 @@ type FlexyUpcomingPerson = {
   installment_no: number;
 };
 
-const PAID_STATUS = ["paid", "PAID", "Paid"] as const;
-
 const ANALYTICS_LOOKBACK_MONTHS = 6;
 
 function analyticsWindowStartIso(lookbackMonths: number): string {
@@ -55,183 +53,6 @@ function currentMonthStartUtc8Iso(): string {
   const y = parts.find((p) => p.type === "year")?.value ?? "1970";
   const m = parts.find((p) => p.type === "month")?.value ?? "01";
   return new Date(`${y}-${m}-01T00:00:00+08:00`).toISOString();
-}
-
-async function bookingsHasPaymentAnalyticsColumns(supabase: SupabaseClient): Promise<boolean> {
-  // Be conservative here: only require the columns we actually need to classify channels.
-  // `paid_at` is optional and may not exist in some deployments.
-  const { error } = await supabase
-    .from("bookings")
-    .select("payment_status, created_at")
-    .limit(1);
-  if (!error) return true;
-  const msg = (error.message ?? "").toLowerCase();
-  if (/column .* does not exist/i.test(msg)) return false;
-  if (msg.includes("unknown column")) return false;
-  if (/relation .* does not exist/i.test(msg)) return false;
-  return true;
-}
-
-async function bookingsColumnExists(
-  supabase: SupabaseClient,
-  column: string,
-): Promise<boolean> {
-  const { error } = await supabase
-    .from("bookings")
-    .select(column)
-    .limit(1);
-  return !error;
-}
-
-
-function classifyPaymentChannel(row: {
-  payment_channel?: string | null;
-  qpay_invoice_id?: string | null;
-}): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "admin" | "other" {
-  const raw = (row.payment_channel ?? "").trim().toLowerCase();
-  if (raw === "qpay" || raw === "q_pay" || raw === "q-pay") return "qpay";
-  if (raw === "sono") return "sono";
-  if (raw === "pocket") return "pocket";
-  if (raw === "carepay" || raw === "care_pay") return "carepay";
-  if (raw === "monpay" || raw === "mon_pay") return "monpay";
-  if (raw === "gymfintech" || raw === "flexy" || raw === "gym_fintech") return "gymfintech";
-  if (raw === "gift" || raw === "admin" || raw === "manual" || raw === "admin_grant") {
-    return "gift";
-  }
-  const inv = String(row.qpay_invoice_id ?? "").trim();
-  if (inv.startsWith("GH")) return "sono";
-  if (/^\d{8}-\d+-\d+-\d+$/.test(inv)) return "carepay";
-  if (inv.length > 0) return "qpay";
-  return "other";
-}
-
-function classifyLendingChannel(channel: string): "qpay" | "sono" | "pocket" | "carepay" | "monpay" | "gymfintech" | "gift" | "admin" | "other" {
-  const raw = channel.trim().toLowerCase();
-  if (raw === "qpay" || raw === "q_pay" || raw === "q-pay") return "qpay";
-  if (raw === "sono") return "sono";
-  if (raw === "pocket") return "pocket";
-  if (raw === "carepay" || raw === "care_pay") return "carepay";
-  if (raw === "monpay" || raw === "mon_pay") return "monpay";
-  if (raw === "gymfintech" || raw === "flexy") return "gymfintech";
-  if (raw === "gift" || raw === "admin" || raw === "manual" || raw === "admin_grant") {
-    return "gift";
-  }
-  return "other";
-}
-
-function isLendingPaidStatus(status: string): boolean {
-  const s = status.trim().toLowerCase();
-  return s === "paid" || s === "completed" || s === "success" || s === "succeeded" || s === "settled" || s === "approved" || s === "done";
-}
-
-function emptyChannels() {
-  return {
-    qpay: 0,
-    sono: 0,
-    pocket: 0,
-    carepay: 0,
-    monpay: 0,
-    gymfintech: 0,
-    gift: 0,
-    admin: 0,
-    other: 0,
-  };
-}
-
-type RecentPayment = {
-  id: string;
-  amount: number | null;
-  channel: ReturnType<typeof classifyPaymentChannel>;
-  paid_at: string | null;
-  user_name: string | null;
-  user_phone: string | null;
-};
-
-/** Last N paid bookings with their resolved payment channel + buyer info (per-transaction view). */
-async function fetchRecentPayments(
-  supabase: SupabaseClient,
-  limit = 25,
-): Promise<RecentPayment[]> {
-  const [hasPaymentChannel, hasQpayInvoiceId, hasPaidAt, hasAmount, hasUserId] =
-    await Promise.all([
-      bookingsColumnExists(supabase, "payment_channel"),
-      bookingsColumnExists(supabase, "qpay_invoice_id"),
-      bookingsColumnExists(supabase, "paid_at"),
-      bookingsColumnExists(supabase, "amount"),
-      bookingsColumnExists(supabase, "user_id"),
-    ]);
-
-  const selectCols = [
-    "id",
-    "payment_status",
-    hasPaymentChannel ? "payment_channel" : null,
-    hasQpayInvoiceId ? "qpay_invoice_id" : null,
-    hasPaidAt ? "paid_at" : null,
-    hasAmount ? "amount" : null,
-    hasUserId ? "user_id" : null,
-    "created_at",
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  let res = await supabase
-    .from("bookings")
-    .select(selectCols)
-    .in("payment_status", [...PAID_STATUS])
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (res.error) {
-    res = await supabase
-      .from("bookings")
-      .select(selectCols)
-      .eq("payment_status", "paid")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-  }
-  if (res.error) return [];
-
-  const rows = (res.data ?? []) as unknown as Record<string, unknown>[];
-  const paid = rows.filter(
-    (r) => String(r.payment_status ?? "").trim().toLowerCase() === "paid",
-  );
-
-  const userIds = [
-    ...new Set(paid.map((r) => String(r.user_id ?? "")).filter(Boolean)),
-  ];
-  const profById = new Map<string, { full_name: string | null; phone: string | null }>();
-  if (hasUserId && userIds.length > 0) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, full_name, phone")
-      .in("id", userIds);
-    for (const p of (profs ?? []) as {
-      id: string;
-      full_name: string | null;
-      phone: string | null;
-    }[]) {
-      profById.set(p.id, { full_name: p.full_name, phone: p.phone });
-    }
-  }
-
-  return paid.map((r) => {
-    const prof = profById.get(String(r.user_id ?? ""));
-    const paidAt =
-      typeof r.paid_at === "string"
-        ? r.paid_at
-        : typeof r.created_at === "string"
-          ? r.created_at
-          : null;
-    return {
-      id: String(r.id ?? ""),
-      amount: r.amount != null ? Number(r.amount) : null,
-      channel: classifyPaymentChannel(
-        r as { payment_channel?: string | null; qpay_invoice_id?: string | null },
-      ),
-      paid_at: paidAt,
-      user_name: prof?.full_name ?? null,
-      user_phone: prof?.phone ?? null,
-    };
-  });
 }
 
 async function createAnalyticsSupabase(): Promise<
@@ -259,266 +80,36 @@ async function createAnalyticsSupabase(): Promise<
   return { client: createAdminClient(), error: null };
 }
 
-/**
- * Single-pass over paid bookings: collects both monthly counts and channel breakdown.
- * Halves the DB work compared to two separate scans.
- */
-async function aggregateBookingsSinglePass(
-  supabase: SupabaseClient,
-  createdAtGte: string,
-): Promise<{
-  byMonth: MonthPoint[];
-  channels: {
-    qpay: number;
-    sono: number;
-    pocket: number;
-    carepay: number;
-    monpay: number;
-    gymfintech: number;
-    gift: number;
-    admin: number;
-    other: number;
-  };
-}> {
-  const channels = emptyChannels();
-  const monthMap: Record<string, number> = {};
-  const PAGE = 1000;
-  let from = 0;
-
-  const [hasPaymentChannel, hasQpayInvoiceId, hasPaidAt] = await Promise.all([
-    bookingsColumnExists(supabase, "payment_channel"),
-    bookingsColumnExists(supabase, "qpay_invoice_id"),
-    bookingsColumnExists(supabase, "paid_at"),
-  ]);
-
-  const selectCols = [
-    "payment_status",
-    hasPaymentChannel ? "payment_channel" : null,
-    hasQpayInvoiceId ? "qpay_invoice_id" : null,
-    hasPaidAt ? "paid_at" : null,
-    "created_at",
-  ]
-    .filter(Boolean)
-    .join(", ");
-
-  for (;;) {
-    let res = await supabase
-      .from("bookings")
-      .select(selectCols)
-      .gte("created_at", createdAtGte)
-      .in("payment_status", [...PAID_STATUS])
-      .order("created_at", { ascending: true })
-      .range(from, from + PAGE - 1);
-
-    // Some DBs have `payment_status` but don't support `.in()` well with mixed casing;
-    // fallback to strict "paid".
-    if (res.error) {
-      res = await supabase
-        .from("bookings")
-        .select(selectCols)
-        .gte("created_at", createdAtGte)
-        .eq("payment_status", "paid")
-        .order("created_at", { ascending: true })
-        .range(from, from + PAGE - 1);
-    }
-    if (res.error) throw new Error(res.error.message);
-
-    const rows = res.data ?? [];
-    for (const row of rows) {
-      const s = String((row as unknown as Record<string, unknown>).payment_status ?? "").trim().toLowerCase();
-      if (s !== "paid") continue;
-
-      const bucket = classifyPaymentChannel(row as { payment_channel?: string | null; qpay_invoice_id?: string | null });
-      channels[bucket]++;
-
-      const raw =
-        (row as unknown as Record<string, unknown>).paid_at ||
-        (row as unknown as Record<string, unknown>).created_at;
-      if (typeof raw === "string") {
-        const month = raw.slice(0, 7);
-        monthMap[month] = (monthMap[month] ?? 0) + 1;
-      }
-    }
-    if (rows.length < PAGE) break;
-    from += PAGE;
-  }
-
-  const byMonth = Object.entries(monthMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, count]) => ({ month, count }));
-
-  return { byMonth, channels };
+function addFlexyDueMonthAmount(
+  monthMap: Record<string, number>,
+  row: { amount?: unknown; due_date?: unknown },
+) {
+  const dueRaw = String(row.due_date ?? "").trim();
+  if (!dueRaw) return;
+  const due = /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
+    ? dueRaw.slice(0, 10)
+    : toLocalDateString(parseLocalDateOnly(dueRaw));
+  const month = due.slice(0, 7);
+  if (month.length !== 7) return;
+  monthMap[month] = (monthMap[month] ?? 0) + (Number(row.amount) || 0);
 }
 
-async function aggregateFromLendingRecords(
-  supabase: SupabaseClient,
-  createdAtGte: string,
-): Promise<{
-  channels: {
-    qpay: number;
-    sono: number;
-    pocket: number;
-    carepay: number;
-    monpay: number;
-    gymfintech: number;
-    gift: number;
-    admin: number;
-    other: number;
-  };
-  byMonth: MonthPoint[];
-} | null> {
-  let selectCols = "channel, status, paid_at, created_at";
-  let probe = await supabase.from("lending_records").select(selectCols).limit(1);
-  if (probe.error?.message?.includes("paid_at")) {
-    selectCols = "channel, status, created_at";
-    probe = await supabase.from("lending_records").select(selectCols).limit(1);
-  }
-  if (probe.error) return null;
-
-  const counts = emptyChannels();
-  const monthMap: Record<string, number> = {};
-  const PAGE = 1000;
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from("lending_records")
-      .select(selectCols)
-      .gte("created_at", createdAtGte)
-      .order("created_at", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) return null;
-    const rows = (data ?? []) as { channel?: string | null; status?: string | null; paid_at?: string | null; created_at?: string | null }[];
-    for (const row of rows) {
-      if (!isLendingPaidStatus(String(row.status ?? ""))) continue;
-      const bucket = classifyLendingChannel(String(row.channel ?? ""));
-      counts[bucket]++;
-      const raw = row.paid_at || row.created_at;
-      if (raw) {
-        const month = raw.slice(0, 7);
-        monthMap[month] = (monthMap[month] ?? 0) + 1;
-      }
-    }
-    if (rows.length < PAGE) break;
-    from += PAGE;
-  }
-  return {
-    channels: counts,
-    byMonth: Object.entries(monthMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, count]) => ({ month, count })),
-  };
-}
-
-async function paginateMembershipStarts(
-  supabase: SupabaseClient,
-  startIso: string,
-  capIso: string,
-  pageSize: number,
-): Promise<MonthPoint[]> {
-  const monthMap: Record<string, number> = {};
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("membership_started_at")
-      .eq("role", "user")
-      .not("membership_started_at", "is", null)
-      .gte("membership_started_at", startIso)
-      .lte("membership_started_at", capIso)
-      .order("membership_started_at", { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
-    for (const row of data ?? []) {
-      const month = row.membership_started_at?.slice(0, 7);
-      if (month) monthMap[month] = (monthMap[month] ?? 0) + 1;
-    }
-    if (!data || data.length < pageSize) break;
-    from += pageSize;
-  }
-  return Object.entries(monthMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, count]) => ({ month, count }));
-}
-
-/**
- * Сар бүрт Flexy-ээс орох ёстой НИЙТ дүн.
- * Жишээ: 8-р сар 800,000₮, 9-р сар 900,000₮, 10-р сар 1,000,000₮…
- * Идэвхтэй төлөвлөгөөний бүх төлөгдөөгүй хуваарийг due_date-ийн сараар нийлнэ.
- * `count` = төгрөгийн дүн.
- */
-async function aggregateFlexyDueAmountByMonth(
-  _supabase: SupabaseClient,
-): Promise<MonthPoint[]> {
-  // RLS-ээс хамааралгүй — fitness counts-тай адил service role
-  const supabase = createAdminClient();
-
-  const { data: plans, error: plansErr } = await supabase
-    .from("installment_plans")
-    .select("id")
-    .eq("status", "active");
-
-  if (plansErr) {
-    if (plansErr.code === "42P01") return [];
-    console.warn("[dashboard-analytics] flexy due by month plans:", plansErr.message);
-    return [];
-  }
-  if (!plans?.length) return [];
-
-  const planIds = plans.map((p) => p.id);
-  const monthMap: Record<string, number> = {};
-  const CHUNK = 200;
-
-  for (let i = 0; i < planIds.length; i += CHUNK) {
-    const chunk = planIds.slice(i, i + CHUNK);
-    const { data: payments, error: payErr } = await supabase
-      .from("installment_payments")
-      .select("amount, due_date, status")
-      .in("plan_id", chunk)
-      .in("status", ["pending", "invoice_created", "overdue"]);
-
-    if (payErr) {
-      // status filter алдаатай бол neq paid-руу ухраа
-      const fallback = await supabase
-        .from("installment_payments")
-        .select("amount, due_date, status")
-        .in("plan_id", chunk)
-        .neq("status", "paid");
-      if (fallback.error) {
-        if (fallback.error.code === "42P01") return [];
-        console.warn("[dashboard-analytics] flexy due by month payments:", payErr.message);
-        continue;
-      }
-      for (const row of fallback.data ?? []) {
-        addFlexyDueMonthAmount(monthMap, row);
-      }
-      continue;
-    }
-
-    for (const row of payments ?? []) {
-      addFlexyDueMonthAmount(monthMap, row);
-    }
-  }
-
+function buildFlexyByMonth(monthMap: Record<string, number>): MonthPoint[] {
   const today = todayInUlaanbaatar();
   const startMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
   const monthsWithData = Object.keys(monthMap).sort();
   if (monthsWithData.length === 0) return [];
 
-  // Өнгөрсөн сарын хэтэрсэнийг тусад нь хадгалаад, одоогийн+ирээдүйн саруудыг due_date-аар үлдээнэ
   let overdueTotal = 0;
   for (const [m, amt] of Object.entries(monthMap)) {
     if (m < startMonth) overdueTotal += amt;
   }
 
   const futureKeys = monthsWithData.filter((m) => m >= startMonth);
-  const endMonth =
-    futureKeys.length > 0
-      ? futureKeys[futureKeys.length - 1]
-      : startMonth;
+  const endMonth = futureKeys.length > 0 ? futureKeys[futureKeys.length - 1] : startMonth;
 
   const out: MonthPoint[] = [];
   if (overdueTotal > 0) {
-    // Тусгай түлхүүр — UI "Хэтэрсэн" гэж харуулна
     out.push({ month: "overdue", count: overdueTotal });
   }
 
@@ -539,20 +130,6 @@ async function aggregateFlexyDueAmountByMonth(
   }
 
   return out;
-}
-
-function addFlexyDueMonthAmount(
-  monthMap: Record<string, number>,
-  row: { amount?: unknown; due_date?: unknown },
-) {
-  const dueRaw = String(row.due_date ?? "").trim();
-  if (!dueRaw) return;
-  const due = /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
-    ? dueRaw.slice(0, 10)
-    : toLocalDateString(parseLocalDateOnly(dueRaw));
-  const month = due.slice(0, 7);
-  if (month.length !== 7) return;
-  monthMap[month] = (monthMap[month] ?? 0) + (Number(row.amount) || 0);
 }
 
 async function aggregateCommissionsByMonth(
@@ -589,38 +166,40 @@ async function aggregateCommissionsByMonth(
     .map(([month, count]) => ({ month, count: Math.round(count * 100) / 100 }));
 }
 
+/** head count per calendar month — avoids downloading tens of thousands of visit rows. */
 async function aggregateVisitsByMonth(
   supabase: SupabaseClient,
-  startIso: string,
+  lookbackMonths: number,
 ): Promise<MonthPoint[]> {
-  const monthMap: Record<string, number> = {};
-  const PAGE = 1000;
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from("gym_visits")
-      .select("checked_in_at, status")
-      .gte("checked_in_at", startIso)
-      .neq("status", "rejected")
-      .order("checked_in_at", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) {
-      if (error.code === "42P01") return [];
-      throw new Error(error.message);
-    }
-    const rows = data ?? [];
-    for (const row of rows) {
-      const checkedAt = (row as { checked_in_at?: string | null }).checked_in_at;
-      if (!checkedAt) continue;
-      const month = checkedAt.slice(0, 7);
-      monthMap[month] = (monthMap[month] ?? 0) + 1;
-    }
-    if (rows.length < PAGE) break;
-    from += PAGE;
+  const now = new Date();
+  const windows: { month: string; startIso: string; endIso: string }[] = [];
+  for (let i = lookbackMonths - 1; i >= 0; i--) {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 1));
+    windows.push({
+      month: start.toISOString().slice(0, 7),
+      startIso: start.toISOString(),
+      endIso: end.toISOString(),
+    });
   }
-  return Object.entries(monthMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, count]) => ({ month, count }));
+
+  const results = await Promise.all(
+    windows.map(async ({ month, startIso, endIso }) => {
+      const { count, error } = await supabase
+        .from("gym_visits")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "rejected")
+        .gte("checked_in_at", startIso)
+        .lt("checked_in_at", endIso);
+      if (error) {
+        if (error.code === "42P01") return { month, count: 0 };
+        throw new Error(error.message);
+      }
+      return { month, count: count ?? 0 };
+    }),
+  );
+
+  return results.filter((r) => r.count > 0);
 }
 
 type FitnessMonthCount = {
@@ -630,12 +209,10 @@ type FitnessMonthCount = {
   count: number;
 };
 
-// gym-visit-counts route-тай яг ижил хэлбэр: createAdminClient() шууд → RLS bypass
 async function aggregateThisMonthFitnessCounts(
-  _supabase: SupabaseClient,
+  supabase: SupabaseClient,
   startIso: string,
 ): Promise<FitnessMonthCount[]> {
-  const supabase = createAdminClient();
   const map = new Map<
     string,
     { gym_id: string; gym_name: string | null; image_url: string | null; count: number }
@@ -643,10 +220,11 @@ async function aggregateThisMonthFitnessCounts(
   const PAGE = 1000;
   let from = 0;
 
+  // Зөвхөн gym_id — payload жижиг, хурдан
   for (;;) {
     const { data, error } = await supabase
       .from("gym_visits")
-      .select("gym_id, gym_name")
+      .select("gym_id")
       .neq("status", "rejected")
       .gte("checked_in_at", startIso)
       .range(from, from + PAGE - 1);
@@ -656,17 +234,15 @@ async function aggregateThisMonthFitnessCounts(
       throw new Error(error.message);
     }
 
-    for (const r of (data ?? []) as { gym_id?: string | null; gym_name?: string | null }[]) {
+    for (const r of (data ?? []) as { gym_id?: string | null }[]) {
       const gymId = String(r.gym_id ?? "").trim();
       if (!gymId) continue;
       const existing = map.get(gymId);
-      if (existing) {
-        existing.count += 1;
-        if (!existing.gym_name && r.gym_name) existing.gym_name = r.gym_name;
-      } else {
+      if (existing) existing.count += 1;
+      else {
         map.set(gymId, {
           gym_id: gymId,
-          gym_name: r.gym_name ?? null,
+          gym_name: null,
           image_url: null,
           count: 1,
         });
@@ -677,8 +253,7 @@ async function aggregateThisMonthFitnessCounts(
     from += PAGE;
   }
 
-  const rows = [...map.values()];
-  const gymIds = rows.map((r) => r.gym_id);
+  const gymIds = [...map.keys()];
   const CHUNK = 200;
   for (let i = 0; i < gymIds.length; i += CHUNK) {
     const chunk = gymIds.slice(i, i + CHUNK);
@@ -694,7 +269,7 @@ async function aggregateThisMonthFitnessCounts(
       const row = map.get(g.id);
       if (!row) continue;
       if (g.image_url) row.image_url = g.image_url;
-      if (!row.gym_name && g.name) row.gym_name = g.name;
+      if (g.name) row.gym_name = g.name;
     }
   }
 
@@ -708,14 +283,21 @@ function calendarDaysUntil(dueDate: string, today: Date): number {
 }
 
 /**
- * Flexy идэвхтэй төлөвлөгөө бүрийн дараагийн (хамгийн ойрын) төлөгдөөгүй хуваарь + profile.
- * due_date өсөхөөр эрэмбэлнэ (хэтэрсэн эхэнд).
+ * Нэг удаагийн Flexy fetch: сарын нийлбэр + ойрын төлбөр (өмнө 2× plans/payments байсан).
  */
-async function fetchFlexyUpcomingPeople(
+async function loadFlexyDashboard(
   supabase: SupabaseClient,
   limit = 40,
-): Promise<{ people: FlexyUpcomingPerson[]; byDue: FlexyDuePoint[] }> {
-  const empty = { people: [] as FlexyUpcomingPerson[], byDue: [] as FlexyDuePoint[] };
+): Promise<{
+  flexyByMonth: MonthPoint[];
+  people: FlexyUpcomingPerson[];
+  byDue: FlexyDuePoint[];
+}> {
+  const empty = {
+    flexyByMonth: [] as MonthPoint[],
+    people: [] as FlexyUpcomingPerson[],
+    byDue: [] as FlexyDuePoint[],
+  };
 
   const { data: plans, error: plansErr } = await supabase
     .from("installment_plans")
@@ -732,35 +314,40 @@ async function fetchFlexyUpcomingPeople(
   const planById = new Map(plans.map((p) => [p.id, p]));
   const planIds = plans.map((p) => p.id);
   const today = todayInUlaanbaatar();
-
-  /** plan_id → хамгийн ойрын unpaid payment */
+  const monthMap: Record<string, number> = {};
   const nextByPlan = new Map<
     string,
-    {
-      id: string;
-      amount: number;
-      due_date: string;
-      installment_no: number;
-    }
+    { id: string; amount: number; due_date: string; installment_no: number }
   >();
 
   const CHUNK = 200;
   for (let i = 0; i < planIds.length; i += CHUNK) {
     const chunk = planIds.slice(i, i + CHUNK);
-    const { data: payments, error: payErr } = await supabase
+    const paidRes = await supabase
       .from("installment_payments")
       .select("id, plan_id, amount, due_date, status, installment_no")
       .in("plan_id", chunk)
-      .neq("status", "paid")
+      .in("status", ["pending", "invoice_created", "overdue"])
       .order("due_date", { ascending: true });
 
-    if (payErr) {
-      if (payErr.code === "42P01") return empty;
-      console.warn("[dashboard-analytics] flexy payments:", payErr.message);
-      continue;
+    let payments = paidRes.data;
+    if (paidRes.error) {
+      const fallback = await supabase
+        .from("installment_payments")
+        .select("id, plan_id, amount, due_date, status, installment_no")
+        .in("plan_id", chunk)
+        .neq("status", "paid")
+        .order("due_date", { ascending: true });
+      if (fallback.error) {
+        if (fallback.error.code === "42P01") return empty;
+        console.warn("[dashboard-analytics] flexy payments:", paidRes.error.message);
+        continue;
+      }
+      payments = fallback.data;
     }
 
     for (const row of payments ?? []) {
+      addFlexyDueMonthAmount(monthMap, row);
       const planId = String(row.plan_id ?? "");
       if (!planId || nextByPlan.has(planId)) continue;
       const dueRaw = String(row.due_date ?? "").trim();
@@ -844,7 +431,11 @@ async function fetchFlexyUpcomingPeople(
     .sort((a, b) => a.due_date.localeCompare(b.due_date))
     .slice(0, 12);
 
-  return { people, byDue };
+  return {
+    flexyByMonth: buildFlexyByMonth(monthMap),
+    people,
+    byDue,
+  };
 }
 
 /** GET — aggregated dashboard chart + payment channel data. */
@@ -868,83 +459,41 @@ export async function GET() {
       return NextResponse.json({ error: "Supabase client үүсгэж чадсангүй." }, { status: 500 });
     }
 
-    const nowIso = new Date().toISOString();
     const windowStartIso = analyticsWindowStartIso(ANALYTICS_LOOKBACK_MONTHS);
     const thisMonthStartIso = currentMonthStartUtc8Iso();
-    const PAGE = 1000;
 
-    const [
-      usersByMonth,
-      useBookingsPayments,
-      commissionsByMonth,
-      visitsByMonth,
-      thisMonthFitnessCounts,
-      recentPayments,
-      flexyUpcoming,
-      flexyByMonth,
-    ] = await Promise.all([
-      paginateMembershipStarts(supabase, windowStartIso, nowIso, PAGE),
-      bookingsHasPaymentAnalyticsColumns(supabase),
-      aggregateCommissionsByMonth(supabase, windowStartIso),
-      aggregateVisitsByMonth(supabase, windowStartIso),
-      aggregateThisMonthFitnessCounts(supabase, thisMonthStartIso),
-      fetchRecentPayments(supabase),
-      fetchFlexyUpcomingPeople(supabase),
-      aggregateFlexyDueAmountByMonth(supabase),
-    ]);
-    const flexyUpcomingByDue = flexyUpcoming.byDue;
-    const flexyUpcomingPeople = flexyUpcoming.people;
-
-    let paymentsByMonth: MonthPoint[];
-    let channelCounts: ReturnType<typeof emptyChannels>;
-    let paymentsMonthsSource: "bookings" | "lending" | "membership_starts";
-
-    if (useBookingsPayments) {
-      const result = await aggregateBookingsSinglePass(supabase, windowStartIso);
-      paymentsByMonth = result.byMonth;
-      channelCounts = result.channels;
-      paymentsMonthsSource = "bookings";
-    } else {
-      const lending = await aggregateFromLendingRecords(supabase, windowStartIso);
-      if (lending) {
-        paymentsByMonth = lending.byMonth;
-        channelCounts = lending.channels;
-        paymentsMonthsSource = "lending";
-      } else {
-        paymentsByMonth = [];
-        channelCounts = emptyChannels();
-        paymentsMonthsSource = "bookings";
-      }
-    }
-
-    if (paymentsByMonth.length === 0 && usersByMonth.length > 0) {
-      paymentsByMonth = usersByMonth.map((x) => ({ month: x.month, count: x.count }));
-      paymentsMonthsSource = "membership_starts";
-    }
+    // Dashboard UI-д хэрэгтэй 4 зүйл л — bookings/membership/recentPayments-ийг хассан (хоосон stub).
+    const [commissionsByMonth, visitsByMonth, thisMonthFitnessCounts, flexy] =
+      await Promise.all([
+        aggregateCommissionsByMonth(supabase, windowStartIso),
+        aggregateVisitsByMonth(supabase, ANALYTICS_LOOKBACK_MONTHS),
+        aggregateThisMonthFitnessCounts(supabase, thisMonthStartIso),
+        loadFlexyDashboard(supabase),
+      ]);
 
     return NextResponse.json(
       {
-        usersByMonth,
-        paymentsByMonth,
+        usersByMonth: [] as MonthPoint[],
+        paymentsByMonth: [] as MonthPoint[],
         commissionsByMonth,
         visitsByMonth,
-        paymentsMonthsSource,
+        paymentsMonthsSource: "bookings" as const,
         analyticsLookbackMonths: ANALYTICS_LOOKBACK_MONTHS,
         thisMonthFitnessCounts,
-        flexyByMonth,
-        flexyUpcomingByDue,
-        flexyUpcomingPeople,
+        flexyByMonth: flexy.flexyByMonth,
+        flexyUpcomingByDue: flexy.byDue,
+        flexyUpcomingPeople: flexy.people,
         paymentChannels: {
-          qpay: channelCounts.qpay,
-          sono: channelCounts.sono,
-          pocket: channelCounts.pocket,
-          carepay: channelCounts.carepay,
-          monpay: channelCounts.monpay,
-          gymfintech: channelCounts.gymfintech,
-          gift: channelCounts.gift,
-          other: channelCounts.other,
+          qpay: 0,
+          sono: 0,
+          pocket: 0,
+          carepay: 0,
+          monpay: 0,
+          gymfintech: 0,
+          gift: 0,
+          other: 0,
         },
-        recentPayments,
+        recentPayments: [],
       },
       {
         headers: {
