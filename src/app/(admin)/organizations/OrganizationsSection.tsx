@@ -551,6 +551,7 @@ export default function OrganizationsSection() {
           />
         ) : selectedOrg ? (
           <OrgDetailPanel
+            key={selectedOrg.name}
             org={selectedOrg}
             record={selectedRecord}
             removeLoading={removeLoading}
@@ -649,10 +650,19 @@ function OrgDetailPanel({
   const [memberSearch, setMemberSearch] = useState("");
   const [tierFilter, setTierFilter]     = useState<"" | "early" | "standard" | "premium1" | "premium2" | "gymcore">("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "expired">("" );
+  const [callFilter, setCallFilter]     = useState<"" | "called" | "not_called">("");
   const [sortBy, setSortBy]             = useState<"name" | "expires_asc" | "expires_desc">("name");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("organizations.members.visibleColumns", {
-    member: true, phone: true, tier: true, expires: true,
+    member: true, phone: true, tier: true, expires: true, call: true,
   });
+
+  const callStats = useMemo(() => {
+    let called = 0;
+    for (const m of org.members) {
+      if (notesMap?.[m.id]?.called) called += 1;
+    }
+    return { called, notCalled: org.members.length - called };
+  }, [org.members, notesMap]);
 
   const filteredMembers = useMemo(() => {
     let list = org.members;
@@ -666,6 +676,10 @@ function OrgDetailPanel({
       list = list.filter(m => m.membership_expires_at && new Date(m.membership_expires_at) >= new Date());
     if (statusFilter === "expired")
       list = list.filter(m => !m.membership_expires_at || new Date(m.membership_expires_at) < new Date());
+    if (callFilter === "called")
+      list = list.filter(m => !!notesMap?.[m.id]?.called);
+    if (callFilter === "not_called")
+      list = list.filter(m => !notesMap?.[m.id]?.called);
     return [...list].sort((a, b) => {
       if (sortBy === "name")
         return (a.full_name ?? "").localeCompare(b.full_name ?? "");
@@ -673,7 +687,7 @@ function OrgDetailPanel({
       const db = b.membership_expires_at ? new Date(b.membership_expires_at).getTime() : Infinity;
       return sortBy === "expires_asc" ? da - db : db - da;
     });
-  }, [org.members, memberSearch, tierFilter, statusFilter, sortBy]);
+  }, [org.members, memberSearch, tierFilter, statusFilter, callFilter, sortBy, notesMap]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -726,6 +740,37 @@ function OrgDetailPanel({
                 <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
                   GymCore {org.gymcoreCount}
                 </span>
+              )}
+              {onNoteClick && org.members.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCallFilter((v) => (v === "called" ? "" : "called"))}
+                    title="Залгасан гишүүдээр шүүх"
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
+                      callFilter === "called"
+                        ? "bg-emerald-500 text-white ring-2 ring-emerald-500/30"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                    }`}
+                  >
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                    </svg>
+                    Залгасан {callStats.called}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCallFilter((v) => (v === "not_called" ? "" : "not_called"))}
+                    title="Залгаагүй гишүүдээр шүүх"
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition ${
+                      callFilter === "not_called"
+                        ? "bg-slate-600 text-white ring-2 ring-slate-500/30 dark:bg-slate-500"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-white/[0.06] dark:text-slate-300 dark:hover:bg-white/[0.1]"
+                    }`}
+                  >
+                    Залгаагүй {callStats.notCalled}
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -900,6 +945,22 @@ function OrgDetailPanel({
           ))}
         </div>
 
+        {/* Call filter */}
+        {onNoteClick && (
+          <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-800/60">
+            {([["", "Дуудлага"], ["called", "Залгасан"], ["not_called", "Залгаагүй"]] as const).map(([v, label]) => (
+              <button key={v || "all"} type="button" onClick={() => setCallFilter(v)}
+                className={`h-7 rounded-lg px-2.5 text-xs font-medium transition-all ${
+                  callFilter === v
+                    ? v === "called" ? "bg-emerald-500 text-white shadow-sm"
+                      : v === "not_called" ? "bg-slate-600 text-white shadow-sm dark:bg-slate-500"
+                      : "bg-white text-gray-700 shadow-sm dark:bg-gray-700 dark:text-white"
+                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                }`}>{label}</button>
+            ))}
+          </div>
+        )}
+
         {/* Sort */}
         <select
           value={sortBy}
@@ -916,13 +977,14 @@ function OrgDetailPanel({
             { key: "phone", label: "Утас" },
             { key: "tier", label: "Тариф" },
             { key: "expires", label: "Дуусах" },
+            ...(onNoteClick ? [{ key: "call", label: "Дуудлага" }] : []),
           ]}
           visible={visibleColumns}
           onChange={setVisibleColumns}
         />
 
-        {(memberSearch || tierFilter || statusFilter) && (
-          <button onClick={() => { setMemberSearch(""); setTierFilter(""); setStatusFilter(""); }}
+        {(memberSearch || tierFilter || statusFilter || callFilter) && (
+          <button onClick={() => { setMemberSearch(""); setTierFilter(""); setStatusFilter(""); setCallFilter(""); }}
             className="h-7 rounded-lg border border-gray-200 px-2 text-xs text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-gray-700">
             ✕
           </button>
@@ -943,6 +1005,9 @@ function OrgDetailPanel({
                 {(visibleColumns.phone ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Утас</th>}
                 {(visibleColumns.tier ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Тариф</th>}
                 {(visibleColumns.expires ?? true) && <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Дуусах</th>}
+                {onNoteClick && (visibleColumns.call ?? true) && (
+                  <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">Дуудлага</th>
+                )}
                 {(canManageOrgs || canManageUsers || onNoteClick) && (
                   <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-400"></th>
                 )}
@@ -953,6 +1018,7 @@ function OrgDetailPanel({
                 const days = m.membership_expires_at
                   ? Math.ceil((new Date(m.membership_expires_at).getTime() - Date.now()) / 86400000)
                   : null;
+                const called = !!notesMap?.[m.id]?.called;
                 return (
                   <tr key={m.id} className="group transition hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
                     {(visibleColumns.member ?? true) && <td className="px-4 py-3">
@@ -1000,13 +1066,24 @@ function OrgDetailPanel({
                             : <span className="text-xs text-gray-500 dark:text-gray-400">{new Date(m.membership_expires_at).toLocaleDateString("mn-MN")}</span>
                       ) : <span className="text-xs text-gray-400">—</span>}
                     </td>}
+                    {onNoteClick && (visibleColumns.call ?? true) && (
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                            called
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
+                              : "bg-slate-100 text-slate-500 dark:bg-white/[0.06] dark:text-slate-400"
+                          }`}
+                        >
+                          {called ? "Залгасан" : "Залгаагүй"}
+                        </span>
+                      </td>
+                    )}
                     {(canManageOrgs || canManageUsers || onNoteClick) && (
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {onNoteClick && (() => {
-                            const n = notesMap?.[m.id];
-                            const called = n?.called ?? false;
-                            const hasNote = !!(n?.note?.trim());
+                            const hasNote = !!(notesMap?.[m.id]?.note?.trim());
                             return (
                               <button
                                 type="button"
@@ -1021,11 +1098,7 @@ function OrgDetailPanel({
                                 }`}
                               >
                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
-                                  {called ? (
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-                                  ) : (
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-                                  )}
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
                                 </svg>
                               </button>
                             );
