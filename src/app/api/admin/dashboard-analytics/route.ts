@@ -31,6 +31,9 @@ type FlexyUpcomingPerson = {
   due_date: string;
   days_until: number;
   installment_no: number;
+  /** Flexy call лог — нэг төлбөрт олон удаа залгасан байж болно */
+  call_count: number;
+  last_called_at: string | null;
 };
 
 const ANALYTICS_LOOKBACK_MONTHS = 6;
@@ -396,7 +399,7 @@ async function loadFlexyDashboard(
     }
   }
 
-  const people: FlexyUpcomingPerson[] = nextRows.slice(0, limit).map((r) => {
+  const peopleBase = nextRows.slice(0, limit).map((r) => {
     const prof = profById.get(r.user_id);
     return {
       payment_id: r.payment_id,
@@ -408,8 +411,42 @@ async function loadFlexyDashboard(
       due_date: r.due_date,
       days_until: calendarDaysUntil(r.due_date, today),
       installment_no: r.installment_no,
+      call_count: 0,
+      last_called_at: null as string | null,
     };
   });
+
+  const paymentIds = peopleBase.map((p) => p.payment_id);
+  if (paymentIds.length > 0) {
+    const { data: callRows, error: callErr } = await supabase
+      .from("flexy_call_logs")
+      .select("payment_id, called_at")
+      .in("payment_id", paymentIds)
+      .order("called_at", { ascending: false });
+    if (callErr) {
+      if (callErr.code !== "42P01") {
+        console.warn("[dashboard-analytics] flexy_call_logs:", callErr.message);
+      }
+    } else {
+      const byPayment = new Map<string, { count: number; last: string }>();
+      for (const row of callRows ?? []) {
+        const cur = byPayment.get(row.payment_id);
+        if (!cur) {
+          byPayment.set(row.payment_id, { count: 1, last: row.called_at });
+        } else {
+          cur.count += 1;
+        }
+      }
+      for (const p of peopleBase) {
+        const s = byPayment.get(p.payment_id);
+        if (!s) continue;
+        p.call_count = s.count;
+        p.last_called_at = s.last;
+      }
+    }
+  }
+
+  const people: FlexyUpcomingPerson[] = peopleBase;
 
   const byDueMap = new Map<string, { amount: number; count: number }>();
   for (const p of nextRows) {

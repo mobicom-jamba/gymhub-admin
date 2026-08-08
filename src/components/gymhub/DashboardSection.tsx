@@ -13,19 +13,10 @@ import ComponentCard from "../common/ComponentCard";
 import { Modal } from "@/components/ui/modal";
 import { t } from "@/lib/i18n";
 import { featureFlags } from "@/lib/feature-flags";
+import FlexyCallPanel, { type FlexyCallPerson } from "./FlexyCallPanel";
 
 type MonthPoint = { month: string; count: number };
-type FlexyUpcomingPerson = {
-  payment_id: string;
-  plan_id: string;
-  user_id: string;
-  user_name: string | null;
-  user_phone: string | null;
-  amount: number;
-  due_date: string;
-  days_until: number;
-  installment_no: number;
-};
+type FlexyUpcomingPerson = FlexyCallPerson;
 type UserRow = {
   id: string;
   full_name: string | null;
@@ -47,13 +38,6 @@ type FitnessMonthCount = {
 
 function formatMnt(n: number): string {
   return `${n.toLocaleString("mn-MN")}₮`;
-}
-
-/** 0 = өнөөдөр; эерэг = үлдсэн хоног; сөрөг = хэтэрсэн */
-function flexyDaysLabel(daysUntil: number): string {
-  if (daysUntil === 0) return "Өнөөдөр";
-  if (daysUntil > 0) return `${daysUntil} хоног дутуу`;
-  return `${Math.abs(daysUntil)} хоног хэтэрсэн`;
 }
 
 function AnalyticsCardSkeleton({ rows = 5 }: { rows?: number }) {
@@ -215,7 +199,15 @@ export default function DashboardSection() {
         return;
       }
       if (Array.isArray(body.flexyByMonth)) setFlexyByMonth(body.flexyByMonth);
-      if (Array.isArray(body.flexyUpcomingPeople)) setFlexyUpcomingPeople(body.flexyUpcomingPeople);
+      if (Array.isArray(body.flexyUpcomingPeople)) {
+        setFlexyUpcomingPeople(
+          body.flexyUpcomingPeople.map((p) => ({
+            ...p,
+            call_count: Number(p.call_count ?? 0),
+            last_called_at: p.last_called_at ?? null,
+          })),
+        );
+      }
       if (Array.isArray(body.commissionsByMonth)) setCommissionsByMonth(body.commissionsByMonth);
       if (Array.isArray(body.visitsByMonth)) setVisitsByMonth(body.visitsByMonth);
       if (Array.isArray(body.thisMonthFitnessCounts)) setThisMonthFitnessCounts(body.thisMonthFitnessCounts);
@@ -374,7 +366,7 @@ export default function DashboardSection() {
               <span>Flexy — ойрын төлбөр</span>
             </span>
           }
-          subtitle="Хамгийн ойрын төлөх хүмүүс (утас · дүн · хоног)"
+          subtitle="Хамгийн ойрын төлөх хүмүүс · Flexy call тэмдэглэх"
         >
           {analyticsError ? <AnalyticsErrorBanner message={analyticsError} /> : null}
           {analyticsLoading ? (
@@ -384,60 +376,10 @@ export default function DashboardSection() {
               Төлөх Flexy хуваарь байхгүй
             </div>
           ) : (
-            <div className="max-h-[28rem] space-y-1 overflow-y-auto">
-              {flexyUpcomingPeople.map((p) => (
-                <div
-                  key={p.payment_id}
-                  className={[
-                    "flex items-center justify-between gap-3 rounded-lg px-2 py-2.5",
-                    p.days_until < 0
-                      ? "bg-rose-50/50 dark:bg-rose-950/15"
-                      : p.days_until === 0
-                        ? "bg-brand-50/60 dark:bg-brand-500/10"
-                        : "hover:bg-gray-50 dark:hover:bg-white/[0.03]",
-                  ].join(" ")}
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
-                      {p.user_name?.trim() || "—"}
-                    </p>
-                    <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                      {p.user_phone?.trim() || "—"}
-                      {p.installment_no > 0 ? (
-                        <span className="text-gray-400 dark:text-gray-500">
-                          {" "}
-                          · {p.installment_no}-р төлөлт
-                        </span>
-                      ) : null}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      className={`text-sm font-bold tabular-nums ${
-                        p.days_until < 0
-                          ? "text-error-600 dark:text-error-400"
-                          : p.days_until === 0
-                            ? "text-brand-600 dark:text-brand-400"
-                            : "text-indigo-600 dark:text-indigo-400"
-                      }`}
-                    >
-                      {formatMnt(p.amount)}
-                    </p>
-                    <p
-                      className={`mt-0.5 text-[11px] font-medium ${
-                        p.days_until < 0
-                          ? "text-error-500 dark:text-error-400"
-                          : p.days_until === 0
-                            ? "text-brand-500 dark:text-brand-300"
-                            : "text-gray-400 dark:text-gray-500"
-                      }`}
-                    >
-                      {flexyDaysLabel(p.days_until)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <FlexyCallPanel
+              people={flexyUpcomingPeople}
+              onPeopleChange={setFlexyUpcomingPeople}
+            />
           )}
         </ComponentCard>
       </div>
