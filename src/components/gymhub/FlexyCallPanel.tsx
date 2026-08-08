@@ -169,7 +169,7 @@ export default function FlexyCallPanel({
 
   return (
     <>
-      <div className="max-h-[28rem] space-y-1.5 overflow-y-auto">
+      <div className="max-h-[28rem] divide-y divide-gray-100 overflow-y-auto dark:divide-white/10">
         {people.map((p) => {
           const phoneDigits = (p.user_phone ?? "").replace(/\D/g, "");
           const called = p.call_count > 0;
@@ -179,35 +179,23 @@ export default function FlexyCallPanel({
             <div
               key={p.payment_id}
               className={[
-                "rounded-xl px-2.5 py-2.5",
+                "flex items-center gap-2 px-1 py-2",
                 called
-                  ? "bg-emerald-50/70 ring-1 ring-emerald-100 dark:bg-emerald-950/20 dark:ring-emerald-900/40"
+                  ? "bg-emerald-50/50 dark:bg-emerald-950/15"
                   : p.days_until < 0
-                    ? "bg-rose-50/50 dark:bg-rose-950/15"
+                    ? "bg-rose-50/40 dark:bg-rose-950/10"
                     : p.days_until === 0
-                      ? "bg-brand-50/60 dark:bg-brand-500/10"
-                      : "hover:bg-gray-50 dark:hover:bg-white/[0.03]",
+                      ? "bg-brand-50/40 dark:bg-brand-500/5"
+                      : "",
               ].join(" ")}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="truncate text-sm font-medium text-gray-800 dark:text-white/90">
                     {p.user_name?.trim() || "—"}
                   </p>
-                  <p className="mt-0.5 truncate font-mono text-xs text-gray-500 dark:text-gray-400">
-                    {p.user_phone?.trim() || "—"}
-                    {p.installment_no > 0 ? (
-                      <span className="text-gray-400 dark:text-gray-500">
-                        {" "}
-                        · {p.installment_no}-р төлөлт
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-
-                <div className="shrink-0 text-right">
                   <p
-                    className={`text-sm font-bold tabular-nums ${
+                    className={`shrink-0 text-sm font-semibold tabular-nums ${
                       p.days_until < 0
                         ? "text-error-600 dark:text-error-400"
                         : p.days_until === 0
@@ -217,27 +205,43 @@ export default function FlexyCallPanel({
                   >
                     {formatMnt(p.amount)}
                   </p>
+                </div>
+                <div className="mt-0.5 flex items-center justify-between gap-2">
+                  <p className="min-w-0 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">
+                    {p.user_phone?.trim() || "—"}
+                    {p.installment_no > 0 ? (
+                      <span className="text-gray-400"> · {p.installment_no}-р</span>
+                    ) : null}
+                    {called ? (
+                      <button
+                        type="button"
+                        onClick={() => setActive(p)}
+                        className="ml-1.5 font-sans text-[11px] font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                      >
+                        Залгасан {p.call_count}
+                        {lastLabel ? ` · ${lastLabel}` : ""}
+                      </button>
+                    ) : null}
+                  </p>
                   <p
-                    className={`mt-0.5 text-[11px] font-medium ${
+                    className={`shrink-0 text-[11px] ${
                       p.days_until < 0
-                        ? "text-error-500 dark:text-error-400"
+                        ? "text-error-500"
                         : p.days_until === 0
-                          ? "text-brand-500 dark:text-brand-300"
-                          : "text-gray-400 dark:text-gray-500"
+                          ? "text-brand-500"
+                          : "text-gray-400"
                     }`}
                   >
                     {flexyDaysLabel(p.days_until)}
-                    <span className="text-gray-300 dark:text-gray-600"> · </span>
-                    {formatDueDate(p.due_date)}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-0.5">
                 {phoneDigits ? (
                   <a
                     href={`tel:${phoneDigits}`}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 hover:border-brand-300 hover:text-brand-700 dark:border-white/10 dark:bg-white/5 dark:text-gray-200"
+                    className="inline-flex size-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-brand-600 dark:hover:bg-white/10"
                     title="Залгах"
                   >
                     <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -247,41 +251,36 @@ export default function FlexyCallPanel({
                         d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
                       />
                     </svg>
-                    Залгах
                   </a>
                 ) : null}
-
                 <button
                   type="button"
                   disabled={logging}
                   onClick={() => void logCall(p, "")}
                   title={called ? "Дахин залгасан гэж тэмдэглэх" : "Залгасан гэж тэмдэглэх"}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition disabled:opacity-50 ${
+                  className={`inline-flex size-7 items-center justify-center rounded-md transition disabled:opacity-50 ${
                     called
                       ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                      : "border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200"
+                      : "text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/30"
                   }`}
                 >
                   <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
-                  {logging
-                    ? "..."
-                    : called
-                      ? `Залгасан · ${p.call_count}`
-                      : "Залгасан"}
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setActive(p)}
                   title="Дуудлагын түүх / тэмдэглэл"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 hover:bg-gray-50 dark:border-white/10 dark:bg-white/5 dark:text-gray-300"
+                  className="inline-flex size-7 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-white/10"
                 >
-                  Түүх
-                  {called && lastLabel ? (
-                    <span className="text-gray-400 dark:text-gray-500">{lastLabel}</span>
-                  ) : null}
+                  <svg className="size-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"
+                    />
+                  </svg>
                 </button>
               </div>
             </div>
