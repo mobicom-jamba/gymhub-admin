@@ -87,6 +87,35 @@ export async function POST(request: Request) {
       );
     }
 
+    const resolvedRole = typeof role === "string" && role.trim() ? role.trim() : "user";
+    const orgId =
+      typeof organization_id === "string" && organization_id.trim()
+        ? organization_id.trim()
+        : null;
+    // Энгийн хэрэглэгч бүртгэхэд байгууллага заавал.
+    if (resolvedRole === "user" && !orgId) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "Байгууллагаа сонгоно уу.",
+        400,
+      );
+    }
+    if (orgId) {
+      const { data: orgRow, error: orgErr } = await admin
+        .from("organizations")
+        .select("id, name")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (orgErr || !orgRow) {
+        return errorResponse(
+          "VALIDATION_ERROR",
+          "Сонгосон байгууллага олдсонгүй.",
+          400,
+          orgErr?.message,
+        );
+      }
+    }
+
     const email = rawEmail || phoneToEmail(phone);
 
     const computedMembershipStatus = resolveMembershipStatus(
@@ -105,6 +134,15 @@ export async function POST(request: Request) {
         ...(sn ? { surname: sn } : {}),
         ...(gn ? { given_name: gn } : {}),
         phone: phone || "",
+        ...(orgId
+          ? {
+              organization_id: orgId,
+              organization_name:
+                typeof organization === "string" && organization.trim()
+                  ? organization.trim()
+                  : undefined,
+            }
+          : {}),
       },
     });
     if (authError) {
@@ -121,8 +159,8 @@ export async function POST(request: Request) {
           surname: sn || null,
           given_name: gn || null,
           phone: phone || null,
-          role: role || "user",
-          organization_id: organization_id || null,
+          role: resolvedRole,
+          organization_id: orgId,
           organization: organization || null,
           membership_tier: membership_tier || null,
           membership_status: computedMembershipStatus,

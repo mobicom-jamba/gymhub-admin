@@ -464,6 +464,10 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
         if (!digits || digits.length < 8) { setFormError("8 оронтой утасны дугаар оруулна уу."); return; }
         if (!password) { setFormError("Нууц үг оруулна уу."); return; }
         if (!ovog.trim() || !ner.trim()) { setFormError("Овог, нэр хоёуланг нь оруулна уу."); return; }
+        if (role === "user" && !safeOrganizationId) {
+          setFormError("Байгууллагаа сонгоно уу.");
+          return;
+        }
         const res = await fetch("/api/admin/users", {
           method: "POST",
           headers: authHeaders,
@@ -701,7 +705,12 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
               {/* Org searchable combobox */}
               <div className="mt-3" ref={orgDropRef}>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <Label>Байгууллага</Label>
+                  <Label>
+                    Байгууллага
+                    {isCreate && role === "user" ? (
+                      <span className="ml-0.5 text-error-500">*</span>
+                    ) : null}
+                  </Label>
                   <button
                     type="button"
                     onClick={() => setQuickCreateOrgOpen(true)}
@@ -718,10 +727,13 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     onFocus={() => { setOrgOpen(true); setOrgSearch(organization); }}
                     onBlur={() =>
                       setTimeout(() => {
-                        const typed = orgSearch.trim();
-                        if (typed && !organization) {
-                          setOrganization(typed);
-                          setOrganizationId("");
+                        // Жагсаалтаас сонгоогүй нэрээр бүртгэхгүй — organization_id заавал.
+                        if (!(isCreate && role === "user")) {
+                          const typed = orgSearch.trim();
+                          if (typed && !organization) {
+                            setOrganization(typed);
+                            setOrganizationId("");
+                          }
                         }
                         setOrgOpen(false);
                       }, 150)
@@ -729,6 +741,8 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     className={inp + " pr-8"}
                     placeholder="Байгууллагын нэрээр хайх..."
                     autoComplete="off"
+                    required={isCreate && role === "user"}
+                    aria-required={isCreate && role === "user"}
                   />
                   <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-300">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -758,6 +772,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     </ul>
                   )}
                 </div>
+                {isCreate && role === "user" && !safeOrganizationId ? (
+                  <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+                    Хэрэглэгч бүртгэхэд байгууллага заавал сонгоно.
+                  </p>
+                ) : null}
                 {organization && (
                   <div className="mt-2 flex items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-900/20 dark:text-brand-300">
