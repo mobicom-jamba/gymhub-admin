@@ -5,6 +5,7 @@ import { QPayError, checkQpayInvoice } from "@/lib/qpay-client";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 import { resumeMembershipAfterFlexyPayment } from "@/lib/flexy-membership-pause";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
+import { ensureFlexyPaidBooking } from "@/lib/ensure-flexy-paid-booking";
 
 export async function POST(request: Request) {
   try {
@@ -51,11 +52,22 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (plan) {
-        await supabase
+        const paidAt = new Date().toISOString();
+        const { data: payRow } = await supabase
           .from("installment_payments")
-          .update({ status: "paid", paid_at: new Date().toISOString() })
+          .update({ status: "paid", paid_at: paidAt })
           .eq("plan_id", plan_id)
-          .eq("installment_no", installment_no);
+          .eq("installment_no", installment_no)
+          .select("amount, qpay_invoice_id")
+          .maybeSingle();
+
+        await ensureFlexyPaidBooking(supabase, {
+          bookingId: plan.booking_id,
+          userId: plan.user_id,
+          amount: Number(payRow?.amount) || Number(result.paid_amount) || 0,
+          paidAt,
+          qpayInvoiceId: payRow?.qpay_invoice_id ?? invoice_id,
+        });
 
         const uid = user_id || plan.user_id;
 

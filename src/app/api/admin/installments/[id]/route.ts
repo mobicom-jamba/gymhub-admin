@@ -4,6 +4,7 @@ import { verifyBearerUser } from "@/lib/verify-gym-access";
 import { resumeMembershipAfterFlexyPayment } from "@/lib/flexy-membership-pause";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
+import { ensureFlexyPaidBooking } from "@/lib/ensure-flexy-paid-booking";
 
 /** id = installment_payments.id. Зөвхөн админ: төлөгдсөнд тэмдэглэх / цуцлах / устгах. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +27,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (body.action === "mark_paid") {
       const { data: installment, error: findErr } = await admin
         .from("installment_payments")
-        .select("id, plan_id, installment_no, status")
+        .select("id, plan_id, installment_no, status, amount, qpay_invoice_id")
         .eq("id", id)
         .maybeSingle();
 
@@ -43,10 +44,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         .eq("id", installment.plan_id)
         .maybeSingle();
 
+      const paidAt = new Date().toISOString();
       await admin
         .from("installment_payments")
-        .update({ status: "paid", paid_at: new Date().toISOString() })
+        .update({ status: "paid", paid_at: paidAt })
         .eq("id", id);
+
+      if (plan) {
+        await ensureFlexyPaidBooking(admin, {
+          bookingId: plan.booking_id,
+          userId: plan.user_id,
+          amount: Number(installment.amount) || 0,
+          paidAt,
+          qpayInvoiceId: installment.qpay_invoice_id,
+        });
+      }
 
       let membershipActivated = false;
       if (plan && installment.installment_no === 1) {
