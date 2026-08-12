@@ -1,44 +1,45 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
-import { getPaymentAppSettings, type PaymentAppSettingsRow } from "@/lib/payment-app-settings";
-import { hasPermission } from "@/lib/permissions";
+import {
+  getPaymentAppSettings,
+  normalizePackages,
+  syncFlatFromPackages,
+  type MembershipPackage,
+  type PaymentAppSettingsRow,
+} from "@/lib/payment-app-settings";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
+
+function parsePrice(o: Record<string, unknown>, key: string, out: Partial<PaymentAppSettingsRow>): boolean {
+  if (!(key in o)) return true;
+  const n = Number(o[key]);
+  if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return false;
+  (out as Record<string, number>)[key] = Math.floor(n);
+  return true;
+}
 
 function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   if (!body || typeof body !== "object") return null;
   const o = body as Record<string, unknown>;
   const out: Partial<PaymentAppSettingsRow> = {};
 
-  if ("early_membership_price_mnt" in o) {
-    const n = Number(o.early_membership_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.early_membership_price_mnt = Math.floor(n);
+  if (!parsePrice(o, "early_membership_price_mnt", out)) return null;
+  if (!parsePrice(o, "early_remainder_price_mnt", out)) return null;
+
+  if ("packages" in o) {
+    if (!Array.isArray(o.packages)) return null;
+    const packages = normalizePackages(o.packages);
+    if (packages.length === 0) return null;
+    // locked system ids must remain
+    const ids = new Set(packages.map((p) => p.id));
+    if (!ids.has("smart1") || !ids.has("standard3") || !ids.has("premium") || !ids.has("premium4")) {
+      return null;
+    }
+    // unique ids
+    if (ids.size !== packages.length) return null;
+    out.packages = packages;
+    Object.assign(out, syncFlatFromPackages(packages));
   }
-  if ("early_remainder_price_mnt" in o) {
-    const n = Number(o.early_remainder_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.early_remainder_price_mnt = Math.floor(n);
-  }
-  if ("premium_membership_price_mnt" in o) {
-    const n = Number(o.premium_membership_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.premium_membership_price_mnt = Math.floor(n);
-  }
-  if ("smart1_price_mnt" in o) {
-    const n = Number(o.smart1_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.smart1_price_mnt = Math.floor(n);
-  }
-  if ("standard3_price_mnt" in o) {
-    const n = Number(o.standard3_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.standard3_price_mnt = Math.floor(n);
-  }
-  if ("premium4_price_mnt" in o) {
-    const n = Number(o.premium4_price_mnt);
-    if (!Number.isFinite(n) || n < 0 || n > 999_999_999) return null;
-    out.premium4_price_mnt = Math.floor(n);
-  }
+
   if ("payment_qpay_enabled" in o) out.payment_qpay_enabled = Boolean(o.payment_qpay_enabled);
   if ("payment_sono_enabled" in o) out.payment_sono_enabled = Boolean(o.payment_sono_enabled);
   if ("payment_pocket_enabled" in o) out.payment_pocket_enabled = Boolean(o.payment_pocket_enabled);
@@ -53,8 +54,8 @@ export async function GET(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!hasPermission(auth.permissions, "analytics.view")) {
-      return NextResponse.json({ ok: false, error: "Төлбөрийн тохиргоо харах эрхгүй." }, { status: 403 });
+    if (!auth.isAdmin) {
+      return NextResponse.json({ ok: false, error: "Зөвхөн админ эрхтэй." }, { status: 403 });
     }
     const row = await getPaymentAppSettings();
     return NextResponse.json({ ok: true, settings: row });
@@ -70,8 +71,8 @@ export async function PATCH(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!hasPermission(auth.permissions, "users.manage")) {
-      return NextResponse.json({ ok: false, error: "Төлбөрийн тохиргоо засах эрхгүй." }, { status: 403 });
+    if (!auth.isAdmin) {
+      return NextResponse.json({ ok: false, error: "Зөвхөн админ эрхтэй." }, { status: 403 });
     }
 
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -98,34 +99,39 @@ export async function PATCH(request: Request) {
     const next: PaymentAppSettingsRow = {
       ...current,
       ...patch,
+      packages: (patch.packages as MembershipPackage[] | undefined) ?? current.packages,
       updated_at: new Date().toISOString(),
     };
 
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("payment_app_settings")
-      .upsert(
-        {
-          id: "default",
-          early_membership_price_mnt: next.early_membership_price_mnt,
-          early_first_month_price_mnt: next.early_first_month_price_mnt,
-          early_remainder_price_mnt: next.early_remainder_price_mnt,
-          premium_membership_price_mnt: next.premium_membership_price_mnt,
-          smart1_price_mnt: next.smart1_price_mnt,
-          standard3_price_mnt: next.standard3_price_mnt,
-          premium4_price_mnt: next.premium4_price_mnt,
-          payment_qpay_enabled: next.payment_qpay_enabled,
-          payment_sono_enabled: next.payment_sono_enabled,
-          payment_pocket_enabled: next.payment_pocket_enabled,
-          payment_carepay_enabled: next.payment_carepay_enabled,
-          payment_monpay_enabled: next.payment_monpay_enabled,
-          payment_gymfintech_enabled: next.payment_gymfintech_enabled,
-          updated_at: next.updated_at,
-        },
-        { onConflict: "id" }
-      )
-      .select("*")
-      .single();
+    const payload: Record<string, unknown> = {
+      id: "default",
+      early_membership_price_mnt: next.early_membership_price_mnt,
+      early_first_month_price_mnt: next.early_first_month_price_mnt,
+      early_remainder_price_mnt: next.early_remainder_price_mnt,
+      premium_membership_price_mnt: next.premium_membership_price_mnt,
+      smart1_price_mnt: next.smart1_price_mnt,
+      standard3_price_mnt: next.standard3_price_mnt,
+      premium4_price_mnt: next.premium4_price_mnt,
+      smart1_months: next.smart1_months,
+      standard3_months: next.standard3_months,
+      premium_months: next.premium_months,
+      premium4_months: next.premium4_months,
+      smart1_pool_months: next.smart1_pool_months,
+      premium_yoga_months: next.premium_yoga_months,
+      premium4_pool_months: next.premium4_pool_months,
+      premium4_yoga_months: next.premium4_yoga_months,
+      packages: next.packages,
+      payment_qpay_enabled: next.payment_qpay_enabled,
+      payment_sono_enabled: next.payment_sono_enabled,
+      payment_pocket_enabled: next.payment_pocket_enabled,
+      payment_carepay_enabled: next.payment_carepay_enabled,
+      payment_monpay_enabled: next.payment_monpay_enabled,
+      payment_gymfintech_enabled: next.payment_gymfintech_enabled,
+      updated_at: next.updated_at,
+    };
+
+    const { error } = await admin.from("payment_app_settings").upsert(payload, { onConflict: "id" });
 
     if (error) {
       if (error.message?.includes("does not exist") || error.code === "42P01") {
@@ -138,34 +144,24 @@ export async function PATCH(request: Request) {
           { status: 500 }
         );
       }
+      if (error.message?.includes("packages") || error.code === "42703") {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "packages багана байхгүй. Supabase дээр supabase/migrations/add_membership_packages_json.sql ажиллуулна уу.",
+          },
+          { status: 500 }
+        );
+      }
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, settings: normalizeFromDb(data) });
+    return NextResponse.json({ ok: true, settings: await getPaymentAppSettings() });
   } catch (e) {
     return NextResponse.json(
       { ok: false, error: e instanceof Error ? e.message : String(e) },
       { status: 500 }
     );
   }
-}
-
-function normalizeFromDb(data: Record<string, unknown>): PaymentAppSettingsRow {
-  return {
-    id: (data.id as string) || "default",
-    early_membership_price_mnt: Number(data.early_membership_price_mnt) || 480_000,
-    early_first_month_price_mnt: Number(data.early_first_month_price_mnt) || 150_000,
-    early_remainder_price_mnt: Number(data.early_remainder_price_mnt) || 330_000,
-    premium_membership_price_mnt: Number(data.premium_membership_price_mnt) || 780_000,
-    smart1_price_mnt: Number(data.smart1_price_mnt) || 780_000,
-    standard3_price_mnt: Number(data.standard3_price_mnt) || 480_000,
-    premium4_price_mnt: Number(data.premium4_price_mnt) || 980_000,
-    payment_qpay_enabled: data.payment_qpay_enabled !== false,
-    payment_sono_enabled: data.payment_sono_enabled !== false,
-    payment_pocket_enabled: data.payment_pocket_enabled !== false,
-    payment_carepay_enabled: data.payment_carepay_enabled !== false,
-    payment_monpay_enabled: data.payment_monpay_enabled !== false,
-    payment_gymfintech_enabled: data.payment_gymfintech_enabled !== false,
-    updated_at: (data.updated_at as string) || new Date().toISOString(),
-  };
 }

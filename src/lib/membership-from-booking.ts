@@ -4,6 +4,12 @@ import {
   isApproximatelyEarlyFirstSegmentOnly,
   type ProfileMembershipSnap,
 } from "@/lib/membership-duration";
+import {
+  getPaymentAppSettings,
+  membershipMonthsForTier,
+  storedTierForPackageId,
+  type PaymentAppSettingsRow,
+} from "@/lib/payment-app-settings";
 
 export type { ProfileMembershipSnap };
 export { earlyFirstSegmentDaySpan, isApproximatelyEarlyFirstSegmentOnly };
@@ -85,11 +91,21 @@ function addCalendarYears(from: Date, years: number): Date {
 /**
  * Төлбөр баталгаажсаны дараах profiles шинэчлэлт.
  * early_rest: дуусах = анхны эхний сар эхэлсэн огноос +1 жил.
+ * annual_from_payment: админ тохируулсан багцын сараар нэмнэ.
  */
 export function computeMembershipDatesAfterPayment(args: {
   bookingId: string;
   now: Date;
   profile: ProfileMembershipSnap;
+  /** Багцын үндсэн эрх — сар. Өгөөгүй бол хуучин default (Standard 6 / бусад 12). */
+  monthsByTier?: Pick<
+    PaymentAppSettingsRow,
+    | "packages"
+    | "smart1_months"
+    | "standard3_months"
+    | "premium_months"
+    | "premium4_months"
+  >;
 }): {
   membership_tier: string;
   membership_status: "active";
@@ -100,6 +116,13 @@ export function computeMembershipDatesAfterPayment(args: {
   if (!parsed) return null;
 
   const { now, profile } = args;
+  const monthsCfg = args.monthsByTier ?? {
+    packages: [],
+    smart1_months: 12,
+    standard3_months: 6,
+    premium_months: 12,
+    premium4_months: 12,
+  };
 
   if (parsed.kind === "early_first") {
     const isActive = String(profile.membership_status ?? "").toLowerCase() === "active";
@@ -140,8 +163,7 @@ export function computeMembershipDatesAfterPayment(args: {
   if (profile.membership_expires_at) {
     const currentExpiry = new Date(profile.membership_expires_at);
     if (currentExpiry > now && profile.membership_status === "active") {
-      // Client+server race: web/app аль хэдийн +6 сар тавьсан бол дахин stack хийхгүй.
-      // (шинэ төлбөрөөр 12 сар болж байсан)
+      // Client+server race: web/app аль хэдийн нэмсэн бол дахин stack хийхгүй.
       const startedMs = profile.membership_started_at
         ? new Date(profile.membership_started_at).getTime()
         : NaN;
@@ -155,14 +177,11 @@ export function computeMembershipDatesAfterPayment(args: {
     }
   }
 
-  // Standard / standard3 / legacy early full-year → 6 сар; Premium 1/2 + GymCore → 1 жил.
-  const expiresAt =
-    parsed.tier === "standard3" || parsed.tier === "standard" || parsed.tier === "early"
-      ? addCalendarMonths(baseDate, 6)
-      : addCalendarYears(baseDate, 1);
+  const months = membershipMonthsForTier(parsed.tier, monthsCfg);
+  const expiresAt = addCalendarMonths(baseDate, months);
 
   return {
-    membership_tier: canonicalStoredTier(parsed.tier),
+    membership_tier: storedTierForPackageId(parsed.tier, monthsCfg),
     membership_status: "active",
     membership_started_at: now.toISOString(),
     membership_expires_at: expiresAt.toISOString(),
@@ -248,7 +267,13 @@ export async function applyMembershipActivationForPaidBooking(
     membership_status: profile?.membership_status ?? null,
   };
 
-  const update = computeMembershipDatesAfterPayment({ bookingId, now, profile: snap });
+  const settings = await getPaymentAppSettings();
+  const update = computeMembershipDatesAfterPayment({
+    bookingId,
+    now,
+    profile: snap,
+    monthsByTier: settings,
+  });
   if (!update) {
     if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
     return false;

@@ -1,85 +1,33 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
+import {
+  DEFAULT_PACKAGES,
+  PAYMENT_APP_SETTINGS_DEFAULTS,
+  normalizePaymentAppSettingsRow,
+  type PaymentAppSettingsRow,
+} from "@/lib/membership-packages";
 
-export type PaymentAppSettingsRow = {
-  id: string;
-  /** Legacy: нэг дор төлөх Standard / Early (membership-early-<ts>) */
-  early_membership_price_mnt: number;
-  early_first_month_price_mnt: number;
-  early_remainder_price_mnt: number;
-  /** Premium 2 (хуучин Smart-2 / membership-premium-<ts>) */
-  premium_membership_price_mnt: number;
-  /** Premium 1 (хуучин Smart-1): Fitness 1 жил + Бассейн 3 сар */
-  smart1_price_mnt: number;
-  /** Standard: Fitness 6 сар */
-  standard3_price_mnt: number;
-  /** GymCore (хуучин Premium-4): Fitness + Бассейн + Иога */
-  premium4_price_mnt: number;
-  payment_qpay_enabled: boolean;
-  payment_sono_enabled: boolean;
-  payment_pocket_enabled: boolean;
-  payment_carepay_enabled: boolean;
-  payment_monpay_enabled: boolean;
-  payment_gymfintech_enabled: boolean;
-  updated_at: string;
-};
+export type {
+  MembershipPackage,
+  PaymentAppSettingsRow,
+  StoredMembershipTier,
+} from "@/lib/membership-packages";
 
-const DEFAULTS: Omit<PaymentAppSettingsRow, "updated_at"> = {
-  id: "default",
-  early_membership_price_mnt: 480_000,
-  early_first_month_price_mnt: 150_000,
-  early_remainder_price_mnt: 330_000,
-  premium_membership_price_mnt: 780_000,
-  smart1_price_mnt: 780_000,
-  standard3_price_mnt: 480_000,
-  premium4_price_mnt: 980_000,
-  payment_qpay_enabled: true,
-  payment_sono_enabled: true,
-  payment_pocket_enabled: true,
-  payment_carepay_enabled: true,
-  payment_monpay_enabled: true,
-  payment_gymfintech_enabled: true,
-};
-
-function normalizeRow(row: Record<string, unknown>): PaymentAppSettingsRow {
-  const early = Number(row.early_membership_price_mnt);
-  const earlyFirst = Number(row.early_first_month_price_mnt);
-  const earlyRest = Number(row.early_remainder_price_mnt);
-  const premium = Number(row.premium_membership_price_mnt);
-  const smart1 = Number(row.smart1_price_mnt);
-  const standard3 = Number(row.standard3_price_mnt);
-  const premium4 = Number(row.premium4_price_mnt);
-  return {
-    id: (row.id as string) || "default",
-    early_membership_price_mnt:
-      Number.isFinite(early) && early >= 0 ? Math.floor(early) : DEFAULTS.early_membership_price_mnt,
-    early_first_month_price_mnt:
-      Number.isFinite(earlyFirst) && earlyFirst >= 0
-        ? Math.floor(earlyFirst)
-        : DEFAULTS.early_first_month_price_mnt,
-    early_remainder_price_mnt:
-      Number.isFinite(earlyRest) && earlyRest >= 0
-        ? Math.floor(earlyRest)
-        : DEFAULTS.early_remainder_price_mnt,
-    premium_membership_price_mnt:
-      Number.isFinite(premium) && premium >= 0
-        ? Math.floor(premium)
-        : DEFAULTS.premium_membership_price_mnt,
-    smart1_price_mnt:
-      Number.isFinite(smart1) && smart1 >= 0 ? Math.floor(smart1) : DEFAULTS.smart1_price_mnt,
-    standard3_price_mnt:
-      Number.isFinite(standard3) && standard3 >= 0 ? Math.floor(standard3) : DEFAULTS.standard3_price_mnt,
-    premium4_price_mnt:
-      Number.isFinite(premium4) && premium4 >= 0 ? Math.floor(premium4) : DEFAULTS.premium4_price_mnt,
-    payment_qpay_enabled: row.payment_qpay_enabled !== false,
-    payment_sono_enabled: row.payment_sono_enabled !== false,
-    payment_pocket_enabled: row.payment_pocket_enabled !== false,
-    payment_carepay_enabled: row.payment_carepay_enabled !== false,
-    payment_monpay_enabled: row.payment_monpay_enabled !== false,
-    payment_gymfintech_enabled: row.payment_gymfintech_enabled !== false,
-    updated_at: (row.updated_at as string) || new Date().toISOString(),
-  };
-}
+export {
+  DEFAULT_PACKAGES,
+  SYSTEM_PACKAGE_IDS,
+  PAYMENT_APP_SETTINGS_DEFAULTS,
+  findPackage,
+  formatMonthsLabel,
+  isValidStoredTier,
+  membershipMonthsForTier,
+  newBlankPackage,
+  normalizePackage,
+  normalizePackages,
+  normalizePaymentAppSettingsRow,
+  storedTierForPackageId,
+  syncFlatFromPackages,
+} from "@/lib/membership-packages";
 
 export async function getPaymentAppSettings(): Promise<PaymentAppSettingsRow> {
   try {
@@ -92,15 +40,27 @@ export async function getPaymentAppSettings(): Promise<PaymentAppSettingsRow> {
 
     if (error) {
       console.warn("[payment_app_settings]", error.message);
-      return { ...DEFAULTS, updated_at: new Date().toISOString() };
+      return {
+        ...PAYMENT_APP_SETTINGS_DEFAULTS,
+        packages: [...DEFAULT_PACKAGES],
+        updated_at: new Date().toISOString(),
+      };
     }
     if (!data) {
-      return { ...DEFAULTS, updated_at: new Date().toISOString() };
+      return {
+        ...PAYMENT_APP_SETTINGS_DEFAULTS,
+        packages: [...DEFAULT_PACKAGES],
+        updated_at: new Date().toISOString(),
+      };
     }
-    return normalizeRow(data as Record<string, unknown>);
+    return normalizePaymentAppSettingsRow(data as Record<string, unknown>);
   } catch (e) {
     console.warn("[payment_app_settings]", e);
-    return { ...DEFAULTS, updated_at: new Date().toISOString() };
+    return {
+      ...PAYMENT_APP_SETTINGS_DEFAULTS,
+      packages: [...DEFAULT_PACKAGES],
+      updated_at: new Date().toISOString(),
+    };
   }
 }
 

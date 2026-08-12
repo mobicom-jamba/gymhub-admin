@@ -14,6 +14,7 @@ import {
   PageIcon,
   PieChartIcon,
   PlugInIcon,
+  SettingsIcon,
   TableIcon,
   TaskIcon,
   UserCircleIcon,
@@ -81,6 +82,11 @@ const navItems: NavItem[] = [
     path: "/notifications",
   },
   {
+    icon: <SettingsIcon />,
+    name: "Тохиргоо",
+    path: "/settings",
+  },
+  {
     icon: <UserCircleIcon />,
     name: "Профайл",
     subItems: [
@@ -114,6 +120,7 @@ const AppSidebar: React.FC = () => {
           if (item.path === "/organizations") return hasPermission(permissions, "organizations.view");
           if (item.path === "/gyms") return hasPermission(permissions, "gyms.view");
           if (item.path === "/settlements") return role === "admin";
+          if (item.path === "/settings") return role === "admin";
           if (item.path === "/coupons") return hasPermission(permissions, "coupons.manage");
           if (item.path === "/notifications") return hasPermission(permissions, "users.manage");
           return true;

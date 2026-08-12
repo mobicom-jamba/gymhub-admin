@@ -224,12 +224,32 @@ export async function GET() {
     membership_prices: {
       early_mnt: settings.early_membership_price_mnt,
       early_legacy_full_mnt: settings.early_membership_price_mnt,
-      // Хуучин эхний сар төлсөн хэрэглэгчдийн үлдэгдэл (шинэ 150k зарахгүй)
       early_remainder_mnt: settings.early_remainder_price_mnt,
       premium_mnt: settings.premium_membership_price_mnt,
       smart1_mnt: settings.smart1_price_mnt,
       standard3_mnt: settings.standard3_price_mnt,
       premium4_mnt: settings.premium4_price_mnt,
+      smart1_months: settings.smart1_months,
+      standard3_months: settings.standard3_months,
+      premium_months: settings.premium_months,
+      premium4_months: settings.premium4_months,
+      smart1_pool_months: settings.smart1_pool_months,
+      premium_yoga_months: settings.premium_yoga_months,
+      premium4_pool_months: settings.premium4_pool_months,
+      premium4_yoga_months: settings.premium4_yoga_months,
     },
+    membership_packages: settings.packages
+      .filter((p) => p.enabled)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        price_mnt: p.price_mnt,
+        months: p.months,
+        pool_months: p.pool_months,
+        yoga_months: p.yoga_months,
+        stored_tier: p.stored_tier,
+        featured: p.featured,
+        sort_order: p.sort_order,
+      })),
   });
 }

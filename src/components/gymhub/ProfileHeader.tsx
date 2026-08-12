@@ -20,8 +20,10 @@ const roleLabels: Record<string, string> = {
 };
 
 export default function ProfileHeader() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const isStrictAdmin = role === "admin";
+
 
   useEffect(() => {
     if (!user) return;
@@ -77,12 +79,14 @@ export default function ProfileHeader() {
           >
             Миний профайл
           </Link>
-          <Link
-            href="/settings"
-            className="rounded-full border border-yellow-400/60 bg-yellow-400/20 px-5 py-2 text-sm font-medium text-yellow-200 backdrop-blur-sm transition hover:bg-yellow-400/30"
-          >
-            Нууц үг солих
-          </Link>
+          {isStrictAdmin && (
+            <Link
+              href="/settings"
+              className="rounded-full border border-yellow-400/60 bg-yellow-400/20 px-5 py-2 text-sm font-medium text-yellow-200 backdrop-blur-sm transition hover:bg-yellow-400/30"
+            >
+              Тохиргоо
+            </Link>
+          )}
         </div>
       </div>
     </div>
