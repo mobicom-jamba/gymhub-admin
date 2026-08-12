@@ -7,10 +7,11 @@ import EmptyState from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/context/AuthContext";
-import { TrashBinIcon } from "@/icons";
+import { PlusIcon, TrashBinIcon } from "@/icons";
 import SearchInput from "@/components/common/SearchInput";
 import { canonicalPlanKey, planTierDisplayLabel } from "@/lib/membership-plan-label";
 import { parseLocalDateOnly } from "@/lib/installment-schedule";
+import CreateFlexyPlanModal from "./CreateFlexyPlanModal";
 
 type Payment = {
   id: string;
@@ -541,6 +542,7 @@ export default function InstallmentsSection() {
   const [planStatus, setPlanStatus] = useState<PlanStatusFilter>("active");
   const [payStatus, setPayStatus] = useState<PayStatusFilter>("all");
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
+  const [createOpen, setCreateOpen] = useState(false);
   const hasLoadedOnce = useRef(false);
 
   const getAuthHeaders = useCallback(async (extra: Record<string, string> = {}): Promise<Record<string, string>> => {
@@ -700,6 +702,16 @@ export default function InstallmentsSection() {
             className="sm:max-w-xs"
           />
           <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+            {isAdmin && (
+              <Button
+                size="sm"
+                onClick={() => setCreateOpen(true)}
+                disabled={initialLoading}
+                startIcon={<PlusIcon className="size-4" />}
+              >
+                Шинэ Flexy
+              </Button>
+            )}
             {refreshing && (
               <span className="inline-flex items-center gap-1.5 text-brand-500 dark:text-brand-400">
                 <span className="size-3.5 animate-spin rounded-full border-2 border-brand-500/30 border-t-brand-500" />
@@ -759,7 +771,11 @@ export default function InstallmentsSection() {
       ) : plans.length === 0 ? (
         <EmptyState
           title="Flexy багц олдсонгүй"
-          description="Одоогоор Flexy хуваан төлөлтийн багц алга."
+          description={
+            isAdmin
+              ? "Одоогоор Flexy хуваан төлөлтийн багц алга. Дээрх «Шинэ Flexy» товчоор үүсгэнэ үү."
+              : "Одоогоор Flexy хуваан төлөлтийн багц алга."
+          }
           icon="search"
         />
       ) : filteredPlans.length === 0 ? (
@@ -786,6 +802,17 @@ export default function InstallmentsSection() {
             />
           ))}
         </div>
+      )}
+
+      {isAdmin && (
+        <CreateFlexyPlanModal
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onSuccess={() => {
+            toastRef.current.show("Flexy багц үүслээ.");
+            void load({ soft: true });
+          }}
+        />
       )}
     </div>
   );

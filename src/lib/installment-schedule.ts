@@ -105,13 +105,16 @@ export function nextFixedDayDates(
   return dates;
 }
 
-/** 480k багцууд (Standard-3, EARLY) хамгийн ихдээ 6 хуваарьтай, бусад нь 8 хүртэл. */
+/** 480k / богино хугацааны багцууд хамгийн ихдээ 6, бусад нь 8 хүртэл. */
 const MAX_INSTALLMENTS_BY_TIER: Record<string, number> = {
   standard3: 6,
   early_year: 6,
 };
 
-export function maxInstallmentsForTier(tier: string): number {
+export function maxInstallmentsForTier(tier: string, months?: number): number {
+  if (typeof months === "number" && Number.isFinite(months) && months > 0 && months <= 6) {
+    return 6;
+  }
   return MAX_INSTALLMENTS_BY_TIER[tier] ?? 8;
 }
 
