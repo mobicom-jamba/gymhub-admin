@@ -85,6 +85,7 @@ export function canonicalPlanKey(tier: string | null | undefined): string {
   if (t === "early" || t === "early_year" || t === "early_month") return "early";
   // Шинэ Standard багц
   if (t === "standard3" || t === "standard" || t === "basic") return "standard";
+  if (t === "smart") return "smart";
   return t;
 }
 
@@ -102,6 +103,8 @@ export function planTierDisplayLabel(tier: string | null | undefined): string {
       return "Early";
     case "standard":
       return "Standard";
+    case "smart":
+      return "Smart";
     default: {
       const raw = (tier ?? "").trim();
       if (!raw) return "—";

@@ -88,9 +88,11 @@ export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Pro
         const res = await fetch("/api/admin/payment-settings", { headers });
         const data = await res.json();
         if (data.ok && Array.isArray(data.settings?.packages)) {
-          const enabled = (data.settings.packages as MembershipPackage[]).filter((p) => p.enabled);
-          setPackages(enabled.length ? enabled : DEFAULT_PACKAGES);
-          const first = enabled[0] ?? DEFAULT_PACKAGES[0];
+          const enabled = (data.settings.packages as MembershipPackage[]).filter(
+            (p) => p.enabled && p.id !== "smart" && !p.qpay_only,
+          );
+          setPackages(enabled.length ? enabled : DEFAULT_PACKAGES.filter((p) => p.id !== "smart"));
+          const first = enabled[0] ?? DEFAULT_PACKAGES.find((p) => p.id === "standard3") ?? DEFAULT_PACKAGES[0];
           if (first) {
             setPlanTier(first.id);
             setAmount(first.price_mnt);
@@ -279,7 +281,9 @@ export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Pro
             value={planTier}
             onChange={(e) => onSelectPackage(e.target.value)}
           >
-            {packages.map((p) => (
+            {packages
+              .filter((p) => p.id !== "smart" && !p.qpay_only)
+              .map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} — {formatMnt(p.price_mnt)} ({p.months} сар)
               </option>

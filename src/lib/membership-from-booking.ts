@@ -39,6 +39,7 @@ export function canonicalStoredTier(bookingTier: string): string {
     case "standard3":
     case "standard":
     case "basic":
+    case "smart":
       return "standard";
     // Хуучин Early — DB-д early үлдээнэ
     case "early":

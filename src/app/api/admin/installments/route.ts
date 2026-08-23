@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { requirePermission, verifyBearerUser } from "@/lib/verify-gym-access";
 import { buildInstallmentSchedule, maxInstallmentsForPlan } from "@/lib/installment-schedule";
+import { isQpayOnlyPackageId } from "@/lib/smart-promo";
 import { getPaymentAppSettings } from "@/lib/payment-app-settings";
 
 export async function GET(request: Request) {
@@ -99,6 +100,12 @@ export async function POST(request: Request) {
     }
     if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
       return NextResponse.json({ ok: false, error: "Дүн буруу байна." }, { status: 400 });
+    }
+    if (isQpayOnlyPackageId(planTier)) {
+      return NextResponse.json(
+        { ok: false, error: "Smart багцыг Flexy-ээр үүсгэхгүй. Зөвхөн QPay." },
+        { status: 400 },
+      );
     }
 
     const settings = await getPaymentAppSettings();

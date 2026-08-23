@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPaymentAppSettings } from "@/lib/payment-app-settings";
+import { isPackageAvailableUntil } from "@/lib/smart-promo";
 
 const QPAY_BASE_URL = process.env.QPAY_BASE_URL ?? "https://merchant.qpay.mn/v2";
 const QPAY_CLIENT_ID = process.env.QPAY_CLIENT_ID ?? process.env.QPAY_USERNAME ?? "";
@@ -240,7 +241,7 @@ export async function GET() {
     },
     require_profile_avatar: settings.require_profile_avatar !== false,
     membership_packages: settings.packages
-      .filter((p) => p.enabled)
+      .filter((p) => p.enabled && isPackageAvailableUntil(p.available_until))
       .map((p) => ({
         id: p.id,
         name: p.name,
@@ -251,6 +252,8 @@ export async function GET() {
         stored_tier: p.stored_tier,
         featured: p.featured,
         sort_order: p.sort_order,
+        qpay_only: p.qpay_only === true,
+        available_until: p.available_until ?? null,
       })),
   });
 }

@@ -34,6 +34,9 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
     if (!ids.has("smart1") || !ids.has("standard3") || !ids.has("premium") || !ids.has("premium4")) {
       return null;
     }
+    if (!ids.has("smart")) {
+      return null;
+    }
     // unique ids
     if (ids.size !== packages.length) return null;
     out.packages = packages;

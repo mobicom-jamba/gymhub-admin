@@ -4,6 +4,7 @@ import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { normalizeQpayBankUrls } from "@/lib/qpay-bank-urls";
 import { QPayError, buildSenderInvoiceNo, createQpayInvoice } from "@/lib/qpay-client";
 import { buildInstallmentSchedule, maxInstallmentsForPlan } from "@/lib/installment-schedule";
+import { isQpayOnlyPackageId } from "@/lib/smart-promo";
 
 const QPAY_CALLBACK_URL = process.env.QPAY_CALLBACK_URL ?? "https://gymhub.mn/payment-callback";
 
@@ -25,6 +26,12 @@ export async function POST(request: Request) {
     if (!booking_id || !plan_tier || !total_amount || total_amount <= 0 || !user_id) {
       return NextResponse.json(
         { error: "booking_id, plan_tier, total_amount, user_id шаардлагатай" },
+        { status: 400 },
+      );
+    }
+    if (isQpayOnlyPackageId(plan_tier) || /(?:^|-)smart(?:-|$)/i.test(booking_id)) {
+      return NextResponse.json(
+        { error: "Smart багцыг зөвхөн QPay-ээр төлнө. Flexy хуваарь боломжгүй." },
         { status: 400 },
       );
     }

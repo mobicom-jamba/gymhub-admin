@@ -17,6 +17,10 @@ export type MembershipPackage = {
   sort_order: number;
   /** Системийн багц — id солих/устгахгүй */
   locked: boolean;
+  /** true бол зөвхөн QPay — Flexy/зээл хаана. */
+  qpay_only?: boolean;
+  /** YYYY-MM-DD — энэ өдөр дуустал (UB). Хоосон бол хугацаагүй. */
+  available_until?: string | null;
 };
 
 export type PaymentAppSettingsRow = {
@@ -47,9 +51,24 @@ export type PaymentAppSettingsRow = {
   updated_at: string;
 };
 
-export const SYSTEM_PACKAGE_IDS = ["smart1", "standard3", "premium", "premium4"] as const;
+export const SYSTEM_PACKAGE_IDS = ["smart1", "standard3", "premium", "premium4", "smart"] as const;
 
 export const DEFAULT_PACKAGES: MembershipPackage[] = [
+  {
+    id: "smart",
+    name: "Smart",
+    price_mnt: 300_000,
+    months: 6,
+    pool_months: 0,
+    yoga_months: 0,
+    stored_tier: "standard",
+    enabled: true,
+    featured: true,
+    sort_order: 0,
+    locked: true,
+    qpay_only: true,
+    available_until: "2026-09-01",
+  },
   {
     id: "smart1",
     name: "Premium 1",
@@ -166,6 +185,9 @@ export function normalizePackage(raw: unknown, index: number): MembershipPackage
     : locked
       ? (DEFAULT_PACKAGES.find((p) => p.id === id)?.stored_tier ?? "standard")
       : "standard";
+  const def = DEFAULT_PACKAGES.find((p) => p.id === id);
+  const untilRaw = String(o.available_until ?? def?.available_until ?? "").trim();
+  const available_until = /^\d{4}-\d{2}-\d{2}/.test(untilRaw) ? untilRaw.slice(0, 10) : (def?.available_until ?? null);
   return {
     id,
     name,
@@ -178,6 +200,8 @@ export function normalizePackage(raw: unknown, index: number): MembershipPackage
     featured: Boolean(o.featured),
     sort_order: clampInt(Number(o.sort_order), index + 1, 0, 9999),
     locked,
+    qpay_only: o.qpay_only === true || def?.qpay_only === true,
+    available_until,
   };
 }
 
@@ -197,6 +221,8 @@ export function normalizePackages(raw: unknown, fallbackFlat?: Partial<PaymentAp
         const cur = byId.get(sys.id)!;
         cur.locked = true;
         if (!cur.stored_tier) cur.stored_tier = sys.stored_tier;
+        if (sys.qpay_only) cur.qpay_only = true;
+        if (sys.available_until && !cur.available_until) cur.available_until = sys.available_until;
       }
     }
     return list.sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "mn"));
