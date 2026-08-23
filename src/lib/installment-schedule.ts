@@ -118,6 +118,80 @@ export function maxInstallmentsForTier(tier: string, months?: number): number {
   return MAX_INSTALLMENTS_BY_TIER[tier] ?? 8;
 }
 
+/**
+ * Шинэ Flexy багцын албан ёсны хуваалт («GYMHUB ТӨЛБӨРХ ХУВААЛТ»).
+ * Зөвхөн шинээр үүсэх хуваарьт хэрэглэнэ — хуучин installment_payments хөндөгдөхгүй.
+ *
+ * 780,000 × 3: хүснэгтэд 380+260+240=880 гэж байсан тул сүүлийн дүнг 140,000 болгосон
+ * (нийт 780,000-д тааруулсан).
+ */
+const PRESET_SPLIT_AMOUNTS: Record<number, Record<number, readonly number[]>> = {
+  480_000: {
+    2: [260_000, 220_000],
+    3: [180_000, 160_000, 140_000],
+    4: [160_000, 140_000, 120_000, 60_000],
+  },
+  780_000: {
+    2: [480_000, 300_000],
+    3: [380_000, 260_000, 140_000],
+    4: [360_000, 220_000, 120_000, 80_000],
+    5: [300_000, 200_000, 130_000, 80_000, 70_000],
+    6: [260_000, 200_000, 120_000, 100_000, 60_000, 40_000],
+  },
+  980_000: {
+    2: [580_000, 400_000],
+    3: [400_000, 300_000, 280_000],
+    4: [380_000, 300_000, 200_000, 100_000],
+    5: [300_000, 280_000, 200_000, 120_000, 80_000],
+    6: [280_000, 260_000, 240_000, 120_000, 60_000, 20_000],
+  },
+};
+
+export function presetSplitAmounts(
+  totalAmount: number,
+  installmentCount: number,
+): number[] | null {
+  const total = Math.floor(totalAmount);
+  const row = PRESET_SPLIT_AMOUNTS[total]?.[installmentCount];
+  if (!row || row.length !== installmentCount) return null;
+  return row.slice();
+}
+
+/** Хүснэгттэй дүн бол түүний max, эсвэл fallback (хуучин тэгш хуваалт). */
+export function maxInstallmentsForAmount(totalAmount: number, fallbackMax: number): number {
+  const row = PRESET_SPLIT_AMOUNTS[Math.floor(totalAmount)];
+  if (!row) return fallbackMax;
+  return Math.max(...Object.keys(row).map(Number));
+}
+
+export function maxInstallmentsForPlan(args: {
+  tier: string;
+  months?: number;
+  totalAmount?: number;
+}): number {
+  const fallback = maxInstallmentsForTier(args.tier, args.months);
+  if (typeof args.totalAmount === "number" && Number.isFinite(args.totalAmount)) {
+    return maxInstallmentsForAmount(args.totalAmount, fallback);
+  }
+  return fallback;
+}
+
+function equalSplitAmounts(totalAmount: number, installmentCount: number): number[] {
+  const total = Math.floor(totalAmount);
+  const rawBase = Math.floor(total / installmentCount);
+  const base = Math.floor(rawBase / 1000) * 1000;
+  const firstAmount = total - base * (installmentCount - 1);
+  return Array.from({ length: installmentCount }, (_, i) => (i === 0 ? firstAmount : base));
+}
+
+/** Шинэ багц: хүснэгтийн дүн байвал түүгээр, үгүй бол тэгш хуваана. */
+export function splitInstallmentAmounts(totalAmount: number, installmentCount: number): number[] {
+  return (
+    presetSplitAmounts(totalAmount, installmentCount) ??
+    equalSplitAmounts(totalAmount, installmentCount)
+  );
+}
+
 export type InstallmentScheduleItem = {
   installment_no: number;
   amount: number;
@@ -125,8 +199,9 @@ export type InstallmentScheduleItem = {
 };
 
 /**
- * Бусад бүх хуваарийг мянгаас нааш тэгшилж (жишээ нь 111,000₮), үлдэгдлийг эхний хуваарьт
- * нэмнэ. Эхний хуваарь өнөөдөр (UB), дараагийнх 15 хоног тутам.
+ * Эхний хуваарь өнөөдөр (UB), дараагийнх 15 хоног тутам.
+ * 480/780/980 мянгатын шинэ багцад албан ёсны хуваалтын хүснэгт хэрэглэнэ.
+ * Бусад дүнд: бусад хуваарийг мянгаас нааш тэгшилж, үлдэгдлийг эхнийхэд нэмнэ.
  */
 export function buildInstallmentSchedule(args: {
   totalAmount: number;
@@ -138,19 +213,13 @@ export function buildInstallmentSchedule(args: {
   const { totalAmount, installmentCount } = args;
   const intervalDays = args.intervalDays ?? 15;
   const start = startOfLocalDay(args.startDate ?? todayInUlaanbaatar());
-  const rawBase = Math.floor(totalAmount / installmentCount);
-  const base = Math.floor(rawBase / 1000) * 1000;
-  const firstAmount = totalAmount - base * (installmentCount - 1);
+  const amounts = splitInstallmentAmounts(totalAmount, installmentCount);
   const restDates = everyNDaysDates(start, installmentCount - 1, intervalDays);
   const dueDates = [start, ...restDates];
 
-  return Array.from({ length: installmentCount }, (_, i) => {
-    const no = i + 1;
-    const amount = no === 1 ? firstAmount : base;
-    return {
-      installment_no: no,
-      amount,
-      due_date: toLocalDateString(dueDates[i]),
-    };
-  });
+  return amounts.map((amount, i) => ({
+    installment_no: i + 1,
+    amount,
+    due_date: toLocalDateString(dueDates[i]),
+  }));
 }

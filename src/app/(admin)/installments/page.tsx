@@ -7,7 +7,7 @@ export default function InstallmentsPage() {
         Flexy
       </h1>
       <p className="text-sm text-gray-500 dark:text-gray-400">
-        2–8 хуваарьт, хүүгүй төлөлтийн багцууд
+        Шинэ багцыг 480/780/980 мянгатын албан ёсны хуваалтаар үүсгэнэ. Хуучин хуваарь өөрчлөгдөхгүй.
       </p>
       <InstallmentsSection />
     </div>

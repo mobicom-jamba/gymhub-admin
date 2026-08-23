@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { normalizeQpayBankUrls } from "@/lib/qpay-bank-urls";
 import { QPayError, buildSenderInvoiceNo, createQpayInvoice } from "@/lib/qpay-client";
-import { buildInstallmentSchedule, maxInstallmentsForTier } from "@/lib/installment-schedule";
+import { buildInstallmentSchedule, maxInstallmentsForPlan } from "@/lib/installment-schedule";
 
 const QPAY_CALLBACK_URL = process.env.QPAY_CALLBACK_URL ?? "https://gymhub.mn/payment-callback";
 
@@ -28,7 +28,10 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const maxInstallments = maxInstallmentsForTier(plan_tier);
+    const maxInstallments = maxInstallmentsForPlan({
+      tier: plan_tier,
+      totalAmount: total_amount,
+    });
     if (!Number.isInteger(installment_count) || installment_count < 2 || installment_count > maxInstallments) {
       return NextResponse.json(
         { error: `installment_count 2-${maxInstallments} хооронд байх ёстой` },

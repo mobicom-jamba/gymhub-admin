@@ -10,7 +10,8 @@ import {
 } from "@/lib/membership-packages";
 import {
   buildInstallmentSchedule,
-  maxInstallmentsForTier,
+  maxInstallmentsForPlan,
+  presetSplitAmounts,
 } from "@/lib/installment-schedule";
 
 type ProfileHit = {
@@ -51,7 +52,11 @@ export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Pro
   const [error, setError] = useState("");
 
   const selectedPkg = packages.find((p) => p.id === planTier) ?? null;
-  const maxCount = maxInstallmentsForTier(planTier, selectedPkg?.months);
+  const maxCount = maxInstallmentsForPlan({
+    tier: planTier,
+    months: selectedPkg?.months,
+    totalAmount: amount,
+  });
 
   const schedule = useMemo(() => {
     if (amount <= 0 || installmentCount < 2) return [];
@@ -317,6 +322,7 @@ export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Pro
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-white/[0.04]">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">
               Хуваарийн урьдчилсан харц
+              {presetSplitAmounts(amount, installmentCount) ? " · албан ёсны хуваалт" : ""}
             </p>
             <ul className="space-y-1.5">
               {schedule.map((item) => (

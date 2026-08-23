@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { requirePermission, verifyBearerUser } from "@/lib/verify-gym-access";
-import { buildInstallmentSchedule, maxInstallmentsForTier } from "@/lib/installment-schedule";
+import { buildInstallmentSchedule, maxInstallmentsForPlan } from "@/lib/installment-schedule";
 import { getPaymentAppSettings } from "@/lib/payment-app-settings";
 
 export async function GET(request: Request) {
@@ -104,7 +104,11 @@ export async function POST(request: Request) {
     const settings = await getPaymentAppSettings();
     const pkg = settings.packages.find((p) => p.id === planTier);
     const months = pkg?.months;
-    const maxInstallments = maxInstallmentsForTier(planTier, months);
+    const maxInstallments = maxInstallmentsForPlan({
+      tier: planTier,
+      months,
+      totalAmount: totalAmount,
+    });
 
     if (
       !Number.isInteger(installmentCount) ||
