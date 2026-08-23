@@ -31,6 +31,7 @@ type Settings = {
   payment_carepay_enabled: boolean;
   payment_monpay_enabled: boolean;
   payment_gymfintech_enabled: boolean;
+  require_profile_avatar: boolean;
   updated_at: string;
 };
 
@@ -314,6 +315,7 @@ export default function PaymentAppSettingsSection() {
   const [carepay, setCarepay] = useState(true);
   const [monpay, setMonpay] = useState(true);
   const [gymfintech, setGymfintech] = useState(true);
+  const [requireAvatar, setRequireAvatar] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -342,6 +344,7 @@ export default function PaymentAppSettingsSection() {
     setCarepay(s.payment_carepay_enabled);
     setMonpay(s.payment_monpay_enabled);
     setGymfintech(s.payment_gymfintech_enabled);
+    setRequireAvatar(s.require_profile_avatar !== false);
     setUpdatedAt(s.updated_at);
   };
 
@@ -463,6 +466,7 @@ export default function PaymentAppSettingsSection() {
           payment_carepay_enabled: carepay,
           payment_monpay_enabled: monpay,
           payment_gymfintech_enabled: gymfintech,
+          require_profile_avatar: requireAvatar,
         }),
       });
       const data = await res.json();
@@ -753,6 +757,32 @@ export default function PaymentAppSettingsSection() {
           </div>
         </div>
       </Modal>
+
+      <ComponentCard
+        title="Профайл зураг"
+        subtitle="Гишүүн ядаж нэг удаа профайл зураг оруулах ёстой эсэх"
+      >
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5">
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            Профайл зураг заавал (1 удаа)
+          </span>
+          <input
+            type="checkbox"
+            checked={requireAvatar}
+            onChange={(e) => setRequireAvatar(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+          />
+        </label>
+        <p className="px-2 pb-2 text-xs text-gray-500 dark:text-gray-400">
+          Идэвхтэй үед зураггүй гишүүн апп руу ороход зураг оруулах хүртэл үргэлжлүүлэхгүй.
+          Оруулсны дараа дахин шаардахгүй.
+        </p>
+        <div className="pt-1">
+          <Button onClick={save} disabled={loading || saving} className="w-full sm:w-auto">
+            {saving ? "Хадгалж байна…" : "Хадгалах"}
+          </Button>
+        </div>
+      </ComponentCard>
 
       <ComponentCard title="Төлбөрийн суваг" subtitle="Апп дээр харагдах">
         <div className="space-y-2">

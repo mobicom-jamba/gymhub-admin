@@ -11,6 +11,7 @@ import {
 import { t } from "@/lib/i18n";
 import { ChevronDownIcon, ChevronUpIcon, PencilIcon, TrashBinIcon } from "@/icons";
 import type { Profile } from "./UsersSection";
+import { signupRegionLabel } from "@/lib/signup-region";
 import type { UsersSortColumn } from "./users-sort";
 import TableSkeleton from "@/components/ui/TableSkeleton";
 import EmptyState from "@/components/ui/EmptyState";
@@ -331,6 +332,11 @@ export default function UsersTable({
                     <span className="block truncate" title={orgNameOfProfile(p) ?? ""}>
                       {orgNameOfProfile(p) ?? "—"}
                     </span>
+                    {p.region ? (
+                      <span className="mt-0.5 block text-[11px] text-gray-400">
+                        {signupRegionLabel(p.region)}
+                      </span>
+                    ) : null}
                   </TableCell>}
 
                   {(visibleColumns?.tier ?? true) && <TableCell className={`px-4 ${py}`}>

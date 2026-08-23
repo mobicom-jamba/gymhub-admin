@@ -40,6 +40,7 @@ export type Profile = {
   role: string | null;
   organization_id: string | null;
   organization: string | null;
+  region?: string | null;
   organizations?: { name: string | null } | Array<{ name: string | null }> | null;
   avatar_path?: string | null;
   /** Precomputed public URL for avatar_path (best-effort) */
@@ -366,7 +367,8 @@ export default function UsersSection() {
   const paidDatePickerRef = useRef<flatpickr.Instance | null>(null);
   const frozenProfilesRef = useRef<Profile[] | null>(null);
 
-  const PROFILE_SELECT_BASE = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), avatar_path, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT_BASE = "id, full_name, phone, role, organization_id, organization, region, organizations!profiles_organization_id_fkey(name), avatar_path, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
+  const PROFILE_SELECT_NO_REGION = "id, full_name, phone, role, organization_id, organization, organizations!profiles_organization_id_fkey(name), avatar_path, membership_tier, membership_status, membership_started_at, membership_expires_at, created_at";
   const PROFILE_SELECT = `${PROFILE_SELECT_BASE}, agreement_accepted_at, agreement_version`;
   const ORG_SELECT = "id,name";
 
@@ -424,7 +426,14 @@ export default function UsersSection() {
       first.error &&
       isMissingProfilesColumnError(first.error, "agreement_accepted_at")
     ) {
-      return load(PROFILE_SELECT_BASE, true);
+      const second = await load(PROFILE_SELECT_BASE, true);
+      if (second.error && isMissingProfilesColumnError(second.error, "region")) {
+        return load(PROFILE_SELECT_NO_REGION, true);
+      }
+      return second;
+    }
+    if (first.error && isMissingProfilesColumnError(first.error, "region")) {
+      return load(`${PROFILE_SELECT_NO_REGION}, agreement_accepted_at, agreement_version`, false);
     }
     return first;
   };

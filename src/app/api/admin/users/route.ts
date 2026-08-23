@@ -3,6 +3,7 @@ import { errorResponse, successResponse } from "@/lib/api-response";
 import { recordGiftMembershipGrant } from "@/lib/gift-membership";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
+import { parseSignupRegion } from "@/lib/signup-region";
 
 const PHONE_DOMAIN = "gymhub.mn";
 
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
       membership_tier,
       membership_started_at,
       membership_expires_at,
+      region,
     } = body;
     if (role !== undefined && !hasPermission(auth.permissions, "users.role.assign")) {
       return errorResponse("FORBIDDEN", "Хэрэглэгчийн эрх өөрчлөх боломжгүй.", 403);
@@ -87,6 +89,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const resolvedRegion = parseSignupRegion(region);
     const resolvedRole = typeof role === "string" && role.trim() ? role.trim() : "user";
     const orgId =
       typeof organization_id === "string" && organization_id.trim()
@@ -97,6 +100,13 @@ export async function POST(request: Request) {
       return errorResponse(
         "VALIDATION_ERROR",
         "Байгууллагаа сонгоно уу.",
+        400,
+      );
+    }
+    if (resolvedRole === "user" && !resolvedRegion) {
+      return errorResponse(
+        "VALIDATION_ERROR",
+        "Улаанбаатар эсвэл орон нутгаа сонгоно уу.",
         400,
       );
     }
@@ -143,6 +153,7 @@ export async function POST(request: Request) {
                   : undefined,
             }
           : {}),
+        ...(resolvedRegion ? { region: resolvedRegion } : {}),
       },
     });
     if (authError) {
@@ -162,6 +173,7 @@ export async function POST(request: Request) {
           role: resolvedRole,
           organization_id: orgId,
           organization: organization || null,
+          region: resolvedRegion,
           membership_tier: membership_tier || null,
           membership_status: computedMembershipStatus,
           membership_started_at: membership_started_at || null,

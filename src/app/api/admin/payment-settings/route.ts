@@ -46,6 +46,7 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   if ("payment_carepay_enabled" in o) out.payment_carepay_enabled = Boolean(o.payment_carepay_enabled);
   if ("payment_monpay_enabled" in o) out.payment_monpay_enabled = Boolean(o.payment_monpay_enabled);
   if ("payment_gymfintech_enabled" in o) out.payment_gymfintech_enabled = Boolean(o.payment_gymfintech_enabled);
+  if ("require_profile_avatar" in o) out.require_profile_avatar = Boolean(o.require_profile_avatar);
 
   return Object.keys(out).length ? out : null;
 }
@@ -128,10 +129,16 @@ export async function PATCH(request: Request) {
       payment_carepay_enabled: next.payment_carepay_enabled,
       payment_monpay_enabled: next.payment_monpay_enabled,
       payment_gymfintech_enabled: next.payment_gymfintech_enabled,
+      require_profile_avatar: next.require_profile_avatar,
       updated_at: next.updated_at,
     };
 
-    const { error } = await admin.from("payment_app_settings").upsert(payload, { onConflict: "id" });
+    let { error } = await admin.from("payment_app_settings").upsert(payload, { onConflict: "id" });
+    if (error && (error.code === "42703" || error.message?.includes("require_profile_avatar"))) {
+      const { require_profile_avatar: _omit, ...withoutAvatarFlag } = payload;
+      const retry = await admin.from("payment_app_settings").upsert(withoutAvatarFlag, { onConflict: "id" });
+      error = retry.error;
+    }
 
     if (error) {
       if (error.message?.includes("does not exist") || error.code === "42P01") {

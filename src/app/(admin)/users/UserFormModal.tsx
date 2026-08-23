@@ -15,6 +15,11 @@ import {
 } from "@/lib/membership-plan-label";
 import { useAuth } from "@/context/AuthContext";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
+import {
+  SIGNUP_REGION_OPTIONS,
+  parseSignupRegion,
+  type SignupRegion,
+} from "@/lib/signup-region";
 
 type Props = {
   isOpen: boolean;
@@ -330,6 +335,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [expiresAt, setExpiresAt]       = useState("");
   const [formError, setFormError]       = useState("");
   const [loading, setLoading]           = useState(false);
+  const [region, setRegion]             = useState<SignupRegion | "">("");
   const shouldHideMembershipFields = role === "admin" || role === "moderator" || role === "sales";
 
   useEffect(() => {
@@ -359,11 +365,13 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
       setStartedAt(profile.membership_started_at?.slice(0, 10) ?? "");
       setExpiresAt(profile.membership_expires_at?.slice(0, 10) ?? "");
       setPassword("");
+      setRegion(parseSignupRegion(profile.region) ?? "");
     } else {
       setPassword("123456");
       setOvog(""); setNer(""); setPhone(""); setRole("user");
       setOrganizationId("");
       setOrganization(""); setTier("standard"); setMembershipStatus("inactive"); setStartedAt(""); setExpiresAt("");
+      setRegion("");
     }
     setOrgSearch(""); setOrgOpen(false); setFormError("");
   }, [isOpen, profile]);
@@ -468,6 +476,10 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
           setFormError("Байгууллагаа сонгоно уу.");
           return;
         }
+        if (role === "user" && !parseSignupRegion(region)) {
+          setFormError("Улаанбаатар эсвэл орон нутгаа сонгоно уу.");
+          return;
+        }
         const res = await fetch("/api/admin/users", {
           method: "POST",
           headers: authHeaders,
@@ -478,6 +490,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             role,
             organization_id: safeOrganizationId,
             organization: organization || null,
+            region: parseSignupRegion(region),
             ...membershipPayload,
           }),
         });
@@ -494,6 +507,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             role,
             organization_id: safeOrganizationId,
             organization: organization || null,
+            region: parseSignupRegion(region),
             ...membershipPayload,
             ...(password ? { password } : {}),
           }),
@@ -796,6 +810,34 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                   </div>
                 )}
               </div>
+
+              {role === "user" && (
+                <div className="mt-3">
+                  <Label>
+                    Бүс {isCreate ? <span className="ml-0.5 text-error-500">*</span> : null}
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SIGNUP_REGION_OPTIONS.map((opt) => {
+                      const selected = region === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setRegion(opt.id)}
+                          className={`rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                            selected
+                              ? "border-brand-500 bg-brand-50 font-semibold text-brand-700 dark:border-brand-400 dark:bg-brand-500/15 dark:text-brand-200"
+                              : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                          }`}
+                        >
+                          <span className="block">{opt.label}</span>
+                          <span className="mt-0.5 block text-[11px] font-normal text-gray-400">{opt.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Membership */}

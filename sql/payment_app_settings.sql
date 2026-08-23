@@ -25,6 +25,7 @@ create table if not exists public.payment_app_settings (
   payment_carepay_enabled boolean not null default true,
   payment_monpay_enabled boolean not null default true,
   payment_gymfintech_enabled boolean not null default true,
+  require_profile_avatar boolean not null default true,
   updated_at timestamptz not null default now()
 );
 

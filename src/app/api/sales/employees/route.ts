@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireSalesOrAdmin } from "@/lib/verify-sales-access";
+import { parseSignupRegion } from "@/lib/signup-region";
 
 const PHONE_DOMAIN = "gymhub.mn";
 
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     const full_name =
       [ovog, ner].filter(Boolean).join(" ").trim() || String(body?.full_name ?? "").trim();
     const organization_id = String(body?.organization_id ?? "").trim();
+    const region = parseSignupRegion(body?.region);
 
     if (phone.length < 8) {
       return NextResponse.json({ error: "Утасны дугаар зөв оруулна уу" }, { status: 400 });
@@ -35,6 +37,9 @@ export async function POST(request: Request) {
     }
     if (!organization_id) {
       return NextResponse.json({ error: "Байгууллага (organization_id) сонгоно уу" }, { status: 400 });
+    }
+    if (!region) {
+      return NextResponse.json({ error: "Улаанбаатар эсвэл орон нутгаа сонгоно уу" }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -61,7 +66,7 @@ export async function POST(request: Request) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name, phone },
+      user_metadata: { full_name, phone, region },
     });
 
     if (authError) {
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
         role: "user",
         organization_id: org.id,
         organization: org.name ?? null,
+        region,
         membership_status: "inactive",
         membership_tier: "early",
       }).eq("id", authData.user.id);

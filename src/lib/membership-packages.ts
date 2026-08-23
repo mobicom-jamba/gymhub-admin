@@ -43,6 +43,7 @@ export type PaymentAppSettingsRow = {
   payment_carepay_enabled: boolean;
   payment_monpay_enabled: boolean;
   payment_gymfintech_enabled: boolean;
+  require_profile_avatar: boolean;
   updated_at: string;
 };
 
@@ -127,6 +128,7 @@ export const PAYMENT_APP_SETTINGS_DEFAULTS: Omit<PaymentAppSettingsRow, "updated
   payment_carepay_enabled: true,
   payment_monpay_enabled: true,
   payment_gymfintech_enabled: true,
+  require_profile_avatar: true,
 };
 
 function clampInt(n: number, fallback: number, min: number, max: number): number {
@@ -326,6 +328,7 @@ export function normalizePaymentAppSettingsRow(row: Record<string, unknown>): Pa
     payment_carepay_enabled: row.payment_carepay_enabled !== false,
     payment_monpay_enabled: row.payment_monpay_enabled !== false,
     payment_gymfintech_enabled: row.payment_gymfintech_enabled !== false,
+    require_profile_avatar: row.require_profile_avatar !== false,
     updated_at: (row.updated_at as string) || new Date().toISOString(),
   };
 }

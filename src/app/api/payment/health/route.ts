@@ -238,6 +238,7 @@ export async function GET() {
       premium4_pool_months: settings.premium4_pool_months,
       premium4_yoga_months: settings.premium4_yoga_months,
     },
+    require_profile_avatar: settings.require_profile_avatar !== false,
     membership_packages: settings.packages
       .filter((p) => p.enabled)
       .map((p) => ({

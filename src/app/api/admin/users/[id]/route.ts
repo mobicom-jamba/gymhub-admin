@@ -5,6 +5,7 @@ import { recordGiftMembershipGrant } from "@/lib/gift-membership";
 import { attributeMembershipAudit } from "@/lib/membership-audit";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
+import { parseSignupRegion } from "@/lib/signup-region";
 
 function resolveMembershipStatus(
   membershipStartedAt: string | null | undefined,
@@ -58,6 +59,7 @@ export async function PATCH(
       membership_tier,
       membership_started_at,
       membership_expires_at,
+      region,
     } = body;
     if (role !== undefined && !hasPermission(auth.permissions, "users.role.assign")) {
       return errorResponse("FORBIDDEN", "Хэрэглэгчийн эрх өөрчлөх боломжгүй.", 403);
@@ -97,7 +99,8 @@ export async function PATCH(
       organization !== undefined ||
       membership_tier !== undefined ||
       membership_started_at !== undefined ||
-      membership_expires_at !== undefined;
+      membership_expires_at !== undefined ||
+      region !== undefined;
 
     if (hasProfileFields) {
       const patch: Record<string, unknown> = {
@@ -109,6 +112,7 @@ export async function PATCH(
       if (role !== undefined) patch.role = role ?? "user";
       if (organization_id !== undefined) patch.organization_id = organization_id ?? null;
       if (organization !== undefined) patch.organization = organization ?? null;
+      if (region !== undefined) patch.region = parseSignupRegion(region);
       if (membership_tier !== undefined) patch.membership_tier = membership_tier ?? null;
       if (membership_started_at !== undefined) patch.membership_started_at = membership_started_at ?? null;
       if (membership_expires_at !== undefined) patch.membership_expires_at = membership_expires_at ?? null;
