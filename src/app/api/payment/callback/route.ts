@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase";
+import { QPayError, checkQpayInvoice } from "@/lib/qpay-client";
 import { safeFindBookingIdByInvoice, safeUpdateBookingById } from "../_lib/bookings";
+import {
+  findFlexyPaymentForQpayCallback,
+  settleFlexyInstallmentPaid,
+} from "@/lib/settle-flexy-payment";
 
 async function handleCallback(request: Request) {
   try {
@@ -16,23 +21,69 @@ async function handleCallback(request: Request) {
 
     const url = new URL(request.url);
     const bookingId = url.searchParams.get("booking_id");
+    const channelHint = (url.searchParams.get("channel") ?? "").toLowerCase();
+    const planIdHint = url.searchParams.get("plan_id");
+    const installmentHint = Number(url.searchParams.get("installment_no") ?? "");
     const invoiceId =
       (payload.invoice_id as string | undefined) ??
       (payload.object_id as string | undefined) ??
+      url.searchParams.get("invoice_id") ??
+      url.searchParams.get("object_id") ??
       null;
     const paymentStatus = (payload.payment_status as string | undefined)?.toUpperCase();
 
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    if (!serviceKey || !supabaseUrl) {
-      return NextResponse.json({ error: "Not configured" }, { status: 500 });
-    }
+    const supabase = createAdminClient();
 
-    const supabase = createClient(
-      supabaseUrl,
-      serviceKey,
-      { auth: { persistSession: false } }
-    );
+    const flexy = await findFlexyPaymentForQpayCallback(supabase, {
+      invoiceId,
+      bookingId,
+      planId: planIdHint,
+      installmentNo: Number.isFinite(installmentHint) && installmentHint > 0 ? installmentHint : null,
+    });
+
+    if (flexy || channelHint === "gymfintech" || channelHint === "flexy") {
+      const invoiceToCheck = invoiceId || flexy?.qpayInvoiceId || null;
+      let paid = paymentStatus === "PAID";
+      let paidAmount: number | null = null;
+
+      if (invoiceToCheck) {
+        try {
+          const result = await checkQpayInvoice(invoiceToCheck);
+          paid = result.paid || paid;
+          paidAmount =
+            typeof result.paid_amount === "number" && result.paid_amount > 0
+              ? result.paid_amount
+              : null;
+        } catch (e) {
+          console.warn("[qpay-callback] flexy check:", e instanceof Error ? e.message : e);
+        }
+      }
+
+      if (paid && flexy) {
+        const settled = await settleFlexyInstallmentPaid(supabase, {
+          paymentId: flexy.paymentId,
+          invoiceId: invoiceToCheck,
+          userId: flexy.userId,
+          paidAmount,
+        });
+        return NextResponse.json({
+          received: true,
+          channel: "gymfintech",
+          booking_id: flexy.bookingId,
+          invoice_id: invoiceToCheck,
+          membership_activated: settled.membershipActivated,
+        });
+      }
+
+      return NextResponse.json({
+        received: true,
+        channel: "gymfintech",
+        booking_id: flexy?.bookingId ?? bookingId,
+        invoice_id: invoiceToCheck,
+        payment_status: paymentStatus ?? null,
+        paid: false,
+      });
+    }
 
     let resolvedBookingId = bookingId;
     if (!resolvedBookingId && invoiceId) {
@@ -57,6 +108,9 @@ async function handleCallback(request: Request) {
       payment_status: paymentStatus ?? null,
     });
   } catch (err: unknown) {
+    if (err instanceof QPayError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }

@@ -25,7 +25,7 @@ export async function ensureFlexyPaidBooking(
 
   const { data: existing, error: selErr } = await supabase
     .from("bookings")
-    .select("id, payment_status")
+    .select("id, payment_status, payment_channel")
     .eq("id", bookingId)
     .maybeSingle();
 
@@ -35,18 +35,21 @@ export async function ensureFlexyPaidBooking(
   }
 
   if (existing) {
-    if (String(existing.payment_status ?? "").toLowerCase() === "paid") return;
-    const { error } = await supabase
-      .from("bookings")
-      .update({
-        payment_status: "paid",
-        payment_channel: "gymfintech",
-        paid_at: paidAt,
-        amount: amount || null,
-        membership_applied_at: paidAt,
-        ...(invoice ? { qpay_invoice_id: invoice } : {}),
-      })
-      .eq("id", bookingId);
+    const alreadyPaid = String(existing.payment_status ?? "").toLowerCase() === "paid";
+    const channel = String(existing.payment_channel ?? "").trim().toLowerCase();
+    // QPay callback often marks the same booking as qpay first — always force gymfintech.
+    if (alreadyPaid && (channel === "gymfintech" || channel === "flexy")) return;
+    const patch: Record<string, unknown> = {
+      payment_status: "paid",
+      payment_channel: "gymfintech",
+    };
+    if (!alreadyPaid) {
+      patch.paid_at = paidAt;
+      patch.membership_applied_at = paidAt;
+      if (amount) patch.amount = amount;
+    }
+    if (invoice) patch.qpay_invoice_id = invoice;
+    const { error } = await supabase.from("bookings").update(patch).eq("id", bookingId);
     if (error) console.warn("[ensureFlexyPaidBooking] update:", error.message);
     return;
   }

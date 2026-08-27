@@ -380,7 +380,7 @@ export default function UsersTable({
                         if (!raw && !flexy) {
                           return <span className="text-xs text-gray-300 dark:text-gray-600">—</span>;
                         }
-                        const ch = getPaymentChannelVisual(raw ?? "gymfintech");
+                        const ch = getPaymentChannelVisual(flexy ? "gymfintech" : raw ?? "gymfintech");
                         const showFlexyProgress = ch.key === "gymfintech" && !!flexy;
                         const label = showFlexyProgress
                           ? `${ch.label} ${flexy.label}`

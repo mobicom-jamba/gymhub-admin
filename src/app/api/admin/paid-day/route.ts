@@ -110,11 +110,10 @@ export async function GET(request: Request) {
               ? plan.installment_count
               : null;
 
-          // Already have booking/activation for this user today — attach Flexy
-          // installment number instead of dropping the Flexy row.
+          // Booking мөр QPay гэж тэмдэглэгдсэн байсан ч энэ өдөр Flexy төлөгдсөн.
           const existing = rows.find((r) => r.user_id === userId);
           if (existing) {
-            if (!existing.payment_channel) existing.payment_channel = "gymfintech";
+            existing.payment_channel = "gymfintech";
             if (existing.installment_no == null) {
               existing.installment_no = installmentNo;
               existing.installment_count = installmentCount;

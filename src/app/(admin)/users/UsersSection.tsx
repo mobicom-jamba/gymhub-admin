@@ -744,6 +744,10 @@ export default function UsersSection() {
     const map: Record<string, string> = {};
     for (const booking of paidBookings) {
       if (!booking.user_id || map[booking.user_id]) continue;
+      if (typeof booking.installment_no === "number" && booking.installment_no > 0) {
+        map[booking.user_id] = "gymfintech";
+        continue;
+      }
       const ch = resolveRowChannel(booking);
       if (ch) map[booking.user_id] = ch;
     }
@@ -1220,14 +1224,14 @@ export default function UsersSection() {
       if (error) return;
 
       const map: Record<string, string> = {};
+      for (const [uid] of planByUser) {
+        map[uid] = "gymfintech";
+      }
       for (const row of rows ?? []) {
         const uid = row.user_id;
         if (!uid || map[uid]) continue;
         const ch = resolveRowChannel(row);
         if (ch) map[uid] = ch;
-      }
-      for (const [uid] of planByUser) {
-        if (!map[uid]) map[uid] = "gymfintech";
       }
 
       // Gift: no paid booking yet — fall back to admin grant audit

@@ -3,8 +3,7 @@ import { createAdminClient } from "@/lib/supabase";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { normalizeQpayBankUrls } from "@/lib/qpay-bank-urls";
 import { QPayError, buildSenderInvoiceNo, createQpayInvoice } from "@/lib/qpay-client";
-
-const QPAY_CALLBACK_URL = process.env.QPAY_CALLBACK_URL ?? "https://gymhub.mn/payment-callback";
+import { buildFlexyQpayCallbackUrl } from "@/lib/settle-flexy-payment";
 
 export async function POST(request: Request) {
   try {
@@ -61,15 +60,17 @@ export async function POST(request: Request) {
     }
 
     const senderInvoiceNo = buildSenderInvoiceNo(`${plan.booking_id}-inst${installment_no}`);
-    const callbackUrl = new URL(QPAY_CALLBACK_URL);
-    callbackUrl.searchParams.set("booking_id", plan.booking_id);
 
     const invoice = await createQpayInvoice({
       senderInvoiceNo,
       receiverCode: user_id,
       description: `GymHub гишүүнчлэл — ${installment_no} дэх хуваарь`,
       amount: installment.amount,
-      callbackUrl: callbackUrl.toString(),
+      callbackUrl: buildFlexyQpayCallbackUrl({
+        bookingId: plan.booking_id,
+        planId: plan.id,
+        installmentNo: installment_no,
+      }),
     });
 
     const urls = normalizeQpayBankUrls(invoice);

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
-import { resumeMembershipAfterFlexyPayment } from "@/lib/flexy-membership-pause";
-import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
-import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
-import { ensureFlexyPaidBooking } from "@/lib/ensure-flexy-paid-booking";
+import { settleFlexyInstallmentPaid } from "@/lib/settle-flexy-payment";
 
 /** id = installment_payments.id. Зөвхөн админ: төлөгдсөнд тэмдэглэх / цуцлах / устгах. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -25,80 +22,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const admin = createAdminClient();
 
     if (body.action === "mark_paid") {
-      const { data: installment, error: findErr } = await admin
-        .from("installment_payments")
-        .select("id, plan_id, installment_no, status, amount, qpay_invoice_id")
-        .eq("id", id)
-        .maybeSingle();
-
-      if (findErr || !installment) {
-        return NextResponse.json({ ok: false, error: "Хуваарь олдсонгүй." }, { status: 404 });
-      }
-      if (installment.status === "paid") {
-        return NextResponse.json({ ok: true, already: true });
-      }
-
-      const { data: plan } = await admin
-        .from("installment_plans")
-        .select("id, booking_id, user_id")
-        .eq("id", installment.plan_id)
-        .maybeSingle();
-
-      const paidAt = new Date().toISOString();
-      await admin
-        .from("installment_payments")
-        .update({ status: "paid", paid_at: paidAt })
-        .eq("id", id);
-
-      if (plan) {
-        await ensureFlexyPaidBooking(admin, {
-          bookingId: plan.booking_id,
-          userId: plan.user_id,
-          amount: Number(installment.amount) || 0,
-          paidAt,
-          qpayInvoiceId: installment.qpay_invoice_id,
+      try {
+        const settled = await settleFlexyInstallmentPaid(admin, {
+          paymentId: id,
+          actorId: auth.userId,
         });
+        return NextResponse.json({
+          ok: true,
+          already: settled.alreadyPaid,
+          membership_activated: settled.membershipActivated,
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Хуваарь олдсонгүй.";
+        const notFound = /олдсонгүй/i.test(msg);
+        return NextResponse.json({ ok: false, error: msg }, { status: notFound ? 404 : 500 });
       }
-
-      let membershipActivated = false;
-      if (plan && installment.installment_no === 1) {
-        try {
-          membershipActivated = await applyMembershipActivationForPaidBooking(admin, {
-            userId: plan.user_id,
-            bookingId: plan.booking_id,
-            actorId: auth.userId,
-          });
-          await recordSalesCommissionForPaidMembership(admin, {
-            buyerUserId: plan.user_id,
-            bookingId: plan.booking_id,
-          });
-        } catch (e) {
-          console.error("Admin mark-paid membership activation failed:", e);
-        }
-      } else if (plan && installment.installment_no > 1) {
-        try {
-          membershipActivated = await resumeMembershipAfterFlexyPayment(
-            admin,
-            plan.user_id,
-            { actorId: auth.userId, bookingId: plan.booking_id },
-          );
-        } catch (e) {
-          console.error("Admin mark-paid membership resume failed:", e);
-        }
-      }
-
-      if (plan) {
-        const { count: unpaidCount } = await admin
-          .from("installment_payments")
-          .select("id", { count: "exact", head: true })
-          .eq("plan_id", plan.id)
-          .neq("status", "paid");
-        if ((unpaidCount ?? 0) === 0) {
-          await admin.from("installment_plans").update({ status: "completed" }).eq("id", plan.id);
-        }
-      }
-
-      return NextResponse.json({ ok: true, membership_activated: membershipActivated });
     }
 
     if (body.action === "cancel_plan") {
