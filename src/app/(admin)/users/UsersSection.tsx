@@ -223,6 +223,21 @@ function buildLocalDayRange(value: string): { startIso: string; endIso: string }
   };
 }
 
+/** Month bounds for YYYY-MM in Asia/Ulaanbaatar (UTC+8, no DST). */
+function buildLocalMonthRange(value: string): { startIso: string; endIso: string } | null {
+  if (!/^\d{4}-\d{2}$/.test(value)) return null;
+  const [y, m] = value.split("-").map(Number);
+  if (!y || !m || m < 1 || m > 12) return null;
+  const start = new Date(`${value}-01T00:00:00+08:00`);
+  if (Number.isNaN(start.getTime())) return null;
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+  const end = new Date(
+    `${String(nextY).padStart(4, "0")}-${String(nextM).padStart(2, "0")}-01T00:00:00+08:00`,
+  );
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
 /** Fallback only: paid-day evidence from active profiles (never include Төлөөгүй). */
 function activeProfilesStartedInRange(
   profileRows: Profile[],
@@ -263,8 +278,8 @@ function isMissingTableError(message: string | null | undefined, table: string):
   return text.includes(`could not find the table 'public.${table.toLowerCase()}'`) || text.includes(`relation "public.${table.toLowerCase()}" does not exist`);
 }
 
-const DATE_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate", "lastVisit"]);
-const DESC_FIRST_SORT_COLS = new Set<UsersSortColumn>(["startDate", "expireDate", "lastVisit", "totalVisits", "streak"]);
+const DATE_SORT_COLS = new Set<UsersSortColumn>(["registeredDate", "startDate", "expireDate", "lastVisit"]);
+const DESC_FIRST_SORT_COLS = new Set<UsersSortColumn>(["registeredDate", "startDate", "expireDate", "lastVisit", "totalVisits", "streak"]);
 
 function compareNullableDates(a: string | null, b: string | null, ascending: boolean): number {
   const parse = (s: string | null) => {
@@ -317,6 +332,7 @@ export default function UsersSection() {
   const [search, setSearch] = useState("");
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [regMonth, setRegMonth] = useState(""); // "YYYY-MM" — бүртгүүлсэн сараар шүүх
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [formProfile, setFormProfile] = useState<Profile | null | "new">(null);
@@ -330,7 +346,7 @@ export default function UsersSection() {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [density, setDensity] = useState<Density>("comfortable");
   const [visibleColumns, setVisibleColumns] = useLocalStorageState<Record<string, boolean>>("users.table.visibleColumns", {
-    member: true, phone: true, organization: true, tier: true, paymentChannel: true, agreement: true, startDate: true, expireDate: true,
+    member: true, phone: true, organization: true, tier: true, paymentChannel: true, agreement: true, registeredDate: true, startDate: true, expireDate: true,
     totalVisits: false, lastVisit: false, streak: false,
   });
   const [statsMap, setStatsMap] = useState<UserVisitStatsMap | null>(null);
@@ -979,6 +995,9 @@ export default function UsersSection() {
       : null;
 
   const filteredProfiles = useMemo(() => {
+    const monthRange = regMonth ? buildLocalMonthRange(regMonth) : null;
+    const monthStartMs = monthRange ? new Date(monthRange.startIso).getTime() : 0;
+    const monthEndMs = monthRange ? new Date(monthRange.endIso).getTime() : 0;
     return profiles.filter((p) => {
       if ((p.role ?? "user") !== tab) return false;
       if (tab === "user" && paidOnDate && !paidUserIds.has(p.id)) return false;
@@ -998,6 +1017,10 @@ export default function UsersSection() {
           orgName?.toLowerCase().includes(q);
         if (!matches) return false;
       }
+      if (monthRange) {
+        const t = p.created_at ? new Date(p.created_at).getTime() : NaN;
+        if (Number.isNaN(t) || t < monthStartMs || t >= monthEndMs) return false;
+      }
       return true;
     });
   }, [
@@ -1006,6 +1029,7 @@ export default function UsersSection() {
     tab,
     orgFilter,
     statusFilter,
+    regMonth,
     paidOnDate,
     paidUserIds,
     earlyFilteredUserIds,
@@ -1035,6 +1059,9 @@ export default function UsersSection() {
           cmp = tr !== 0 ? tr : (a.membership_tier ?? "").localeCompare(b.membership_tier ?? "", "en", { sensitivity: "base" });
           break;
         }
+        case "registeredDate":
+          cmp = compareNullableDates(a.created_at ?? null, b.created_at ?? null, asc);
+          break;
         case "startDate":
           cmp = compareNullableDates(a.membership_started_at, b.membership_started_at, asc);
           break;
@@ -1458,6 +1485,7 @@ export default function UsersSection() {
         }
       : null,
     orgFilter ? { key: "org", label: `Байгууллага: ${orgFilter}`, clear: () => setOrgFilter("") } : null,
+    regMonth ? { key: "regMonth", label: `Бүртгүүлсэн: ${regMonth}`, clear: () => setRegMonth("") } : null,
     entitlementFilter
       ? {
           key: "entitlement",
@@ -1606,6 +1634,7 @@ export default function UsersSection() {
                     { key: "tier", label: "Тариф · төрөл" },
                     { key: "paymentChannel", label: "Төлбөрийн хэрэгсэл" },
                     { key: "agreement", label: "Гэрээ" },
+                    { key: "registeredDate", label: "Бүртгүүлсэн" },
                     { key: "startDate", label: "Эхлэх огноо" },
                     { key: "expireDate", label: "Дуусах огноо" },
                     { key: "totalVisits", label: "Нийт ирц" },
@@ -1693,6 +1722,22 @@ export default function UsersSection() {
                   <option value="inactive">Идэвхгүй</option>
                   <option value="expired">⛔ Дууссан</option>
                 </select>
+              </label>
+
+              <label className="group flex min-w-0 flex-col gap-1">
+                <span className="px-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                  Бүртгүүлсэн сар
+                </span>
+                <input
+                  type="month"
+                  value={regMonth}
+                  onChange={(e) => { setRegMonth(e.target.value); resetPage(); }}
+                  className={`h-9 w-full rounded-xl border-0 bg-white px-2.5 text-sm shadow-sm ring-1 transition focus:outline-none focus:ring-2 focus:ring-brand-400/50 dark:bg-gray-800 dark:text-white/90 ${
+                    regMonth
+                      ? "font-medium text-brand-700 ring-brand-300 dark:text-brand-300 dark:ring-brand-700"
+                      : "text-gray-700 ring-gray-200/90 dark:ring-gray-700"
+                  }`}
+                />
               </label>
 
               {tab === "user" && (

@@ -89,6 +89,18 @@ function addCalendarYears(from: Date, years: number): Date {
   return d;
 }
 
+/** Багц бүрийн 7 хоногийн зочлох эрхийн лимит. NULL = лимитгүй (хуучин дүрэм: өдөрт 1 удаа). */
+export function weeklyVisitLimitForTier(storedTier: string): number | null {
+  switch (storedTier) {
+    case "standard":
+      return 3;
+    case "premium1":
+      return 4;
+    default:
+      return null;
+  }
+}
+
 /**
  * Төлбөр баталгаажсаны дараах profiles шинэчлэлт.
  * early_rest: дуусах = анхны эхний сар эхэлсэн огноос +1 жил.
@@ -112,6 +124,7 @@ export function computeMembershipDatesAfterPayment(args: {
   membership_status: "active";
   membership_started_at: string;
   membership_expires_at: string;
+  weekly_visit_limit: number | null;
 } | null {
   const parsed = parseMembershipBookingId(args.bookingId);
   if (!parsed) return null;
@@ -145,6 +158,7 @@ export function computeMembershipDatesAfterPayment(args: {
       membership_status: "active",
       membership_started_at: startedAt,
       membership_expires_at: addCalendarMonths(baseDate, 1).toISOString(),
+      weekly_visit_limit: null,
     };
   }
 
@@ -157,6 +171,7 @@ export function computeMembershipDatesAfterPayment(args: {
       membership_status: "active",
       membership_started_at: anchor.toISOString(),
       membership_expires_at: addCalendarYears(anchor, 1).toISOString(),
+      weekly_visit_limit: null,
     };
   }
 
@@ -181,11 +196,13 @@ export function computeMembershipDatesAfterPayment(args: {
   const months = membershipMonthsForTier(parsed.tier, monthsCfg);
   const expiresAt = addCalendarMonths(baseDate, months);
 
+  const storedTier = storedTierForPackageId(parsed.tier, monthsCfg);
   return {
-    membership_tier: storedTierForPackageId(parsed.tier, monthsCfg),
+    membership_tier: storedTier,
     membership_status: "active",
     membership_started_at: now.toISOString(),
     membership_expires_at: expiresAt.toISOString(),
+    weekly_visit_limit: weeklyVisitLimitForTier(storedTier),
   };
 }
 

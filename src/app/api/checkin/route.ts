@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase";
 import {
   countGymVisitorsToday,
   getTodayStartUTC8,
+  getWeekStartMondayUTC8,
   gymHasDailyCapacityLeft,
 } from "@/lib/gym-daily-capacity";
 
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
     // Гишүүнчлэл идэвхтэй бөгөөд хугацаа нь дуусаагүй эсэхийг шалгах
     const { data: memberRow, error: memberErr } = await supabase
       .from("profiles")
-      .select("membership_status, membership_expires_at")
+      .select("membership_status, membership_expires_at, weekly_visit_limit")
       .eq("id", user_id)
       .maybeSingle();
 
@@ -112,6 +113,36 @@ export async function POST(request: Request) {
         },
         { status: 403 }
       );
+    }
+
+    // 7 хоногийн зочлох эрхийн лимит.
+    // weekly_visit_limit == null → хуучин дүрэм (дээрх өдөрт 1 удаа шалгалт л үйлчилнэ, энэ хэсэг алгасна).
+    // Утгатай бол → Даваа гарагийн 00:00 (UTC+8)-аас хойшхи visit-ийг тоолж хязгаарлана.
+    const weeklyLimit = memberRow?.weekly_visit_limit as number | null | undefined;
+    if (weeklyLimit != null && weeklyLimit > 0) {
+      const weekStart = getWeekStartMondayUTC8();
+      const { count: weekCount, error: weekErr } = await supabase
+        .from("gym_visits")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user_id)
+        .gte("checked_in_at", weekStart)
+        .in("status", ["pending", "approved"]);
+
+      if (weekErr) {
+        return NextResponse.json({ error: weekErr.message }, { status: 500 });
+      }
+
+      if ((weekCount ?? 0) >= weeklyLimit) {
+        return NextResponse.json(
+          {
+            error: `Энэ долоо хоногт таны эрх дүүрсэн байна (${weeklyLimit} удаа). Дараа долоо хоногт дахин орно уу.`,
+            weekly_limit_reached: true,
+            weekly_visit_limit: weeklyLimit,
+            week_visits: weekCount ?? 0,
+          },
+          { status: 429 }
+        );
+      }
     }
 
     const { data: gymRow, error: gymErr } = await supabase

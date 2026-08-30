@@ -272,6 +272,8 @@ export default function UsersTable({
                   Гэрээ
                 </TableCell>
               )}
+              {(visibleColumns?.registeredDate ?? true) &&
+                <Th col="registeredDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Бүртгүүлсэн" />}
               {(visibleColumns?.startDate ?? true) &&
                 <Th col="startDate" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Эхлэх огноо" />}
               {(visibleColumns?.expireDate ?? true) &&
@@ -435,6 +437,9 @@ export default function UsersTable({
                     </TableCell>
                   )}
 
+                  {(visibleColumns?.registeredDate ?? true) && <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>
+                    {p.created_at ? new Date(p.created_at).toLocaleDateString("mn-MN", { timeZone: "Asia/Ulaanbaatar" }) : "—"}
+                  </TableCell>}
                   {(visibleColumns?.startDate ?? true) && <TableCell className={`px-4 ${py} text-sm whitespace-nowrap text-gray-500 dark:text-gray-400`}>
                     {p.membership_started_at ? new Date(p.membership_started_at).toLocaleDateString("mn-MN") : "—"}
                   </TableCell>}
