@@ -20,6 +20,28 @@ export function getTodayStartUTC8(): string {
   return new Date(startUtcMs).toISOString();
 }
 
+/** Mongolia (UTC+8) start of the current week (Monday 00:00) as ISO timestamp in UTC */
+export function getWeekStartMondayUTC8(): string {
+  const now = new Date();
+  const mongoliaOffset = 8 * 60;
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const mongoliaMs = utcMs + mongoliaOffset * 60000;
+  const mongoliaDate = new Date(mongoliaMs);
+  // getDay(): 0=Sunday..6=Saturday. Даваа=0 болгож тоолно.
+  const daysSinceMonday = (mongoliaDate.getDay() + 6) % 7;
+  const startOfWeek = new Date(
+    mongoliaDate.getFullYear(),
+    mongoliaDate.getMonth(),
+    mongoliaDate.getDate() - daysSinceMonday,
+    0,
+    0,
+    0,
+    0
+  );
+  const startUtcMs = startOfWeek.getTime() - mongoliaOffset * 60000;
+  return new Date(startUtcMs).toISOString();
+}
+
 /** Counts visits that consume daily capacity (rejected frees a slot). */
 export async function countGymVisitorsToday(
   supabase: SupabaseClient,

@@ -3,6 +3,7 @@ export type UsersSortColumn =
   | "phone"
   | "organization"
   | "tier"
+  | "registeredDate"
   | "startDate"
   | "expireDate"
   | "totalVisits"
