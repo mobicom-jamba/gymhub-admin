@@ -8,12 +8,14 @@ import {
 } from "@/lib/membership-packages";
 
 export type {
+  BannerConfig,
   MembershipPackage,
   PaymentAppSettingsRow,
   StoredMembershipTier,
 } from "@/lib/membership-packages";
 
 export {
+  DEFAULT_BANNER,
   DEFAULT_PACKAGES,
   SYSTEM_PACKAGE_IDS,
   PAYMENT_APP_SETTINGS_DEFAULTS,
@@ -23,6 +25,7 @@ export {
   membershipMonthsForTier,
   newBlankPackage,
   normalizePackage,
+  normalizeBanner,
   normalizePackages,
   normalizePaymentAppSettingsRow,
   storedTierForPackageId,

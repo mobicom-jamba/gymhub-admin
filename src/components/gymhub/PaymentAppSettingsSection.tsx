@@ -14,8 +14,10 @@ import {
 } from "@/components/ui/table";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import {
+  DEFAULT_BANNER,
   DEFAULT_PACKAGES,
   newBlankPackage,
+  type BannerConfig,
   type MembershipPackage,
   type StoredMembershipTier,
 } from "@/lib/membership-packages";
@@ -32,6 +34,7 @@ type Settings = {
   payment_monpay_enabled: boolean;
   payment_gymfintech_enabled: boolean;
   require_profile_avatar: boolean;
+  banner: BannerConfig;
   updated_at: string;
 };
 
@@ -316,6 +319,9 @@ export default function PaymentAppSettingsSection() {
   const [monpay, setMonpay] = useState(true);
   const [gymfintech, setGymfintech] = useState(true);
   const [requireAvatar, setRequireAvatar] = useState(true);
+  const [banner, setBanner] = useState<BannerConfig>(DEFAULT_BANNER);
+  const [bannerUploading, setBannerUploading] = useState(false);
+  const bannerFileRef = useRef<HTMLInputElement | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -345,7 +351,31 @@ export default function PaymentAppSettingsSection() {
     setMonpay(s.payment_monpay_enabled);
     setGymfintech(s.payment_gymfintech_enabled);
     setRequireAvatar(s.require_profile_avatar !== false);
+    setBanner(s.banner ?? DEFAULT_BANNER);
     setUpdatedAt(s.updated_at);
+  };
+
+  const setBannerField = (patch: Partial<BannerConfig>) =>
+    setBanner((b) => ({ ...b, ...patch }));
+
+  const handleBannerFile = async (file: File | null) => {
+    if (!file) return;
+    setBannerUploading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/admin/banner-upload", { method: "POST", headers, body: fd });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "Зураг оруулахад алдаа");
+      setBannerField({ image_url: data.url as string });
+      toast.show("Баннер зураг орлоо. Доор 'Хадгалах' дарж баталгаажуулна уу.");
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "Зураг оруулахад алдаа");
+    } finally {
+      setBannerUploading(false);
+      if (bannerFileRef.current) bannerFileRef.current.value = "";
+    }
   };
 
   const load = useCallback(async () => {
@@ -467,6 +497,7 @@ export default function PaymentAppSettingsSection() {
           payment_monpay_enabled: monpay,
           payment_gymfintech_enabled: gymfintech,
           require_profile_avatar: requireAvatar,
+          banner,
         }),
       });
       const data = await res.json();
@@ -778,6 +809,97 @@ export default function PaymentAppSettingsSection() {
           Оруулсны дараа дахин шаардахгүй.
         </p>
         <div className="pt-1">
+          <Button onClick={save} disabled={loading || saving} className="w-full sm:w-auto">
+            {saving ? "Хадгалж байна…" : "Хадгалах"}
+          </Button>
+        </div>
+      </ComponentCard>
+
+      <ComponentCard title="Промо баннер" subtitle="Нүүр хуудсанд гарах промо цонх (нэг баннер)">
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-transparent px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5">
+          <span className="text-sm text-gray-700 dark:text-gray-300">Баннер идэвхтэй</span>
+          <input
+            type="checkbox"
+            checked={banner.active}
+            onChange={(e) => setBannerField({ active: e.target.checked })}
+            className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+          />
+        </label>
+
+        <div className="space-y-3 px-2 pt-1">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Баннер зураг</label>
+            {banner.image_url ? (
+              <img src={banner.image_url} alt="banner" className="mb-2 max-h-48 w-auto rounded-lg border border-gray-200 dark:border-gray-700" />
+            ) : (
+              <p className="mb-2 text-xs text-gray-400">Зураг оруулаагүй байна.</p>
+            )}
+            <input
+              ref={bannerFileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => handleBannerFile(e.target.files?.[0] ?? null)}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => bannerFileRef.current?.click()} disabled={bannerUploading}>
+                {bannerUploading ? "Оруулж байна…" : banner.image_url ? "Зураг солих" : "Зураг оруулах"}
+              </Button>
+              {banner.image_url ? (
+                <Button size="sm" variant="outline" onClick={() => setBannerField({ image_url: "" })} disabled={bannerUploading}>
+                  Зураг устгах
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Тайлбар текст</label>
+            <input
+              type="text"
+              value={banner.caption}
+              onChange={(e) => setBannerField({ caption: e.target.value })}
+              placeholder="300,000₮ · 6 сарын фитнес · зөвхөн QPay"
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Товчны текст</label>
+              <input
+                type="text"
+                value={banner.button_text}
+                onChange={(e) => setBannerField({ button_text: e.target.value })}
+                placeholder="Багц авах"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Товчны холбоос (заавал биш)</label>
+              <input
+                type="text"
+                value={banner.button_link}
+                onChange={(e) => setBannerField({ button_link: e.target.value })}
+                placeholder="/app/membership"
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Дуусах огноо (заавал биш)</label>
+            <input
+              type="date"
+              value={banner.available_until}
+              onChange={(e) => setBannerField({ available_until: e.target.value })}
+              className="block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white/90"
+            />
+            <p className="mt-1 text-xs text-gray-400">Хоосон бол хугацаагүй. Огноо өнгөрвөл баннер автоматаар харагдахгүй.</p>
+          </div>
+        </div>
+
+        <div className="pt-2">
           <Button onClick={save} disabled={loading || saving} className="w-full sm:w-auto">
             {saving ? "Хадгалж байна…" : "Хадгалах"}
           </Button>
