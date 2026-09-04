@@ -1,12 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { attributeMembershipAudit } from "@/lib/membership-audit";
 
-/**
- * Flexy хуваарьт төлбөр overdue үед гишүүнчлэлийг pause;
- * төлсний дараа (overdue үлдээгүй бол) дахин active болгоно.
- * membership_expires_at өөрчлөхгүй — зөвхөн нэвтрэх эрхийг түдгэлзүүлнэ.
- */
-
 type PlanJoin = { user_id: string; status: string } | { user_id: string; status: string }[] | null;
 
 function userIdsFromOverdueRows(
