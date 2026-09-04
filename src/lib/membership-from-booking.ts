@@ -43,6 +43,8 @@ export function canonicalStoredTier(bookingTier: string): string {
     case "smart":
       return "standard";
     // Хуучин Early — DB-д early үлдээнэ
+    case "gymgo":
+      return "gymgo";
     case "early":
     case "early_year":
     case "early_month":
@@ -75,6 +77,8 @@ export function priceForStoredTier(
       return settings.premium4_price_mnt;
     case "early":
       return settings.early_membership_price_mnt;
+    case "gymgo":
+      return 300_000;
     default:
       return 0;
   }
@@ -94,6 +98,7 @@ export function priceForPackageId(
 ): number {
   switch ((packageId || "").toLowerCase()) {
     case "smart":
+    case "gymgo":
       return 300_000;
     case "smart1":
     case "premium1":
@@ -167,6 +172,8 @@ export function weeklyVisitLimitForTier(storedTier: string): number | null {
     case "premium1":
     case "premium2":
       return 4;
+    case "gymgo":
+      return 3;
     default:
       return null;
   }

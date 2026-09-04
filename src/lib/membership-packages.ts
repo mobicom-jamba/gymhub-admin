@@ -1,5 +1,5 @@
 /** profiles.membership_tier enum-д байгаа утгууд */
-export type StoredMembershipTier = "standard" | "premium1" | "premium2" | "gymcore" | "early";
+export type StoredMembershipTier = "standard" | "premium1" | "premium2" | "gymcore" | "early" | "gymgo";
 
 export type MembershipPackage = {
   /** Booking slug: membership-{id}-{ts} */
@@ -70,23 +70,22 @@ export const DEFAULT_BANNER: BannerConfig = {
   available_until: "",
 };
 
-export const SYSTEM_PACKAGE_IDS = ["smart1", "standard3", "premium", "premium4", "smart"] as const;
+export const SYSTEM_PACKAGE_IDS = ["smart1", "standard3", "premium", "premium4", "smart", "gymgo"] as const;
 
 export const DEFAULT_PACKAGES: MembershipPackage[] = [
   {
-    id: "smart",
-    name: "Smart",
+    id: "gymgo",
+    name: "GymGo",
     price_mnt: 300_000,
     months: 6,
     pool_months: 0,
     yoga_months: 0,
-    stored_tier: "standard",
+    stored_tier: "gymgo",
     enabled: true,
     featured: true,
     sort_order: 0,
     locked: true,
-    qpay_only: true,
-    available_until: "2026-09-01",
+    qpay_only: false,
   },
   {
     id: "smart1",
@@ -197,7 +196,7 @@ function slugifyPackageId(raw: string): string {
 }
 
 export function isValidStoredTier(v: unknown): v is StoredMembershipTier {
-  return v === "standard" || v === "premium1" || v === "premium2" || v === "gymcore" || v === "early";
+  return v === "standard" || v === "premium1" || v === "premium2" || v === "gymcore" || v === "early" || v === "gymgo";
 }
 
 export function normalizePackage(raw: unknown, index: number): MembershipPackage | null {
@@ -433,6 +432,8 @@ export function membershipMonthsForTier(
     case "basic":
     case "early":
       return settings.standard3_months;
+    case "gymgo":
+      return 6;
     default:
       return settings.standard3_months;
   }
@@ -462,6 +463,8 @@ export function storedTierForPackageId(
     case "standard":
     case "basic":
       return "standard";
+    case "gymgo":
+      return "gymgo";
     case "early":
       return "early";
     default:
