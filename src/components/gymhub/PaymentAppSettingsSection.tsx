@@ -43,6 +43,7 @@ const STORED_TIER_OPTIONS: { value: StoredMembershipTier; label: string }[] = [
   { value: "premium1", label: "Premium 1" },
   { value: "premium2", label: "Premium 2" },
   { value: "gymcore", label: "GymCore" },
+  { value: "gymgo", label: "GymGo" },
   { value: "early", label: "Early" },
 ];
 
