@@ -19,7 +19,8 @@ export { earlyFirstSegmentDaySpan, isApproximatelyEarlyFirstSegmentOnly };
 export type ParsedMembershipBooking =
   | { kind: "early_first" }
   | { kind: "early_rest" }
-  | { kind: "annual_from_payment"; tier: string };
+  | { kind: "annual_from_payment"; tier: string }
+  | { kind: "upgrade"; tier: string };
 
 /** Booking slug → profiles.membership_tier */
 export function canonicalStoredTier(bookingTier: string): string {
@@ -51,9 +52,78 @@ export function canonicalStoredTier(bookingTier: string): string {
   }
 }
 
+/** Хадгалагдсан tier бүрийн албан ёсны үнэ (зөрүү тооцоонд). */
+export function priceForStoredTier(
+  settings: Pick<
+    PaymentAppSettingsRow,
+    | "standard3_price_mnt"
+    | "smart1_price_mnt"
+    | "premium_membership_price_mnt"
+    | "premium4_price_mnt"
+    | "early_membership_price_mnt"
+  >,
+  storedTier: string,
+): number {
+  switch (storedTier) {
+    case "standard":
+      return settings.standard3_price_mnt;
+    case "premium1":
+      return settings.smart1_price_mnt;
+    case "premium2":
+      return settings.premium_membership_price_mnt;
+    case "gymcore":
+      return settings.premium4_price_mnt;
+    case "early":
+      return settings.early_membership_price_mnt;
+    default:
+      return 0;
+  }
+}
+
+/** Багцын id-аар албан ёсны үнэ (Smart промо код дотор 300k). */
+export function priceForPackageId(
+  settings: Pick<
+    PaymentAppSettingsRow,
+    | "standard3_price_mnt"
+    | "smart1_price_mnt"
+    | "premium_membership_price_mnt"
+    | "premium4_price_mnt"
+    | "early_membership_price_mnt"
+  >,
+  packageId: string,
+): number {
+  switch ((packageId || "").toLowerCase()) {
+    case "smart":
+      return 300_000;
+    case "smart1":
+    case "premium1":
+    case "plus":
+      return settings.smart1_price_mnt;
+    case "standard3":
+    case "standard":
+    case "basic":
+      return settings.standard3_price_mnt;
+    case "premium":
+    case "premium2":
+      return settings.premium_membership_price_mnt;
+    case "premium4":
+    case "gymcore":
+    case "prime":
+      return settings.premium4_price_mnt;
+    case "early":
+      return settings.early_membership_price_mnt;
+    default:
+      return 0;
+  }
+}
+
 export function parseMembershipBookingId(bookingId: string): ParsedMembershipBooking | null {
   if (!bookingId.startsWith("membership-")) return null;
   const parts = bookingId.split("-");
+  // membership-upgrade-<tier>-<ts> — багц ахиулах (зөрүү төлбөр, эрх солигдоно)
+  if (parts[1] === "upgrade") {
+    return { kind: "upgrade", tier: parts[2] || "" };
+  }
   // Хуучин эхний сар / үлдэгдэл (шинэ 150k зарахгүй; үлдэгдэл төлбөр үлдэнэ)
   if (parts.length >= 4 && parts[1] === "early" && parts[2] === "first") {
     return { kind: "early_first" };
@@ -95,6 +165,7 @@ export function weeklyVisitLimitForTier(storedTier: string): number | null {
     case "standard":
       return 3;
     case "premium1":
+    case "premium2":
       return 4;
     default:
       return null;
@@ -125,6 +196,7 @@ export function computeMembershipDatesAfterPayment(args: {
   membership_started_at: string;
   membership_expires_at: string;
   weekly_visit_limit: number | null;
+  membership_package_id: string;
 } | null {
   const parsed = parseMembershipBookingId(args.bookingId);
   if (!parsed) return null;
@@ -159,6 +231,25 @@ export function computeMembershipDatesAfterPayment(args: {
       membership_started_at: startedAt,
       membership_expires_at: addCalendarMonths(baseDate, 1).toISOString(),
       weekly_visit_limit: null,
+      membership_package_id: "early",
+    };
+  }
+
+  if (parsed.kind === "upgrade") {
+    const isActive = String(profile.membership_status ?? "").toLowerCase() === "active";
+    const hasFutureExpiry =
+      !!profile.membership_expires_at && new Date(profile.membership_expires_at) > now;
+    // Зөвхөн идэвхтэй, хугацаа дуусаагүй гишүүн ахиулж болно. Эс бөгөөс идэвхжүүлэхгүй (аюулгүй).
+    if (!isActive || !hasFutureExpiry) return null;
+    const storedTier = canonicalStoredTier(parsed.tier);
+    return {
+      membership_tier: storedTier,
+      membership_status: "active",
+      // Дуусах огноо ба эхэлсэн огноо ХЭВЭЭР — зөвхөн tier дээшилнэ.
+      membership_started_at: profile.membership_started_at ?? now.toISOString(),
+      membership_expires_at: profile.membership_expires_at!,
+      weekly_visit_limit: weeklyVisitLimitForTier(storedTier),
+      membership_package_id: parsed.tier,
     };
   }
 
@@ -172,6 +263,7 @@ export function computeMembershipDatesAfterPayment(args: {
       membership_started_at: anchor.toISOString(),
       membership_expires_at: addCalendarYears(anchor, 1).toISOString(),
       weekly_visit_limit: null,
+      membership_package_id: "early",
     };
   }
 
@@ -203,6 +295,7 @@ export function computeMembershipDatesAfterPayment(args: {
     membership_started_at: now.toISOString(),
     membership_expires_at: expiresAt.toISOString(),
     weekly_visit_limit: weeklyVisitLimitForTier(storedTier),
+    membership_package_id: parsed.tier,
   };
 }
 
@@ -269,7 +362,7 @@ export async function applyMembershipActivationForPaidBooking(
   const now = new Date();
   const { data: profile, error: selErr } = await supabase
     .from("profiles")
-    .select("membership_started_at, membership_expires_at, membership_status")
+    .select("membership_started_at, membership_expires_at, membership_status, membership_tier")
     .eq("id", userId)
     .maybeSingle();
 
@@ -295,6 +388,35 @@ export async function applyMembershipActivationForPaidBooking(
   if (!update) {
     if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
     return false;
+  }
+
+  // Ахиулах booking — зөрүү төлбөрийг server дээр баталгаажуулна (клиентэд итгэхгүй).
+  const parsedForCheck = parseMembershipBookingId(bookingId);
+  if (parsedForCheck?.kind === "upgrade") {
+    const currentPkgId = String(
+      (profile as { membership_package_id?: string | null } | null)?.membership_package_id ?? "",
+    );
+    const currentTier = String(
+      (profile as { membership_tier?: string | null } | null)?.membership_tier ?? "",
+    );
+    const currentPrice = currentPkgId
+      ? priceForPackageId(settings, currentPkgId)
+      : priceForStoredTier(settings, currentTier);
+    const expectedDiff = priceForPackageId(settings, parsedForCheck.tier) - currentPrice;
+    if (expectedDiff > 0) {
+      const { data: bk } = await supabase
+        .from("bookings")
+        .select("amount")
+        .eq("id", bookingId)
+        .maybeSingle();
+      const paid = Number((bk as { amount?: number } | null)?.amount ?? 0);
+      // 2000₮ хүлцэл (бөөрөнхийлөлт/шимтгэл).
+      if (paid + 2000 < expectedDiff) {
+        console.warn("[membership-from-booking] upgrade underpaid", { bookingId, paid, expectedDiff });
+        if (claim === "claimed") await releaseMembershipBooking(supabase, bookingId);
+        return false;
+      }
+    }
   }
 
   const { error: upErr } = await supabase.from("profiles").update(update).eq("id", userId);

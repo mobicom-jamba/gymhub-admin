@@ -48,7 +48,26 @@ export type PaymentAppSettingsRow = {
   payment_monpay_enabled: boolean;
   payment_gymfintech_enabled: boolean;
   require_profile_avatar: boolean;
+  banner: BannerConfig;
   updated_at: string;
+};
+
+export type BannerConfig = {
+  active: boolean;
+  image_url: string;
+  caption: string;
+  button_text: string;
+  button_link: string;
+  available_until: string; // "" эсвэл YYYY-MM-DD
+};
+
+export const DEFAULT_BANNER: BannerConfig = {
+  active: false,
+  image_url: "",
+  caption: "",
+  button_text: "",
+  button_link: "",
+  available_until: "",
 };
 
 export const SYSTEM_PACKAGE_IDS = ["smart1", "standard3", "premium", "premium4", "smart"] as const;
@@ -148,7 +167,21 @@ export const PAYMENT_APP_SETTINGS_DEFAULTS: Omit<PaymentAppSettingsRow, "updated
   payment_monpay_enabled: true,
   payment_gymfintech_enabled: true,
   require_profile_avatar: true,
+  banner: DEFAULT_BANNER,
 };
+
+export function normalizeBanner(raw: unknown): BannerConfig {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    active: o.active === true,
+    image_url: str(o.image_url),
+    caption: str(o.caption),
+    button_text: str(o.button_text),
+    button_link: str(o.button_link),
+    available_until: str(o.available_until),
+  };
+}
 
 function clampInt(n: number, fallback: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return fallback;
@@ -355,6 +388,7 @@ export function normalizePaymentAppSettingsRow(row: Record<string, unknown>): Pa
     payment_monpay_enabled: row.payment_monpay_enabled !== false,
     payment_gymfintech_enabled: row.payment_gymfintech_enabled !== false,
     require_profile_avatar: row.require_profile_avatar !== false,
+    banner: normalizeBanner(row.banner),
     updated_at: (row.updated_at as string) || new Date().toISOString(),
   };
 }

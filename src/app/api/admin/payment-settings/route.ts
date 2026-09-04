@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import {
   getPaymentAppSettings,
+  normalizeBanner,
   normalizePackages,
   syncFlatFromPackages,
   type MembershipPackage,
@@ -50,6 +51,7 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   if ("payment_monpay_enabled" in o) out.payment_monpay_enabled = Boolean(o.payment_monpay_enabled);
   if ("payment_gymfintech_enabled" in o) out.payment_gymfintech_enabled = Boolean(o.payment_gymfintech_enabled);
   if ("require_profile_avatar" in o) out.require_profile_avatar = Boolean(o.require_profile_avatar);
+  if ("banner" in o) out.banner = normalizeBanner(o.banner);
 
   return Object.keys(out).length ? out : null;
 }
@@ -133,13 +135,14 @@ export async function PATCH(request: Request) {
       payment_monpay_enabled: next.payment_monpay_enabled,
       payment_gymfintech_enabled: next.payment_gymfintech_enabled,
       require_profile_avatar: next.require_profile_avatar,
+      banner: next.banner,
       updated_at: next.updated_at,
     };
 
     let { error } = await admin.from("payment_app_settings").upsert(payload, { onConflict: "id" });
-    if (error && (error.code === "42703" || error.message?.includes("require_profile_avatar"))) {
-      const { require_profile_avatar: _omit, ...withoutAvatarFlag } = payload;
-      const retry = await admin.from("payment_app_settings").upsert(withoutAvatarFlag, { onConflict: "id" });
+    if (error && (error.code === "42703" || error.message?.includes("require_profile_avatar") || error.message?.includes("banner"))) {
+      const { require_profile_avatar: _omit, banner: _omitBanner, ...withoutOptionalCols } = payload;
+      const retry = await admin.from("payment_app_settings").upsert(withoutOptionalCols, { onConflict: "id" });
       error = retry.error;
     }
 

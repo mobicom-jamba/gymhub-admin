@@ -240,6 +240,7 @@ export async function GET() {
       premium4_yoga_months: settings.premium4_yoga_months,
     },
     require_profile_avatar: settings.require_profile_avatar !== false,
+    banner: settings.banner,
     membership_packages: settings.packages
       .filter((p) => p.enabled && isPackageAvailableUntil(p.available_until))
       .map((p) => ({
