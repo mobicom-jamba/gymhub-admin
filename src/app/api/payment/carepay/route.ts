@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requirePaymentChannel } from "@/lib/payment-app-settings";
+import { bookingIdHasRestrictedChannelPackage } from "@/lib/smart-promo";
 import { safeUpdateBookingById } from "../_lib/bookings";
 import {
   isCarepayConfigured,
@@ -51,6 +52,13 @@ export async function POST(request: Request) {
     if (!booking_id || amount == null || !user_id) {
       return NextResponse.json(
         { error: "booking_id, amount, user_id шаардлагатай" },
+        { status: 400 },
+      );
+    }
+
+    if (bookingIdHasRestrictedChannelPackage(booking_id)) {
+      return NextResponse.json(
+        { error: "Энэ багцад Carepay боломжгүй." },
         { status: 400 },
       );
     }

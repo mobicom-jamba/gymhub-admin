@@ -7,17 +7,29 @@ import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 import { parseSignupRegion } from "@/lib/signup-region";
 
+/** Огноог (YYYY-MM-DD) Ази/Улаанбаатар цагийн бүсээр буцаана. */
+function ubDateString(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(d);
+}
+
+/**
+ * Эхлэх/Дуусах огноог бодит instant (UTC момент)-оор биш, Улаанбаатарын
+ * КАЛЕНДАРИЙН ӨДРӨӨР харьцуулна. Admin-аас "Эхлэх огноо" гэж сонгосон
+ * огноо нь DB-д UTC шөнө дунд (00:00Z) хадгалагддаг тул шууд `now >= start`
+ * гэж харьцуулбал Улаанбаатараар (UTC+8) тухайн өдрийн орой 8 цаг хүртэл
+ * "хараахан эхлээгүй" гэж буруу гарч байсан. Одоо календарийн өдрөөр тооцно.
+ */
 function resolveMembershipStatus(
   membershipStartedAt: string | null | undefined,
   membershipExpiresAt: string | null | undefined
 ): "active" | "inactive" {
   if (!membershipStartedAt && !membershipExpiresAt) return "inactive";
-  const now = new Date();
   const start = membershipStartedAt ? new Date(membershipStartedAt) : null;
   const end = membershipExpiresAt ? new Date(membershipExpiresAt) : null;
   if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) return "inactive";
-  const isStarted = start ? now >= start : true;
-  const isNotExpired = end ? now <= end : true;
+  const todayUB = ubDateString(new Date());
+  const isStarted = start ? todayUB >= ubDateString(start) : true;
+  const isNotExpired = end ? todayUB <= ubDateString(end) : true;
   return isStarted && isNotExpired ? "active" : "inactive";
 }
 

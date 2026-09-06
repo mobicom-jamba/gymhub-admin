@@ -4,7 +4,7 @@ import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { normalizeQpayBankUrls } from "@/lib/qpay-bank-urls";
 import { QPayError, buildSenderInvoiceNo, createQpayInvoice } from "@/lib/qpay-client";
 import { buildInstallmentSchedule, maxInstallmentsForPlan } from "@/lib/installment-schedule";
-import { isQpayOnlyPackageId } from "@/lib/smart-promo";
+import { isRestrictedChannelPackageId, bookingIdHasRestrictedChannelPackage } from "@/lib/smart-promo";
 import { buildFlexyQpayCallbackUrl } from "@/lib/settle-flexy-payment";
 
 export async function POST(request: Request) {
@@ -28,9 +28,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (isQpayOnlyPackageId(plan_tier) || /(?:^|-)smart(?:-|$)/i.test(booking_id)) {
+    if (isRestrictedChannelPackageId(plan_tier) || bookingIdHasRestrictedChannelPackage(booking_id)) {
       return NextResponse.json(
-        { error: "Smart багцыг зөвхөн QPay-ээр төлнө. Flexy хуваарь боломжгүй." },
+        { error: "Энэ багцад Flexy хуваан төлөлт боломжгүй." },
         { status: 400 },
       );
     }
