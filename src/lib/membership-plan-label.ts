@@ -4,6 +4,7 @@ export type MembershipPlanVariant =
   | "premium1"
   | "premium2"
   | "gymcore"
+  | "gymgo"
   | "early_year"
   | "early_month"
   | "early_rest_due"
@@ -81,6 +82,7 @@ export function canonicalPlanKey(tier: string | null | undefined): string {
   // Legacy `premium` booking = Smart-2 / йог багц → Premium 2
   if (t === "premium") return "premium2";
   if (t === "premium4" || t === "gymcore" || t === "prime") return "gymcore";
+  if (t === "gymgo") return "gymgo";
   // Хуучин Early багц — нэршлийг Early-ээр үлдээнэ
   if (t === "early" || t === "early_year" || t === "early_month") return "early";
   // Шинэ Standard багц
@@ -99,6 +101,8 @@ export function planTierDisplayLabel(tier: string | null | undefined): string {
       return "Premium 2";
     case "gymcore":
       return "GymCore";
+    case "gymgo":
+      return "GymGo";
     case "early":
       return "Early";
     case "standard":
@@ -157,6 +161,14 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
       title: "GymCore — фитнес + бассейн + йог",
       shortLabel: "GymCore · 1 жил",
       variant: "gymcore",
+    };
+  }
+
+  if (key === "gymgo") {
+    return {
+      title: "GymGo — 6 сарын фитнес эрх",
+      shortLabel: "GymGo · 6 сар",
+      variant: "gymgo",
     };
   }
 
@@ -273,6 +285,8 @@ export function membershipPlanBadgeClass(variant: MembershipPlanVariant): string
       return "bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-900/20 dark:text-fuchsia-400";
     case "gymcore":
       return "bg-amber-50 text-amber-800 dark:bg-amber-900/25 dark:text-amber-300";
+    case "gymgo":
+      return "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400";
     case "early_year":
       return "bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400";
     case "early_month":

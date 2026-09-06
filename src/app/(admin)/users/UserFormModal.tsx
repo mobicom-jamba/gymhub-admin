@@ -58,21 +58,34 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+/**
+ * Өнөөдрийн огноо (YYYY-MM-DD) Ази/Улаанбаатар цагийн бүсээр.
+ * Эхлэх/Дуусах огноог зөвхөн огноогоор (цагийн хэсэггүй) харьцуулахад ашиглана.
+ */
+function todayISOInUlaanbaatar(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date());
+}
+
+/**
+ * "Эхлэх огноо" / "Дуусах огноо" нь цагийн хэсэггүй (YYYY-MM-DD) огноо тул
+ * үүнийг шууд `new Date()`-ийн бодит "now" момент (instant)-той харьцуулж
+ * болохгүй — date-only мөр нь UTC шөнө дунд (00:00Z) гэж parse хийгддэг тул
+ * Улаанбаатар (UTC+8) дээр "өнөөдөр эхэлсэн" гишүүнчлэл ч гэсэн орой 8 цаг
+ * хүртэл "Идэвхгүй" гэж буруу гарч байсан. Одоо календарийн өдрөөр (UB цагийн
+ * бүсээр) л харьцуулна.
+ */
 function resolveMembershipStatus(startedAt: string, expiresAt: string): "active" | "inactive" {
   if (!startedAt && !expiresAt) return "inactive";
-  const now = new Date();
-  const start = startedAt ? new Date(startedAt) : null;
-  const end = expiresAt ? new Date(expiresAt) : null;
-  if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime()))) return "inactive";
-  const isStarted = start ? now >= start : true;
-  const isNotExpired = end ? now <= end : true;
+  const today = todayISOInUlaanbaatar();
+  const isStarted = startedAt ? today >= startedAt : true;
+  const isNotExpired = expiresAt ? today <= expiresAt : true;
   return isStarted && isNotExpired ? "active" : "inactive";
 }
 
-/** Standard = 6 сар; Early / Premium / GymCore = 12 сар */
+/** Standard, GymGo = 6 сар; Early / Premium / GymCore = 12 сар */
 function membershipDurationMonths(tier: string): number {
   const key = canonicalPlanKey(tier);
-  return key === "standard" ? 6 : 12;
+  return key === "standard" || key === "gymgo" ? 6 : 12;
 }
 
 /** YYYY-MM-DD ± months in UTC calendar (avoids local TZ day shift). */
@@ -390,7 +403,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
 
   const handleExpiresChange = (val: string) => {
     setExpiresAt(val);
-    if (!val) return;
+    // Эхлэх огноо аль хэдийн тохируулагдсан бол хөндөхгүй — зөвхөн Дуусах
+    // огнооны утгыг өөрчилнө (өмнө нь энд Эхлэх огноог дахин бодож дарж
+    // бичдэг байсан тул admin гар аар хугацаа сунгах үед Эхлэх огноо
+    // "үсэрч" алдаа гарч байсан).
+    if (!val || startedAt) return;
     const months = membershipDurationMonths(tier);
     const nextStart = shiftDateOnly(val, -months);
     if (nextStart) setStartedAt(nextStart);
@@ -857,6 +874,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                 {(
                   [
                     { id: "standard", label: "Standard", price: "480,000₮", selected: canonicalPlanKey(tier) === "standard" },
+                    { id: "gymgo", label: "GymGo", price: "300,000₮", selected: canonicalPlanKey(tier) === "gymgo" },
                     { id: "premium1", label: "Premium 1", price: "780,000₮", selected: canonicalPlanKey(tier) === "premium1" },
                     { id: "premium2", label: "Premium 2", price: "780,000₮", selected: canonicalPlanKey(tier) === "premium2" },
                     { id: "gymcore", label: "GymCore", price: "980,000₮", selected: canonicalPlanKey(tier) === "gymcore" },
@@ -870,9 +888,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                       opt.selected
                         ? opt.id === "gymcore"
                           ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20"
-                          : opt.id.startsWith("premium")
-                            ? "border-violet-400 bg-violet-50 dark:border-violet-600 dark:bg-violet-900/20"
-                            : "border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20"
+                          : opt.id === "gymgo"
+                            ? "border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-900/20"
+                            : opt.id.startsWith("premium")
+                              ? "border-violet-400 bg-violet-50 dark:border-violet-600 dark:bg-violet-900/20"
+                              : "border-blue-400 bg-blue-50 dark:border-blue-600 dark:bg-blue-900/20"
                         : "border-gray-100 bg-white hover:border-gray-200 dark:border-gray-700 dark:bg-gray-800/60"
                     }`}
                   >
@@ -880,19 +900,21 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                       opt.selected
                         ? opt.id === "gymcore"
                           ? "text-amber-700 dark:text-amber-300"
-                          : opt.id.startsWith("premium")
-                            ? "text-violet-700 dark:text-violet-300"
-                            : "text-blue-700 dark:text-blue-300"
+                          : opt.id === "gymgo"
+                            ? "text-emerald-700 dark:text-emerald-300"
+                            : opt.id.startsWith("premium")
+                              ? "text-violet-700 dark:text-violet-300"
+                              : "text-blue-700 dark:text-blue-300"
                         : "text-gray-600 dark:text-gray-400"
                     }`}>
                       {opt.label}
                     </span>
                     <span className="text-[11px] text-gray-400">
-                      {opt.price} · {opt.id === "standard" ? "6 сар" : "1 жил"}
+                      {opt.price} · {opt.id === "standard" || opt.id === "gymgo" ? "6 сар" : "1 жил"}
                     </span>
                     {opt.selected && (
                       <span className={`absolute right-2.5 top-2.5 flex h-4 w-4 items-center justify-center rounded-full ${
-                        opt.id === "gymcore" ? "bg-amber-500" : opt.id.startsWith("premium") ? "bg-violet-500" : "bg-blue-500"
+                        opt.id === "gymcore" ? "bg-amber-500" : opt.id === "gymgo" ? "bg-emerald-500" : opt.id.startsWith("premium") ? "bg-violet-500" : "bg-blue-500"
                       }`}>
                         <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
