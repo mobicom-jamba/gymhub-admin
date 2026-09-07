@@ -34,12 +34,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    const rows = (data ?? []) as { user_id?: string }[];
     const userIds = [
-      ...new Set(
-        (data ?? [])
-          .map((row) => String((row as { user_id?: string }).user_id ?? "").trim())
-          .filter(Boolean),
-      ),
+      ...new Set(rows.map((row) => String(row.user_id ?? "").trim()).filter(Boolean)),
     ];
 
     return NextResponse.json({
