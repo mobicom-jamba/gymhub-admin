@@ -27,7 +27,7 @@ function json(body: unknown, status = 200) {
   return NextResponse.json(body, {
     status,
     headers: {
-      "Cache-Control": "public, max-age=15, stale-while-revalidate=30",
+      "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
     },
   });
 }
@@ -54,15 +54,11 @@ export async function GET() {
   try {
     const supabase = createAdminClient();
 
-    // Paid membership bookings since campaign start (unique users).
-    // Seed covers spots sold before tracking; new payers after START reduce remaining further.
-    const { data, error } = await supabase
-      .from("bookings")
-      .select("user_id, paid_at, created_at, id")
-      .eq("payment_status", "paid")
-      .like("id", "membership-%")
-      .not("user_id", "is", null)
-      .limit(5000);
+    // Distinct paid membership users since campaign start — one aggregate RPC,
+    // not a 5000-row bookings download.
+    const { data, error } = await supabase.rpc("count_founding_spot_payers", {
+      p_start: CAMPAIGN_START,
+    });
 
     if (error) {
       console.warn("[founding-spots]", error.message);
@@ -78,19 +74,8 @@ export async function GET() {
       );
     }
 
-    const startMs = Date.parse(CAMPAIGN_START);
-    const afterStart = new Set<string>();
-
-    for (const row of data ?? []) {
-      const uid = typeof row.user_id === "string" ? row.user_id.trim() : "";
-      if (!uid) continue;
-      const when = row.paid_at || row.created_at;
-      const t = when ? Date.parse(String(when)) : NaN;
-      if (!Number.isFinite(t) || t < startMs) continue;
-      afterStart.add(uid);
-    }
-
-    const claimed = Math.min(LIMIT, SEED_CLAIMED + afterStart.size);
+    const newPaid = Math.max(0, Number(data) || 0);
+    const claimed = Math.min(LIMIT, SEED_CLAIMED + newPaid);
     const remaining = Math.max(0, LIMIT - claimed);
 
     return json(
@@ -100,7 +85,7 @@ export async function GET() {
         remaining,
         sold_out: remaining === 0,
         campaign_start: CAMPAIGN_START,
-        new_paid_since_start: afterStart.size,
+        new_paid_since_start: newPaid,
         source: "bookings",
       }),
     );

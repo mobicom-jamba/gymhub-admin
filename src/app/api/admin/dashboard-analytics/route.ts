@@ -139,70 +139,47 @@ async function aggregateCommissionsByMonth(
   supabase: SupabaseClient,
   startIso: string,
 ): Promise<MonthPoint[]> {
-  const monthMap: Record<string, number> = {};
-  const PAGE = 1000;
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from("sales_commissions")
-      .select("created_at, commission_amount")
-      .gte("created_at", startIso)
-      .order("created_at", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) {
-      if (error.code === "42P01") return [];
-      throw new Error(error.message);
-    }
-    const rows = data ?? [];
-    for (const row of rows) {
-      const createdAt = (row as { created_at?: string | null }).created_at;
-      if (!createdAt) continue;
-      const month = createdAt.slice(0, 7);
-      const amount = Number((row as { commission_amount?: unknown }).commission_amount) || 0;
-      monthMap[month] = (monthMap[month] ?? 0) + amount;
-    }
-    if (rows.length < PAGE) break;
-    from += PAGE;
+  const { data, error } = await supabase.rpc("sales_commission_totals_by_month", {
+    p_since: startIso,
+  });
+  if (error) {
+    if (error.code === "42P01" || error.code === "PGRST202") return [];
+    throw new Error(error.message);
   }
-  return Object.entries(monthMap)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, count]) => ({ month, count: Math.round(count * 100) / 100 }));
+  return ((data ?? []) as { month?: string; total_amount?: number | string }[])
+    .map((row) => ({
+      month: String(row.month ?? "").trim(),
+      count: Math.round((Number(row.total_amount) || 0) * 100) / 100,
+    }))
+    .filter((r) => /^\d{4}-\d{2}$/.test(r.month))
+    .sort((a, b) => a.month.localeCompare(b.month));
 }
 
-/** head count per calendar month — avoids downloading tens of thousands of visit rows. */
+/** One GROUP BY instead of N exact-count round-trips. */
 async function aggregateVisitsByMonth(
   supabase: SupabaseClient,
   lookbackMonths: number,
 ): Promise<MonthPoint[]> {
-  const now = new Date();
-  const windows: { month: string; startIso: string; endIso: string }[] = [];
-  for (let i = lookbackMonths - 1; i >= 0; i--) {
-    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i + 1, 1));
-    windows.push({
-      month: start.toISOString().slice(0, 7),
-      startIso: start.toISOString(),
-      endIso: end.toISOString(),
-    });
+  const start = new Date();
+  start.setUTCMonth(start.getUTCMonth() - (lookbackMonths - 1));
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+
+  const { data, error } = await supabase.rpc("gym_visit_counts_by_utc_month", {
+    p_since: start.toISOString(),
+  });
+  if (error) {
+    if (error.code === "42P01" || error.code === "PGRST202") return [];
+    throw new Error(error.message);
   }
 
-  const results = await Promise.all(
-    windows.map(async ({ month, startIso, endIso }) => {
-      const { count, error } = await supabase
-        .from("gym_visits")
-        .select("id", { count: "exact", head: true })
-        .neq("status", "rejected")
-        .gte("checked_in_at", startIso)
-        .lt("checked_in_at", endIso);
-      if (error) {
-        if (error.code === "42P01") return { month, count: 0 };
-        throw new Error(error.message);
-      }
-      return { month, count: count ?? 0 };
-    }),
-  );
-
-  return results.filter((r) => r.count > 0);
+  const minMonth = start.toISOString().slice(0, 7);
+  return ((data ?? []) as { month?: string; visitor_count?: number | string }[])
+    .map((row) => ({
+      month: String(row.month ?? "").trim(),
+      count: Number(row.visitor_count) || 0,
+    }))
+    .filter((r) => /^\d{4}-\d{2}$/.test(r.month) && r.month >= minMonth && r.count > 0);
 }
 
 type FitnessMonthCount = {
@@ -216,44 +193,28 @@ async function aggregateThisMonthFitnessCounts(
   supabase: SupabaseClient,
   startIso: string,
 ): Promise<FitnessMonthCount[]> {
+  const { data, error } = await supabase.rpc("gym_visit_counts_since", {
+    p_since: startIso,
+  });
+
+  if (error) {
+    if (error.code === "42P01" || error.code === "PGRST202") return [];
+    throw new Error(error.message);
+  }
+
   const map = new Map<
     string,
     { gym_id: string; gym_name: string | null; image_url: string | null; count: number }
   >();
-  const PAGE = 1000;
-  let from = 0;
-
-  // Зөвхөн gym_id — payload жижиг, хурдан
-  for (;;) {
-    const { data, error } = await supabase
-      .from("gym_visits")
-      .select("gym_id")
-      .neq("status", "rejected")
-      .gte("checked_in_at", startIso)
-      .range(from, from + PAGE - 1);
-
-    if (error) {
-      if (error.code === "42P01") return [];
-      throw new Error(error.message);
-    }
-
-    for (const r of (data ?? []) as { gym_id?: string | null }[]) {
-      const gymId = String(r.gym_id ?? "").trim();
-      if (!gymId) continue;
-      const existing = map.get(gymId);
-      if (existing) existing.count += 1;
-      else {
-        map.set(gymId, {
-          gym_id: gymId,
-          gym_name: null,
-          image_url: null,
-          count: 1,
-        });
-      }
-    }
-
-    if (!data || data.length < PAGE) break;
-    from += PAGE;
+  for (const r of (data ?? []) as { gym_id?: string | null; visitor_count?: number | string | null }[]) {
+    const gymId = String(r.gym_id ?? "").trim();
+    if (!gymId) continue;
+    map.set(gymId, {
+      gym_id: gymId,
+      gym_name: null,
+      image_url: null,
+      count: Number(r.visitor_count) || 0,
+    });
   }
 
   const gymIds = [...map.keys()];

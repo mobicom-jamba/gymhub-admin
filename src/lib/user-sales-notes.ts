@@ -24,6 +24,8 @@ export async function fetchAllUserSalesNotes(): Promise<Record<string, UserSales
   const supabase = createBrowserSupabaseClient();
   const { data, error } = await fetchAllPagesParallel<UserSalesNote>({
     pageSize: PAGE,
+    maxPages: 10,
+    concurrency: 2,
     getCount: async () => {
       const res = await supabase
         .from("user_sales_notes")

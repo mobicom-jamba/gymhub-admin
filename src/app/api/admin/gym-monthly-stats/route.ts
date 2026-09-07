@@ -2,19 +2,6 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { verifyGymStaffOrAdmin } from "@/lib/verify-gym-access";
 
-type VisitRow = { checked_in_at: string };
-
-function monthKeyUlaanbaatar(iso: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ulaanbaatar",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date(iso));
-  const y = parts.find((p) => p.type === "year")?.value ?? "0";
-  const m = parts.find((p) => p.type === "month")?.value ?? "01";
-  return `${y}-${m}`;
-}
-
 function monthLabelMn(key: string): string {
   const [y, mo] = key.split("-");
   const n = Number(mo);
@@ -45,35 +32,25 @@ export async function GET(request: Request) {
     twelveMonthsAgo.setUTCHours(0, 0, 0, 0);
     const cutoff = twelveMonthsAgo.toISOString();
 
-    const pageSize = 1000;
-    let from = 0;
-    const counts = new Map<string, number>();
+    const { data, error } = await supabase.rpc("gym_visit_counts_by_month", {
+      p_gym_id: gymId,
+      p_since: cutoff,
+    });
 
-    for (;;) {
-      const { data, error } = await supabase
-        .from("gym_visits")
-        .select("checked_in_at")
-        .eq("gym_id", gymId)
-        .neq("status", "rejected")
-        .gte("checked_in_at", cutoff)
-        .order("checked_in_at", { ascending: false })
-        .range(from, from + pageSize - 1);
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-      const batch = (data ?? []) as VisitRow[];
-      for (const r of batch) {
-        if (!r.checked_in_at) continue;
-        const key = monthKeyUlaanbaatar(r.checked_in_at);
-        counts.set(key, (counts.get(key) ?? 0) + 1);
-      }
-      if (batch.length < pageSize) break;
-      from += pageSize;
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const months = [...counts.entries()]
-      .map(([month, total]) => ({ month, label: monthLabelMn(month), total }))
+    const months = ((data ?? []) as { month?: string; visitor_count?: number | string }[])
+      .map((row) => {
+        const month = String(row.month ?? "").trim();
+        return {
+          month,
+          label: monthLabelMn(month),
+          total: Number(row.visitor_count) || 0,
+        };
+      })
+      .filter((r) => /^\d{4}-\d{2}$/.test(r.month))
       .sort((a, b) => (a.month < b.month ? 1 : a.month > b.month ? -1 : 0));
 
     return NextResponse.json(

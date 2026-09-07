@@ -26,36 +26,26 @@ export async function GET(request: Request) {
       kind === "early_first" ? "membership-early-first-" : "membership-early-rest-";
 
     const admin = createAdminClient();
-    const userIds = new Set<string>();
+    const { data, error } = await admin.rpc("paid_booking_user_ids_by_id_prefix", {
+      p_prefix: prefix,
+    });
 
-    // Paginate — bookings can be large
-    const PAGE = 1000;
-    let from = 0;
-    for (;;) {
-      const { data, error } = await admin
-        .from("bookings")
-        .select("user_id, id")
-        .eq("payment_status", "paid")
-        .like("id", `${prefix}%`)
-        .not("user_id", "is", null)
-        .range(from, from + PAGE - 1);
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-
-      for (const row of data ?? []) {
-        if (row.user_id) userIds.add(row.user_id as string);
-      }
-
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    const userIds = [
+      ...new Set(
+        (data ?? [])
+          .map((row) => String((row as { user_id?: string }).user_id ?? "").trim())
+          .filter(Boolean),
+      ),
+    ];
 
     return NextResponse.json({
       kind,
-      userIds: Array.from(userIds),
-      count: userIds.size,
+      userIds,
+      count: userIds.length,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";

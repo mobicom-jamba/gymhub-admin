@@ -112,15 +112,7 @@ export default function DashboardSection() {
     setActiveCount(activeRes.count ?? 0);
 
     const orgTableCount = orgsCountRes.count ?? 0;
-    if (orgTableCount > 0) {
-      setCompanyCount(orgTableCount);
-    } else {
-      const { data: orgsData } = await supabase
-        .from("profiles").select("organization")
-        .not("organization", "is", null).neq("organization", "");
-      const distinctOrgs = new Set((orgsData ?? []).map((p: { organization: string }) => p.organization));
-      setCompanyCount(distinctOrgs.size);
-    }
+    setCompanyCount(orgTableCount);
 
     const allGyms = gymsRes.data ?? [];
     const totalGyms = gymsRes.count ?? allGyms.length;
@@ -225,20 +217,18 @@ export default function DashboardSection() {
 
     const supabase = createBrowserSupabaseClient();
 
-    // Урт debounce — realtime үйл явдал их үед Supabase руу давтагдах Disk I/O-г багасгана
+    // Realtime on profiles/bookings was re-querying the Data API on every insert and
+    // saturating PostgREST. Refresh counts on gym changes only; charts stay on mount.
     const debouncedFast = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         void fetchFast();
-        void fetchAnalytics();
-      }, 8000);
+      }, 30_000);
     };
 
     const channel = supabase
       .channel("dashboard-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "gyms" }, debouncedFast)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, debouncedFast)
-      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, debouncedFast)
       .subscribe();
 
     return () => {

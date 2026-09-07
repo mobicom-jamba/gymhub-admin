@@ -56,7 +56,8 @@ export async function GET(request: Request) {
       .eq("payment_status", "paid")
       .gte("paid_at", start)
       .lt("paid_at", end)
-      .order("paid_at", { ascending: false });
+      .order("paid_at", { ascending: false })
+      .limit(3000);
 
     if (bookingsErr) {
       return NextResponse.json({ error: bookingsErr.message }, { status: 500 });

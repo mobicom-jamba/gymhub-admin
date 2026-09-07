@@ -17,24 +17,38 @@ export default function BackupRestore() {
     try {
       const supabase = createBrowserSupabaseClient();
 
-      // Fetch all tables data
-      const [profiles, gyms, classes, bookings, visits] = await Promise.all([
-        supabase.from("profiles").select("*"),
-        supabase.from("gyms").select("*"),
-        supabase.from("classes").select("*"),
-        supabase.from("bookings").select("*"),
-        supabase.from("visit_logs").select("*"),
-      ]);
+      const fetchTable = async (table: string) => {
+        const pageSize = 500;
+        const all: unknown[] = [];
+        for (let from = 0; from < 10_000; from += pageSize) {
+          const { data, error } = await supabase
+            .from(table)
+            .select("*")
+            .range(from, from + pageSize - 1);
+          if (error) throw new Error(error.message);
+          const rows = data ?? [];
+          all.push(...rows);
+          if (rows.length < pageSize) break;
+        }
+        return all;
+      };
+
+      // Sequential pages so backup does not stampede Data API.
+      const profiles = await fetchTable("profiles");
+      const gyms = await fetchTable("gyms");
+      const classes = await fetchTable("classes");
+      const bookings = await fetchTable("bookings");
+      const visits = await fetchTable("visit_logs");
 
       const backup = {
         timestamp: new Date().toISOString(),
         version: "1.0",
         data: {
-          profiles: profiles.data || [],
-          gyms: gyms.data || [],
-          classes: classes.data || [],
-          bookings: bookings.data || [],
-          visit_logs: visits.data || [],
+          profiles,
+          gyms,
+          classes,
+          bookings,
+          visit_logs: visits,
         },
       };
 

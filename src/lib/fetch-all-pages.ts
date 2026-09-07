@@ -6,17 +6,19 @@ type PageResult<T> = {
 };
 
 /**
- * Supabase/PostgREST 1000 мөрийн хязгаарыг давж, хуудсуудыг параллель татна.
- * Count + эхний хуудсыг зэрэг эхлүүлнэ → дараалсан loop-оос ~3–4× хурдан.
+ * Supabase/PostgREST 1000 мөрийн хязгаарыг давж, хуудсуудыг цөөн зэрэг татна.
+ * Unlimited parallel pages saturates Data API; default concurrency is 2.
  */
 export async function fetchAllPagesParallel<T>(options: {
   pageSize?: number;
   maxPages?: number;
+  concurrency?: number;
   getCount?: () => Promise<{ count: number | null; error: PageError }>;
   fetchPage: (from: number, to: number) => Promise<PageResult<T>>;
 }): Promise<{ data: T[]; error: string | null }> {
   const pageSize = options.pageSize ?? 1000;
-  const maxPages = options.maxPages ?? 50;
+  const maxPages = options.maxPages ?? 20;
+  const concurrency = Math.max(1, options.concurrency ?? 2);
 
   const countPromise = options.getCount
     ? options.getCount()
@@ -44,19 +46,24 @@ export async function fetchAllPagesParallel<T>(options: {
     return { data: firstRows, error: null };
   }
 
-  const rest = await Promise.all(
-    Array.from({ length: totalPages - 1 }, (_, i) => {
-      const page = i + 1;
-      return options.fetchPage(page * pageSize, page * pageSize + pageSize - 1);
-    }),
-  );
-
   const all = [...firstRows];
-  for (const r of rest) {
-    if (r.error) return { data: all, error: r.error.message };
-    const rows = r.data ?? [];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
+  for (let page = 1; page < totalPages; page += concurrency) {
+    const batch = Array.from(
+      { length: Math.min(concurrency, totalPages - page) },
+      (_, i) => {
+        const p = page + i;
+        return options.fetchPage(p * pageSize, p * pageSize + pageSize - 1);
+      },
+    );
+    const rest = await Promise.all(batch);
+    for (const r of rest) {
+      if (r.error) return { data: all, error: r.error.message };
+      const rows = r.data ?? [];
+      all.push(...rows);
+      if (rows.length < pageSize) {
+        return { data: all, error: null };
+      }
+    }
   }
   return { data: all, error: null };
 }

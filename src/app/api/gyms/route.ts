@@ -27,7 +27,7 @@ export async function GET() {
       { gyms: withCounts },
       {
         headers: {
-          "Cache-Control": "public, max-age=30, stale-while-revalidate=60",
+          "Cache-Control": "public, max-age=60, stale-while-revalidate=120",
         },
       },
     );

@@ -26,28 +26,19 @@ export async function GET(request: Request) {
     }
 
     const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc("gym_visit_counts_since", {
+      p_since: since,
+    });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
     const counts: Record<string, number> = {};
-    const PAGE = 1000;
-    let from = 0;
-
-    for (;;) {
-      const { data, error } = await supabase
-        .from("gym_visits")
-        .select("gym_id")
-        .neq("status", "rejected")
-        .gte("checked_in_at", since)
-        .range(from, from + PAGE - 1);
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-
-      for (const row of data ?? []) {
-        if (row.gym_id) counts[row.gym_id] = (counts[row.gym_id] ?? 0) + 1;
-      }
-
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
+    for (const row of data ?? []) {
+      const gid = String((row as { gym_id?: string }).gym_id ?? "").trim();
+      if (!gid) continue;
+      counts[gid] = Number((row as { visitor_count?: number }).visitor_count) || 0;
     }
 
     return NextResponse.json({ counts });

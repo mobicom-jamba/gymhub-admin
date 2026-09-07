@@ -20,7 +20,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "gym_id шаардлагатай." }, { status: 400 });
     }
 
-    // 13 сарын хугацааны өгөгдөл (UTC+8 бүсийн эхний өдрөөс)
     const now = new Date();
     const cutoffUtc8 = new Date(now.getTime() + 8 * 3600 * 1000);
     cutoffUtc8.setUTCMonth(cutoffUtc8.getUTCMonth() - 12);
@@ -29,45 +28,35 @@ export async function GET(request: Request) {
     const cutoff = new Date(cutoffUtc8.getTime() - 8 * 3600 * 1000).toISOString();
 
     const supabase = createAdminClient();
-    const monthMap = new Map<string, number>();
-    const PAGE = 1000;
-    let from = 0;
+    const { data, error } = await supabase.rpc("gym_visit_counts_by_month", {
+      p_gym_id: gymId,
+      p_since: cutoff,
+    });
 
-    for (;;) {
-      const { data, error } = await supabase
-        .from("gym_visits")
-        .select("checked_in_at")
-        .eq("gym_id", gymId)
-        .neq("status", "rejected")
-        .gte("checked_in_at", cutoff)
-        .range(from, from + PAGE - 1);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-      for (const row of data ?? []) {
-        const ts = (row as { checked_in_at?: string | null }).checked_in_at;
-        if (!ts) continue;
-        const d = new Date(ts);
-        if (Number.isNaN(d.getTime())) continue;
-        // Монгол цаг UTC+8
-        const mnMs = d.getTime() + 8 * 3600 * 1000;
-        const mnD = new Date(mnMs);
-        const key = `${mnD.getUTCFullYear()}-${String(mnD.getUTCMonth() + 1).padStart(2, "0")}`;
-        monthMap.set(key, (monthMap.get(key) ?? 0) + 1);
-      }
-
-      if (!data || data.length < PAGE) break;
-      from += PAGE;
-    }
-
-    const months = Array.from(monthMap.entries())
-      .sort((a, b) => b[0].localeCompare(a[0]))
-      .map(([month, count]) => {
+    const months = ((data ?? []) as { month?: string; visitor_count?: number | string }[])
+      .map((row) => {
+        const month = String(row.month ?? "").trim();
+        const count = Number(row.visitor_count) || 0;
         const [y, m] = month.split("-");
-        return { month, label: `${y} оны ${parseInt(m, 10)} сар`, count };
-      });
+        return {
+          month,
+          label: `${y} оны ${parseInt(m, 10)} сар`,
+          count,
+        };
+      })
+      .filter((r) => /^\d{4}-\d{2}$/.test(r.month))
+      .sort((a, b) => b.month.localeCompare(a.month));
 
-    return NextResponse.json({ months });
+    return NextResponse.json(
+      { months },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=120, stale-while-revalidate=300",
+        },
+      },
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: msg }, { status: 500 });

@@ -175,6 +175,8 @@ export default function OrganizationsSection() {
     const supabase = createBrowserSupabaseClient();
     const { data } = await fetchAllPagesParallel<Member>({
       pageSize: 1000,
+      maxPages: 15,
+      concurrency: 2,
       getCount: async () => {
         const res = await supabase.from("profiles").select("id", { count: "exact", head: true });
         return { count: res.count, error: res.error };
@@ -191,12 +193,15 @@ export default function OrganizationsSection() {
     return data;
   }, []);
 
+  const ORG_TABLE_SELECT =
+    "id, name, logo_url, description, phone, facebook_url, website_url, partner_url, created_at";
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const supabase = createBrowserSupabaseClient();
     const [allMembers, orgsRes] = await Promise.all([
       fetchAllMemberPages(),
-      supabase.from("organizations").select("*").order("name", { ascending: true }),
+      supabase.from("organizations").select(ORG_TABLE_SELECT).order("name", { ascending: true }).limit(500),
     ]);
     setMembers(allMembers);
     setOrgRecords((orgsRes.data ?? []) as OrgRecord[]);
@@ -207,7 +212,7 @@ export default function OrganizationsSection() {
     const supabase = createBrowserSupabaseClient();
     const [allMembers, orgsRes] = await Promise.all([
       fetchAllMemberPages(),
-      supabase.from("organizations").select("*").order("name", { ascending: true }),
+      supabase.from("organizations").select(ORG_TABLE_SELECT).order("name", { ascending: true }).limit(500),
     ]);
     setMembers(allMembers);
     if (orgsRes.data) setOrgRecords(orgsRes.data as OrgRecord[]);

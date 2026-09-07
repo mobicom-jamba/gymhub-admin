@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const supabase = createAdminClient();
     const targetSalesId = auth.userId;
 
-    const [promosRes, sumRes, recentRes, profileRes, usersCountRes, usersRecentRes, gymsRes, orgsRes, requestRes] =
+    const [promosRes, sumRes, countRes, recentRes, profileRes, usersCountRes, usersRecentRes, gymsRes, orgsRes, requestRes] =
       await Promise.all([
       supabase
         .from("sales_promo_codes")
@@ -28,9 +28,13 @@ export async function GET(request: Request) {
 
       supabase
         .from("sales_commissions")
-        .select("commission_amount, gross_amount")
-        .eq("sales_user_id", targetSalesId)
-        .limit(5000),
+        .select("commission_total:commission_amount.sum(), gross_total:gross_amount.sum()")
+        .eq("sales_user_id", targetSalesId),
+
+      supabase
+        .from("sales_commissions")
+        .select("id", { count: "exact", head: true })
+        .eq("sales_user_id", targetSalesId),
 
       supabase
         .from("sales_commissions")
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
         .select("id, name, address, lat, lng, is_active")
         .eq("is_active", true)
         .order("name")
-        .limit(500),
+        .limit(100),
 
       supabase
         .from("organizations")
@@ -86,14 +90,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: recentRes.error.message }, { status: 500 });
     }
 
-    const totalCommission = (sumRes.data ?? []).reduce(
-      (acc, r) => acc + (Number((r as { commission_amount?: unknown }).commission_amount) || 0),
-      0,
-    );
-    const totalGrossRevenue = (sumRes.data ?? []).reduce(
-      (acc, r) => acc + (Number((r as { gross_amount?: unknown }).gross_amount) || 0),
-      0,
-    );
+    const sumRow = (sumRes.data?.[0] ?? {}) as {
+      commission_total?: unknown;
+      gross_total?: unknown;
+    };
+    const totalCommission = Number(sumRow.commission_total) || 0;
+    const totalGrossRevenue = Number(sumRow.gross_total) || 0;
     const promoCodes = (promosRes.data ?? []).map((row) => ({
       ...row,
       commission_percent: Math.round(Number(row.commission_rate ?? 0) * 10000) / 100,
@@ -123,7 +125,7 @@ export async function GET(request: Request) {
         active_commission_percent: Math.round(Number(activePromo?.commission_rate ?? 0.05) * 10000) / 100,
         commission_total: Math.round(totalCommission * 100) / 100,
         registration_revenue_total: Math.round(totalGrossRevenue * 100) / 100,
-        commission_count: sumRes.data?.length ?? 0,
+        commission_count: countRes.count ?? 0,
         recent_commissions: recentRes.data ?? [],
         registered_users_total: usersCountRes.count ?? 0,
         registered_users: usersRecentRes.data ?? [],

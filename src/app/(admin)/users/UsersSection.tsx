@@ -8,6 +8,7 @@ import UserStatsPanel from "./UserStatsPanel";
 import UserNoteModal, { type UserSalesNote } from "./UserNoteModal";
 import { fetchAllUserSalesNotes, patchUserSalesNotesCache } from "@/lib/user-sales-notes";
 import { fetchAllPagesParallel } from "@/lib/fetch-all-pages";
+import { fetchPaidBookingUserChannels } from "@/lib/paid-booking-user-channels";
 import { fetchUserVisitStats, type UserVisitStatsMap } from "./user-visit-stats";
 import type { UsersSortColumn } from "./users-sort";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -413,6 +414,8 @@ export default function UsersSection() {
     const load = (select: string, omitAgreement: boolean) =>
       fetchAllPagesParallel<Profile>({
         pageSize: PAGE,
+        maxPages: 15,
+        concurrency: 2,
         getCount: async () => {
           const res = await supabase.from("profiles").select("id", { count: "exact", head: true });
           return { count: res.count, error: res.error };
@@ -458,6 +461,8 @@ export default function UsersSection() {
     const supabase = createBrowserSupabaseClient();
     const { data } = await fetchAllPagesParallel<OrganizationOption>({
       pageSize: 1000,
+      maxPages: 5,
+      concurrency: 2,
       getCount: async () => {
         const res = await supabase.from("organizations").select("id", { count: "exact", head: true });
         return { count: res.count, error: res.error };
@@ -709,7 +714,8 @@ export default function UsersSection() {
           .eq("payment_status", "paid")
           .gte("paid_at", range.startIso)
           .lt("paid_at", range.endIso)
-          .order("paid_at", { ascending: false });
+          .order("paid_at", { ascending: false })
+          .limit(2000);
         if (!res.error) {
           rows = (res.data as PaidBookingRow[] | null) ?? [];
           bookingsError = null;
@@ -873,21 +879,22 @@ export default function UsersSection() {
           }
         }
       } else {
-        const { data: bookings } = await supabase
-          .from("bookings")
-          .select("user_id, payment_channel, qpay_invoice_id")
-          .eq("payment_status", "paid");
-        for (const row of bookings ?? []) {
-          if (!row.user_id) continue;
-          const ch = resolveRowChannel(row);
-          if (isGiftChannel(ch)) giftIds.add(row.user_id);
-          else if (ch) paidIds.add(row.user_id);
+        try {
+          const channels = await fetchPaidBookingUserChannels();
+          for (const row of channels) {
+            const ch = resolveRowChannel(row);
+            if (isGiftChannel(ch)) giftIds.add(row.user_id);
+            else if (ch) paidIds.add(row.user_id);
+          }
+        } catch {
+          /* RPC unavailable — leave booking-derived sets empty */
         }
 
         const { data: flexyPlans } = await supabase
           .from("installment_plans")
           .select("user_id")
-          .in("status", ["active", "completed"]);
+          .in("status", ["active", "completed"])
+          .limit(5000);
         for (const plan of flexyPlans ?? []) {
           if (plan.user_id) paidIds.add(plan.user_id);
         }
@@ -895,7 +902,8 @@ export default function UsersSection() {
         const { data: audits } = await supabase
           .from("membership_audit_logs")
           .select("profile_id, payment_channel, new_membership_status, old_membership_status")
-          .eq("source", "admin");
+          .eq("source", "admin")
+          .limit(5000);
         for (const a of audits ?? []) {
           if (!a.profile_id) continue;
           if (String(a.new_membership_status ?? "").toLowerCase() !== "active") continue;
@@ -945,20 +953,21 @@ export default function UsersSection() {
       const ids = new Set<string>();
       const filter = paymentChannelFilter;
 
-      const { data: bookings } = await supabase
-        .from("bookings")
-        .select("user_id, payment_channel, qpay_invoice_id")
-        .eq("payment_status", "paid");
-      for (const row of bookings ?? []) {
-        if (!row.user_id) continue;
-        if (channelMatchesFilter(row, filter)) ids.add(row.user_id);
+      try {
+        const channels = await fetchPaidBookingUserChannels();
+        for (const row of channels) {
+          if (channelMatchesFilter(row, filter)) ids.add(row.user_id);
+        }
+      } catch {
+        /* RPC unavailable */
       }
 
       if (filter === "gymfintech") {
         const { data: flexyPlans } = await supabase
           .from("installment_plans")
           .select("user_id")
-          .in("status", ["active", "completed"]);
+          .in("status", ["active", "completed"])
+          .limit(5000);
         for (const plan of flexyPlans ?? []) {
           if (plan.user_id) ids.add(plan.user_id);
         }
@@ -968,7 +977,8 @@ export default function UsersSection() {
         const { data: audits } = await supabase
           .from("membership_audit_logs")
           .select("profile_id, payment_channel, new_membership_status, old_membership_status")
-          .eq("source", "admin");
+          .eq("source", "admin")
+          .limit(5000);
         for (const a of audits ?? []) {
           if (!a.profile_id) continue;
           if (String(a.new_membership_status ?? "").toLowerCase() !== "active") continue;
@@ -1186,7 +1196,8 @@ export default function UsersSection() {
           .select("user_id, payment_channel, qpay_invoice_id, paid_at, created_at")
           .eq("payment_status", "paid")
           .in("user_id", ids)
-          .order("paid_at", { ascending: false });
+          .order("paid_at", { ascending: false })
+          .limit(500);
         rows = (res.data as ChannelRow[] | null) ?? null;
         error = res.error;
       }
@@ -1197,7 +1208,8 @@ export default function UsersSection() {
           .select("user_id, payment_channel, qpay_invoice_id, created_at")
           .eq("payment_status", "paid")
           .in("user_id", ids)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(500);
         rows = (fb.data as ChannelRow[] | null) ?? null;
         error = fb.error;
       }
@@ -1208,7 +1220,8 @@ export default function UsersSection() {
           .select("user_id, qpay_invoice_id, paid_at, created_at")
           .eq("payment_status", "paid")
           .in("user_id", ids)
-          .order("paid_at", { ascending: false });
+          .order("paid_at", { ascending: false })
+          .limit(500);
         rows = (fb.data as ChannelRow[] | null) ?? null;
         error = fb.error;
       }
@@ -1219,7 +1232,8 @@ export default function UsersSection() {
         .select("id, user_id, installment_count, status, created_at")
         .in("user_id", ids)
         .in("status", ["active", "completed"])
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(200);
 
       const planByUser = new Map<
         string,

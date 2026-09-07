@@ -106,8 +106,9 @@ export default function VisitsSection() {
     const supabase = createBrowserSupabaseClient();
     const all: MemberProfile[] = [];
     const PAGE = 1000;
+    const MAX = 15_000;
     let from = 0;
-    while (true) {
+    while (from < MAX) {
       const { data, error: err } = await supabase
         .from("profiles")
         .select("id, full_name, phone, avatar_path, membership_status, membership_expires_at")

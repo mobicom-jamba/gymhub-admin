@@ -99,9 +99,12 @@ export default function GymsSection() {
     const supabase = createBrowserSupabaseClient();
     const { data, error: err } = await supabase
       .from("gyms")
-      .select("*")
+      .select(
+        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, daily_visitor_limit, sort_order, billing_mode, billing_amount_mnt, created_at, type",
+      )
       .order("sort_order", { ascending: true })
-      .order("name");
+      .order("name")
+      .limit(200);
     setGyms(data ?? []);
     setError(err?.message ?? null);
     setLoading(false);

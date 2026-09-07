@@ -10,8 +10,11 @@ export async function GET(request: Request) {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("coupons")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(
+        "id, partner_name, title, description, discount_percent, expires_at, partner_logo_url, is_active, view_count, required_tier, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     if (error) {
       return errorResponse("INTERNAL_ERROR", "Купоны жагсаалт ачаалж чадсангүй.", 500, error.message);

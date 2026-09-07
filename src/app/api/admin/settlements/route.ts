@@ -69,24 +69,16 @@ async function countVisitsByGym(
   startIso: string,
   endIso: string,
 ): Promise<Record<string, number>> {
+  const { data, error } = await supabase.rpc("gym_visit_counts_in_range", {
+    p_start: startIso,
+    p_end: endIso,
+  });
+  if (error) throw new Error(error.message);
   const counts: Record<string, number> = {};
-  const PAGE = 1000;
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from("gym_visits")
-      .select("gym_id")
-      .neq("status", "rejected")
-      .gte("checked_in_at", startIso)
-      .lt("checked_in_at", endIso)
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    for (const row of data ?? []) {
-      const id = (row as { gym_id?: string | null }).gym_id;
-      if (id) counts[id] = (counts[id] ?? 0) + 1;
-    }
-    if (!data || data.length < PAGE) break;
-    from += PAGE;
+  for (const row of data ?? []) {
+    const id = String((row as { gym_id?: string | null }).gym_id ?? "").trim();
+    if (!id) continue;
+    counts[id] = Number((row as { visitor_count?: number | string }).visitor_count) || 0;
   }
   return counts;
 }
@@ -182,27 +174,23 @@ async function loadAllVisitsByMonth(
   startIso: string,
   endIso: string,
 ): Promise<Record<string, Record<string, number>>> {
+  const { data, error } = await supabase.rpc("gym_visit_counts_by_gym_month", {
+    p_start: startIso,
+    p_end: endIso,
+  });
+  if (error) throw new Error(error.message);
   const byMonth: Record<string, Record<string, number>> = {};
-  const PAGE = 1000;
-  let from = 0;
-  for (;;) {
-    const { data, error } = await supabase
-      .from("gym_visits")
-      .select("gym_id, checked_in_at")
-      .neq("status", "rejected")
-      .gte("checked_in_at", startIso)
-      .lt("checked_in_at", endIso)
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    for (const row of data ?? []) {
-      const r = row as { gym_id?: string | null; checked_in_at?: string | null };
-      if (!r.gym_id || !r.checked_in_at) continue;
-      const mk = monthKeyMn(r.checked_in_at);
-      if (!byMonth[mk]) byMonth[mk] = {};
-      byMonth[mk][r.gym_id] = (byMonth[mk][r.gym_id] ?? 0) + 1;
-    }
-    if (!data || data.length < PAGE) break;
-    from += PAGE;
+  for (const row of data ?? []) {
+    const r = row as {
+      gym_id?: string | null;
+      month?: string | null;
+      visitor_count?: number | string | null;
+    };
+    const gymId = String(r.gym_id ?? "").trim();
+    const month = String(r.month ?? "").trim();
+    if (!gymId || !/^\d{4}-\d{2}$/.test(month)) continue;
+    if (!byMonth[month]) byMonth[month] = {};
+    byMonth[month][gymId] = Number(r.visitor_count) || 0;
   }
   return byMonth;
 }
@@ -232,8 +220,13 @@ export async function GET(request: Request) {
             .select(
               "id, name, city, type, is_active, image_url, billing_mode, billing_amount_mnt, sort_order",
             )
-            .order("sort_order", { ascending: true }),
-          supabase.from("gym_billing_settlements").select("*"),
+            .order("sort_order", { ascending: true })
+            .limit(200),
+          supabase
+            .from("gym_billing_settlements")
+            .select(
+              "id, gym_id, month, visit_count, billing_mode, unit_amount_mnt, computed_amount_mnt, amount_mnt, notes, status, updated_at",
+            ),
           supabase
             .from("gym_visits")
             .select("checked_in_at")
@@ -308,8 +301,14 @@ export async function GET(request: Request) {
           .select(
             "id, name, city, type, is_active, image_url, billing_mode, billing_amount_mnt, sort_order",
           )
-          .order("sort_order", { ascending: true }),
-        supabase.from("gym_billing_settlements").select("*").eq("month", month),
+          .order("sort_order", { ascending: true })
+          .limit(200),
+        supabase
+          .from("gym_billing_settlements")
+          .select(
+            "id, gym_id, month, visit_count, billing_mode, unit_amount_mnt, computed_amount_mnt, amount_mnt, notes, status, updated_at",
+          )
+          .eq("month", month),
         countVisitsByGym(supabase, bounds.startIso, bounds.endIso),
       ]);
 
