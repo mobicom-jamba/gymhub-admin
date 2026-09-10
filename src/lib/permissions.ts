@@ -1,4 +1,4 @@
-export type AppRole = "admin" | "moderator" | "sales" | "gym_owner" | "user";
+export type AppRole = "admin" | "moderator" | "sales" | "gym_owner" | "org_admin" | "user";
 
 export type AppPermission =
   | "admin.app.access"
@@ -19,7 +19,11 @@ export type AppPermission =
   | "commissions.rate.request"
   | "commissions.rate.approve"
   | "coupons.manage"
-  | "payments.installments.view";
+  | "payments.installments.view"
+  | "org.admins.manage"
+  | "org.portal.access"
+  | "org.members.view"
+  | "org.reports.export";
 
 const ALL_PERMISSIONS: AppPermission[] = [
   "admin.app.access",
@@ -41,6 +45,10 @@ const ALL_PERMISSIONS: AppPermission[] = [
   "commissions.rate.approve",
   "coupons.manage",
   "payments.installments.view",
+  "org.admins.manage",
+  "org.portal.access",
+  "org.members.view",
+  "org.reports.export",
 ];
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
@@ -51,7 +59,8 @@ const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
       permission !== "users.manage" &&
       permission !== "users.role.assign" &&
       permission !== "users.subscription.edit" &&
-      permission !== "organizations.create",
+      permission !== "organizations.create" &&
+      permission !== "org.admins.manage",
   ),
   sales: [
     "admin.app.access",
@@ -64,6 +73,8 @@ const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
     "commissions.rate.request",
   ],
   gym_owner: ["fitness.activity.view", "gyms.view"],
+  // HR: зөвхөн өөрийн байгууллагын портал. Админ вэб апп руу орох эрхгүй.
+  org_admin: ["org.portal.access", "org.members.view", "org.reports.export"],
   user: [],
 };
 
@@ -73,6 +84,7 @@ export function normalizeAppRole(raw: string | null | undefined): AppRole {
   if (role === "moderator") return "moderator";
   if (role === "sales") return "sales";
   if (role === "gym_owner") return "gym_owner";
+  if (role === "org_admin") return "org_admin";
   return "user";
 }
 

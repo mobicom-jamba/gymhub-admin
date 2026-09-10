@@ -67,6 +67,11 @@ const navItems: NavItem[] = [
     path: "/organizations",
   },
   {
+    icon: <UserCircleIcon />,
+    name: "HR",
+    path: "/hr",
+  },
+  {
     icon: <PlugInIcon />,
     name: "Купон",
     path: "/coupons",
@@ -118,6 +123,7 @@ const AppSidebar: React.FC = () => {
           if (!item.path) return true;
           if (item.path === "/users") return hasPermission(permissions, "users.view");
           if (item.path === "/organizations") return hasPermission(permissions, "organizations.view");
+          if (item.path === "/hr") return hasPermission(permissions, "org.members.view");
           if (item.path === "/gyms") return hasPermission(permissions, "gyms.view");
           if (item.path === "/settlements") return role === "admin";
           if (item.path === "/settings") return role === "admin";
