@@ -23,7 +23,11 @@ export type AppPermission =
   | "org.admins.manage"
   | "org.portal.access"
   | "org.members.view"
-  | "org.reports.export";
+  | "org.reports.export"
+  | "videos.view"
+  | "videos.manage"
+  | "office.requests.view"
+  | "office.requests.manage";
 
 const ALL_PERMISSIONS: AppPermission[] = [
   "admin.app.access",
@@ -49,6 +53,10 @@ const ALL_PERMISSIONS: AppPermission[] = [
   "org.portal.access",
   "org.members.view",
   "org.reports.export",
+  "videos.view",
+  "videos.manage",
+  "office.requests.view",
+  "office.requests.manage",
 ];
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
@@ -60,7 +68,8 @@ const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
       permission !== "users.role.assign" &&
       permission !== "users.subscription.edit" &&
       permission !== "organizations.create" &&
-      permission !== "org.admins.manage",
+      permission !== "org.admins.manage" &&
+      permission !== "videos.manage",
   ),
   sales: [
     "admin.app.access",
@@ -71,6 +80,8 @@ const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
     "gyms.map.view",
     "commissions.view.own",
     "commissions.rate.request",
+    "videos.view",
+    "office.requests.view",
   ],
   gym_owner: ["fitness.activity.view", "gyms.view"],
   // HR: зөвхөн өөрийн байгууллагын портал. Админ вэб апп руу орох эрхгүй.

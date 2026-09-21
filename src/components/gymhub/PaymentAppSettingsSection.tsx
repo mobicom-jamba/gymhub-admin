@@ -21,12 +21,20 @@ import {
   type MembershipPackage,
   type StoredMembershipTier,
 } from "@/lib/membership-packages";
+import {
+  DEFAULT_OFFICE_PACKAGES,
+  OFFICE_PLAN_LABELS,
+  newBlankOfficePackage,
+  type OfficePackage,
+  type OfficePlanKey,
+} from "@/lib/office-packages";
 import { PencilIcon } from "@/icons/index";
 
 type Settings = {
   early_membership_price_mnt: number;
   early_remainder_price_mnt: number;
   packages: MembershipPackage[];
+  office_packages: OfficePackage[];
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
@@ -320,6 +328,7 @@ export default function PaymentAppSettingsSection() {
   const [monpay, setMonpay] = useState(true);
   const [gymfintech, setGymfintech] = useState(true);
   const [requireAvatar, setRequireAvatar] = useState(true);
+  const [officePackages, setOfficePackages] = useState<OfficePackage[]>(DEFAULT_OFFICE_PACKAGES);
   const [banner, setBanner] = useState<BannerConfig>(DEFAULT_BANNER);
   const [bannerUploading, setBannerUploading] = useState(false);
   const bannerFileRef = useRef<HTMLInputElement | null>(null);
@@ -352,6 +361,7 @@ export default function PaymentAppSettingsSection() {
     setMonpay(s.payment_monpay_enabled);
     setGymfintech(s.payment_gymfintech_enabled);
     setRequireAvatar(s.require_profile_avatar !== false);
+    setOfficePackages(Array.isArray(s.office_packages) ? s.office_packages : []);
     setBanner(s.banner ?? DEFAULT_BANNER);
     setUpdatedAt(s.updated_at);
   };
@@ -464,6 +474,10 @@ export default function PaymentAppSettingsSection() {
     });
   };
 
+  const updateOfficeRow = (index: number, patch: Partial<OfficePackage>) => {
+    setOfficePackages((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
   const save = async () => {
     for (const p of packages) {
       if (!p.name.trim()) {
@@ -498,6 +512,7 @@ export default function PaymentAppSettingsSection() {
           payment_monpay_enabled: monpay,
           payment_gymfintech_enabled: gymfintech,
           require_profile_avatar: requireAvatar,
+          office_packages: officePackages,
           banner,
         }),
       });
@@ -813,6 +828,111 @@ export default function PaymentAppSettingsSection() {
           <Button onClick={save} disabled={loading || saving} className="w-full sm:w-auto">
             {saving ? "Хадгалж байна…" : "Хадгалах"}
           </Button>
+        </div>
+      </ComponentCard>
+
+      <ComponentCard
+        title="Оффис багц"
+        subtitle="Байгууллагад санал болгох багц — аппд «Оффис багц» табд харагдаж, захиалгын хүсэлт ирнэ"
+      >
+        <div className="space-y-3">
+          {officePackages.length === 0 && (
+            <p className="rounded-lg bg-gray-50 px-3 py-4 text-center text-sm text-gray-500 dark:bg-white/5 dark:text-gray-400">
+              Багц алга. «+ Мөр нэмэх» дарж нэмнэ үү.
+            </p>
+          )}
+
+          {officePackages.map((row, index) => (
+            <div
+              key={row.id}
+              className="grid gap-3 rounded-xl border border-gray-200 p-3 dark:border-gray-800 sm:grid-cols-[1fr_1.4fr_1fr_1fr_auto]"
+            >
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-gray-500">Хүний тоо</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={row.headcount || ""}
+                  onChange={(e) => {
+                    const headcount = Math.max(0, Number(e.target.value) || 0);
+                    updateOfficeRow(index, { headcount, label: `${headcount} хүртэлх хүн` });
+                  }}
+                  className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm dark:border-gray-700 dark:bg-gray-800/80 dark:text-white/90"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-gray-500">Нөхцөл</label>
+                <select
+                  value={row.plan_key}
+                  onChange={(e) => {
+                    const planKey = e.target.value as OfficePlanKey;
+                    updateOfficeRow(index, {
+                      plan_key: planKey,
+                      plan_label: OFFICE_PLAN_LABELS[planKey],
+                    });
+                  }}
+                  className="h-10 w-full rounded-lg border border-gray-200 px-3 text-sm dark:border-gray-700 dark:bg-gray-800/80 dark:text-white/90"
+                >
+                  {(Object.keys(OFFICE_PLAN_LABELS) as OfficePlanKey[]).map((key) => (
+                    <option key={key} value={key}>
+                      {OFFICE_PLAN_LABELS[key]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-gray-500">Багцын үнэ ₮</label>
+                <MoneyInput
+                  value={row.price_mnt}
+                  onChange={(price_mnt) => updateOfficeRow(index, { price_mnt })}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-gray-500">1 оролт ₮</label>
+                <MoneyInput
+                  value={row.per_visit_mnt}
+                  onChange={(per_visit_mnt) => updateOfficeRow(index, { per_visit_mnt })}
+                />
+              </div>
+
+              <div className="flex items-end gap-2 pb-0.5">
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    onChange={(e) => updateOfficeRow(index, { enabled: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                  />
+                  Идэвхтэй
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setOfficePackages((prev) => prev.filter((p) => p.id !== row.id))}
+                  className="rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900/40 dark:hover:bg-red-900/20"
+                >
+                  Устгах
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() =>
+                setOfficePackages((prev) => [...prev, newBlankOfficePackage(prev.length)])
+              }
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            >
+              + Мөр нэмэх
+            </button>
+            <Button onClick={save} disabled={loading || saving} className="w-full sm:w-auto">
+              {saving ? "Хадгалж байна…" : "Хадгалах"}
+            </Button>
+          </div>
         </div>
       </ComponentCard>
 

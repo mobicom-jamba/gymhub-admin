@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase";
 import { QPayError, checkQpayInvoice } from "@/lib/qpay-client";
 import { safeFindBookingIdByInvoice, safeUpdateBookingById } from "../_lib/bookings";
+import { isOfficeBookingId, markOfficeOrderPaid } from "@/lib/office-order-settle";
 import {
   findFlexyPaymentForQpayCallback,
   settleFlexyInstallmentPaid,
@@ -91,6 +92,23 @@ async function handleCallback(request: Request) {
     }
 
     if (resolvedBookingId && (!paymentStatus || paymentStatus === "PAID")) {
+      if (isOfficeBookingId(resolvedBookingId)) {
+        // Callback-ийн үгэнд итгэлгүй — дүнг нь QPay-гээс шалгаж авна.
+        let officePaidAmount: number | null = null;
+        if (invoiceId) {
+          try {
+            const verified = await checkQpayInvoice(invoiceId);
+            officePaidAmount =
+              typeof verified.paid_amount === "number" ? verified.paid_amount : null;
+          } catch {
+            officePaidAmount = null;
+          }
+        }
+        await markOfficeOrderPaid(supabase, resolvedBookingId, {
+          invoiceId,
+          paidAmount: officePaidAmount,
+        });
+      }
       const updateError = await safeUpdateBookingById(supabase, resolvedBookingId, {
         payment_status: "paid",
         payment_channel: "qpay",

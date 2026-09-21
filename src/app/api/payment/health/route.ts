@@ -256,5 +256,18 @@ export async function GET() {
         qpay_only: p.qpay_only === true,
         available_until: p.available_until ?? null,
       })),
+    // Оффис (байгууллагын) багц — аппд зөвхөн харагдаж, захиалгын хүсэлт үлдээнэ.
+    office_packages: settings.office_packages
+      .filter((p) => p.enabled)
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        plan_key: p.plan_key,
+        plan_label: p.plan_label,
+        headcount: p.headcount,
+        price_mnt: p.price_mnt,
+        per_visit_mnt: p.per_visit_mnt,
+        sort_order: p.sort_order,
+      })),
   });
 }

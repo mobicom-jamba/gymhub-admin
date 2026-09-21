@@ -8,6 +8,7 @@ import {
   type MembershipPackage,
   type PaymentAppSettingsRow,
 } from "@/lib/payment-app-settings";
+import { normalizeOfficePackages } from "@/lib/office-packages";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 
 function parsePrice(o: Record<string, unknown>, key: string, out: Partial<PaymentAppSettingsRow>): boolean {
@@ -52,6 +53,11 @@ function parseBody(body: unknown): Partial<PaymentAppSettingsRow> | null {
   if ("payment_gymfintech_enabled" in o) out.payment_gymfintech_enabled = Boolean(o.payment_gymfintech_enabled);
   if ("require_profile_avatar" in o) out.require_profile_avatar = Boolean(o.require_profile_avatar);
   if ("banner" in o) out.banner = normalizeBanner(o.banner);
+
+  if ("office_packages" in o) {
+    if (!Array.isArray(o.office_packages)) return null;
+    out.office_packages = normalizeOfficePackages(o.office_packages);
+  }
 
   return Object.keys(out).length ? out : null;
 }
@@ -106,6 +112,7 @@ export async function PATCH(request: Request) {
       ...current,
       ...patch,
       packages: (patch.packages as MembershipPackage[] | undefined) ?? current.packages,
+      office_packages: patch.office_packages ?? current.office_packages,
       updated_at: new Date().toISOString(),
     };
 
@@ -128,6 +135,7 @@ export async function PATCH(request: Request) {
       premium4_pool_months: next.premium4_pool_months,
       premium4_yoga_months: next.premium4_yoga_months,
       packages: next.packages,
+      office_packages: next.office_packages,
       payment_qpay_enabled: next.payment_qpay_enabled,
       payment_sono_enabled: next.payment_sono_enabled,
       payment_pocket_enabled: next.payment_pocket_enabled,
@@ -140,8 +148,19 @@ export async function PATCH(request: Request) {
     };
 
     let { error } = await admin.from("payment_app_settings").upsert(payload, { onConflict: "id" });
-    if (error && (error.code === "42703" || error.message?.includes("require_profile_avatar") || error.message?.includes("banner"))) {
-      const { require_profile_avatar: _omit, banner: _omitBanner, ...withoutOptionalCols } = payload;
+    if (
+      error &&
+      (error.code === "42703" ||
+        error.message?.includes("require_profile_avatar") ||
+        error.message?.includes("banner") ||
+        error.message?.includes("office_packages"))
+    ) {
+      const {
+        require_profile_avatar: _omit,
+        banner: _omitBanner,
+        office_packages: _omitOffice,
+        ...withoutOptionalCols
+      } = payload;
       const retry = await admin.from("payment_app_settings").upsert(withoutOptionalCols, { onConflict: "id" });
       error = retry.error;
     }

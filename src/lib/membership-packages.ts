@@ -1,3 +1,9 @@
+import {
+  DEFAULT_OFFICE_PACKAGES,
+  normalizeOfficePackages,
+  type OfficePackage,
+} from "@/lib/office-packages";
+
 /** profiles.membership_tier enum-д байгаа утгууд */
 export type StoredMembershipTier = "standard" | "premium1" | "premium2" | "gymcore" | "early" | "gymgo";
 
@@ -41,6 +47,7 @@ export type PaymentAppSettingsRow = {
   premium4_pool_months: number;
   premium4_yoga_months: number;
   packages: MembershipPackage[];
+  office_packages: OfficePackage[];
   payment_qpay_enabled: boolean;
   payment_sono_enabled: boolean;
   payment_pocket_enabled: boolean;
@@ -159,6 +166,7 @@ export const PAYMENT_APP_SETTINGS_DEFAULTS: Omit<PaymentAppSettingsRow, "updated
   premium4_pool_months: 3,
   premium4_yoga_months: 3,
   packages: DEFAULT_PACKAGES,
+  office_packages: DEFAULT_OFFICE_PACKAGES,
   payment_qpay_enabled: true,
   payment_sono_enabled: true,
   payment_pocket_enabled: true,
@@ -380,6 +388,7 @@ export function normalizePaymentAppSettingsRow(row: Record<string, unknown>): Pa
     premium4_yoga_months: flatPartial.premium4_yoga_months!,
     ...synced,
     packages,
+    office_packages: normalizeOfficePackages(row.office_packages),
     payment_qpay_enabled: row.payment_qpay_enabled !== false,
     payment_sono_enabled: row.payment_sono_enabled !== false,
     payment_pocket_enabled: row.payment_pocket_enabled !== false,

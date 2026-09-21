@@ -18,6 +18,7 @@ import {
   TableIcon,
   TaskIcon,
   UserCircleIcon,
+  VideoIcon,
 } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
 import { canAccessAuditLog } from "@/lib/audit-log-access";
@@ -82,6 +83,16 @@ const navItems: NavItem[] = [
     path: "/news",
   },
   {
+    icon: <VideoIcon />,
+    name: "Видео хичээл",
+    path: "/video-lessons",
+  },
+  {
+    icon: <TableIcon />,
+    name: "Оффис захиалга",
+    path: "/office-requests",
+  },
+  {
     icon: <PlugInIcon />,
     name: "Push мэдэгдэл",
     path: "/notifications",
@@ -129,6 +140,8 @@ const AppSidebar: React.FC = () => {
           if (item.path === "/settings") return role === "admin";
           if (item.path === "/coupons") return hasPermission(permissions, "coupons.manage");
           if (item.path === "/notifications") return hasPermission(permissions, "users.manage");
+          if (item.path === "/video-lessons") return hasPermission(permissions, "videos.view");
+          if (item.path === "/office-requests") return hasPermission(permissions, "office.requests.view");
           return true;
         }),
     [permissions, role, user?.email],
