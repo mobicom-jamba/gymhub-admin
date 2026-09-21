@@ -13,6 +13,14 @@ import {
   maxInstallmentsForPlan,
   presetSplitAmounts,
 } from "@/lib/installment-schedule";
+import { isRestrictedChannelPackageId } from "@/lib/smart-promo";
+
+/** Flexy-д зөвшөөрөгдсөн багц уу — Smart/GymGo сервер талдаа хориотой. */
+function isFlexyEligiblePackage(pkg: MembershipPackage): boolean {
+  return !isRestrictedChannelPackageId(pkg.id) && !pkg.qpay_only;
+}
+
+const FLEXY_FALLBACK_PACKAGES = DEFAULT_PACKAGES.filter(isFlexyEligiblePackage);
 
 type ProfileHit = {
   id: string;
@@ -40,7 +48,7 @@ const inputClass =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-theme-xs dark:border-gray-700 dark:bg-gray-900 dark:text-white";
 
 export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Props) {
-  const [packages, setPackages] = useState<MembershipPackage[]>(DEFAULT_PACKAGES.filter((p) => p.enabled));
+  const [packages, setPackages] = useState<MembershipPackage[]>(FLEXY_FALLBACK_PACKAGES.filter((p) => p.enabled));
   const [userQuery, setUserQuery] = useState("");
   const [userHits, setUserHits] = useState<ProfileHit[]>([]);
   const [selectedUser, setSelectedUser] = useState<ProfileHit | null>(null);
@@ -89,21 +97,26 @@ export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Pro
         const data = await res.json();
         if (data.ok && Array.isArray(data.settings?.packages)) {
           const enabled = (data.settings.packages as MembershipPackage[]).filter(
-            (p) => p.enabled && p.id !== "smart" && !p.qpay_only,
+            (p) => p.enabled && isFlexyEligiblePackage(p),
           );
-          setPackages(enabled.length ? enabled : DEFAULT_PACKAGES.filter((p) => p.id !== "smart"));
-          const first = enabled[0] ?? DEFAULT_PACKAGES.find((p) => p.id === "standard3") ?? DEFAULT_PACKAGES[0];
+          setPackages(enabled.length ? enabled : FLEXY_FALLBACK_PACKAGES);
+          const first =
+            enabled[0] ??
+            FLEXY_FALLBACK_PACKAGES.find((p) => p.id === "standard3") ??
+            FLEXY_FALLBACK_PACKAGES[0];
           if (first) {
             setPlanTier(first.id);
             setAmount(first.price_mnt);
           }
         } else {
-          const first = DEFAULT_PACKAGES.find((p) => p.id === "standard3") ?? DEFAULT_PACKAGES[0];
+          const first =
+            FLEXY_FALLBACK_PACKAGES.find((p) => p.id === "standard3") ?? FLEXY_FALLBACK_PACKAGES[0];
           setPlanTier(first.id);
           setAmount(first.price_mnt);
         }
       } catch {
-        const first = DEFAULT_PACKAGES.find((p) => p.id === "standard3") ?? DEFAULT_PACKAGES[0];
+        const first =
+          FLEXY_FALLBACK_PACKAGES.find((p) => p.id === "standard3") ?? FLEXY_FALLBACK_PACKAGES[0];
         setPlanTier(first.id);
         setAmount(first.price_mnt);
       }
@@ -282,7 +295,7 @@ export default function CreateFlexyPlanModal({ isOpen, onClose, onSuccess }: Pro
             onChange={(e) => onSelectPackage(e.target.value)}
           >
             {packages
-              .filter((p) => p.id !== "smart" && !p.qpay_only)
+              .filter(isFlexyEligiblePackage)
               .map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name} — {formatMnt(p.price_mnt)} ({p.months} сар)
