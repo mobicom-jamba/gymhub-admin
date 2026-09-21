@@ -24,7 +24,10 @@ export async function GET() {
       { organizations },
       {
         headers: {
-          "Cache-Control": "public, max-age=300, stale-while-revalidate=600",
+          // Шинэ байгууллага HR-ийн сонголтод шууд гарч ирэх ёстой тул
+          // хөтөч бүрд тухай бүр шалгуулна; ачааллыг зөвхөн CDN богино
+          // хугацаанд авч үлдэнэ.
+          "Cache-Control": "public, max-age=0, must-revalidate, s-maxage=30, stale-while-revalidate=60",
         },
       },
     );

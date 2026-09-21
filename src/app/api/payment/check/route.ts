@@ -4,6 +4,7 @@ import { requirePaymentChannel } from "@/lib/payment-app-settings";
 import { safeUpdateBookingById } from "../_lib/bookings";
 import { recordSalesCommissionForPaidMembership } from "@/lib/sales-commission";
 import { applyMembershipActivationForPaidBooking } from "@/lib/membership-from-booking";
+import { isOfficeBookingId, markOfficeOrderPaid } from "@/lib/office-order-settle";
 import { QPayError, checkQpayInvoice } from "@/lib/qpay-client";
 
 export async function POST(request: Request) {
@@ -42,6 +43,13 @@ export async function POST(request: Request) {
             payment_channel: "qpay",
             paid_at: new Date().toISOString(),
             ...(user_id ? { user_id } : {}),
+          });
+        }
+
+        if (isOfficeBookingId(booking_id)) {
+          await markOfficeOrderPaid(supabase, booking_id as string, {
+            invoiceId: invoice_id,
+            paidAmount: typeof result.paid_amount === "number" ? result.paid_amount : null,
           });
         }
 

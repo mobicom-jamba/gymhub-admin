@@ -15,6 +15,51 @@ export class QPayError extends Error {
 let _token: string | null = null;
 let _tokenExpiresAt = 0;
 
+/** Хамгийн урт кэшлэх хугацаа — QPay юу ч буцаасан үүнээс хэтрэхгүй. */
+const MAX_TOKEN_TTL_MS = 50 * 60 * 1000;
+
+/**
+ * QPay нь `expires_in`-г үргэлжлэх хугацаа (сек) биш, ДУУСАХ Unix timestamp
+ * (сек) хэлбэрээр буцаадаг. Түүнийг хугацаа гэж үзвэл кэш хэзээ ч хоцрохгүй
+ * гэж бодогдож, бодит токен дуусахад бүх QPay дуудлага 401 болж унана.
+ * Тиймээс том утгыг timestamp гэж тайлна.
+ */
+function resolveTokenExpiry(raw: unknown): number {
+  const now = Date.now();
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return now + MAX_TOKEN_TTL_MS;
+
+  // ~115 хоногоос урт "хугацаа" гэж байхгүй — энэ бол timestamp.
+  const asMs = value > 10_000_000 ? value * 1000 : now + value * 1000;
+  return Math.min(asMs - 60_000, now + MAX_TOKEN_TTL_MS);
+}
+
+/** Токен хүчингүй болсныг мэдэгдэх — дараагийн дуудлага шинээр авна. */
+export function invalidateQpayToken(): void {
+  _token = null;
+  _tokenExpiresAt = 0;
+}
+
+/**
+ * QPay руу токентой хүсэлт явуулна. 401 ирвэл кэшээ хаяад нэг удаа дахин
+ * оролдоно — сервер удаан ажиллаж байхад токен хуучирсан тохиолдлыг арилгана.
+ */
+async function qpayFetch(path: string, init: RequestInit): Promise<Response> {
+  const send = async () => {
+    const token = await getQpayToken();
+    return fetch(`${QPAY_BASE}${path}`, {
+      ...init,
+      headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
+    });
+  };
+
+  const res = await send();
+  if (res.status !== 401) return res;
+
+  invalidateQpayToken();
+  return send();
+}
+
 /** QPay sender_invoice_no max length is 45 chars. Deterministic-ish and unique per request. */
 export function buildSenderInvoiceNo(bookingId: string): string {
   const ts = Date.now().toString();
@@ -41,8 +86,7 @@ export async function getQpayToken(): Promise<string> {
   }
   const data = await res.json();
   _token = data.access_token as string;
-  // QPay tokens are typically valid for 3600s; refresh 60s early
-  _tokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
+  _tokenExpiresAt = resolveTokenExpiry(data.expires_in);
   return _token;
 }
 
@@ -57,13 +101,9 @@ export async function createQpayInvoice(params: {
     throw new QPayError("QPAY_INVOICE_CODE тохируулагдаагүй байна");
   }
 
-  const token = await getQpayToken();
-  const res = await fetch(`${QPAY_BASE}/invoice`, {
+  const res = await qpayFetch("/invoice", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       invoice_code: QPAY_INVOICE_CODE,
       sender_invoice_no: params.senderInvoiceNo,
@@ -98,13 +138,9 @@ export type QpayCheckResult = {
 };
 
 export async function checkQpayInvoice(invoiceId: string): Promise<QpayCheckResult> {
-  const token = await getQpayToken();
-  const res = await fetch(`${QPAY_BASE}/payment/check`, {
+  const res = await qpayFetch("/payment/check", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       object_type: "INVOICE",
       object_id: invoiceId,

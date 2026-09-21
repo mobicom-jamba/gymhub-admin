@@ -65,7 +65,7 @@ export default function HrSection() {
       const headers = await authHeader();
       const [adminsRes, orgsRes] = await Promise.all([
         fetch("/api/admin/org-admins", { headers }),
-        fetch("/api/organizations"),
+        fetch("/api/organizations", { cache: "no-store" }),
       ]);
       const adminsJson = await adminsRes.json();
       if (!adminsRes.ok) throw new Error(adminsJson?.error || "HR жагсаалт татаж чадсангүй");
