@@ -14,6 +14,7 @@ import type { Profile } from "../users/UsersSection";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
 import ColumnToggle from "@/components/ui/ColumnToggle";
+import { buildOrgInviteUrl } from "@/lib/org-invite";
 import EmptyState from "@/components/ui/EmptyState";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
 import { getUserPlaceholderAvatar } from "@/lib/user-avatar";
@@ -668,6 +669,60 @@ export default function OrganizationsSection() {
   );
 }
 
+/* ── Ажилтны урилгын линк ── */
+function OrgInviteLink({ organizationId }: { organizationId: string }) {
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const url = buildOrgInviteUrl(organizationId);
+
+  const copy = async () => {
+    inputRef.current?.select();
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API боломжгүй бол сонгосон текстийг нь гараар хуулна.
+    }
+  };
+
+  return (
+    <div className="border-t border-gray-50 px-5 py-3 dark:border-white/[0.04]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+          </svg>
+          Ажилтны урилгын линк
+        </span>
+        <input
+          ref={inputRef}
+          readOnly
+          value={url}
+          onFocus={(e) => e.currentTarget.select()}
+          className="h-8 min-w-0 flex-1 basis-64 rounded-lg border border-gray-200 bg-gray-50 px-2.5 font-mono text-[11px] text-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+        />
+        <button
+          type="button"
+          onClick={copy}
+          className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            copied
+              ? "bg-success-500 text-white"
+              : "bg-brand-500 text-white hover:bg-brand-600"
+          }`}
+        >
+          {copied ? "Хуулагдлаа" : "Хуулах"}
+        </button>
+      </div>
+      <p className="mt-1.5 text-[11px] leading-snug text-gray-400 dark:text-gray-500">
+        Энэ линкийг байгууллагын HR-т явуулна. Линкээр орсон ажилтан байгууллагаа
+        сонгох шаардлагагүй — овог, нэр, утасны дугаараа бичээд өөрөө GymHub
+        бүртгэлээ үүсгэнэ.
+      </p>
+    </div>
+  );
+}
+
 /* ── Org Detail Panel ── */
 function OrgDetailPanel({
   org, record, removeLoading,
@@ -902,6 +957,8 @@ function OrgDetailPanel({
             </div>
           )}
         </div>
+
+        {record?.id && <OrgInviteLink organizationId={record.id} />}
 
         {/* Contact / social links strip */}
         {record && (record.phone || record.facebook_url || record.website_url || record.partner_url) && (
