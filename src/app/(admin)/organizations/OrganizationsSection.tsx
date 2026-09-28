@@ -149,6 +149,7 @@ function highlightOrgName(name: string, query: string): React.ReactNode {
 export default function OrganizationsSection() {
   const { can } = useAuth();
   const canManageOrgs = can("organizations.create");
+  const canDeleteOrgs = can("organizations.delete");
   const canManageUsers = can("users.manage");
   const canNote = can("users.view");
   const [members, setMembers] = useState<Member[]>([]);
@@ -607,7 +608,7 @@ export default function OrganizationsSection() {
             addSearch={addSearch}
             addCandidates={addCandidates}
             onEdit={canManageOrgs ? () => setFormOrg(selectedRecord ?? { id: "", name: selectedOrg.name, logo_url: null, description: null, phone: null, facebook_url: null, website_url: null, partner_url: null, created_at: "" }) : undefined}
-            onDelete={canManageOrgs ? () => handleDeleteOrg(selectedOrg.name, selectedRecord?.id ?? null) : undefined}
+            onDelete={canDeleteOrgs ? () => handleDeleteOrg(selectedOrg.name, selectedRecord?.id ?? null) : undefined}
             onRemove={canManageOrgs ? handleRemove : undefined}
             onEditMember={canManageUsers ? (m) => setEditProfile(m as unknown as Profile) : undefined}
             onNoteClick={canNote ? (m) => setNoteMember(m) : undefined}

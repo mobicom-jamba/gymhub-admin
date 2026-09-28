@@ -330,6 +330,9 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const { can, user, signOut } = useAuth();
   const isCreate = !profile;
   const canEditSubscriptionDates = can("users.subscription.edit");
+  const canAssignRole = can("users.role.assign");
+  // users.create-ээр (модератор) зөвхөн аккаунт нээнэ — гишүүнчлэл олгохгүй.
+  const canGrantMembership = can("users.manage");
   const orgDropRef = useRef<HTMLDivElement>(null);
 
   const [password, setPassword]         = useState("123456");
@@ -349,7 +352,8 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
   const [formError, setFormError]       = useState("");
   const [loading, setLoading]           = useState(false);
   const [region, setRegion]             = useState<SignupRegion | "">("");
-  const shouldHideMembershipFields = role === "admin" || role === "moderator" || role === "sales";
+  const shouldHideMembershipFields =
+    !canGrantMembership || role === "admin" || role === "moderator" || role === "sales";
 
   useEffect(() => {
     if (!isOpen) return;
@@ -504,11 +508,11 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
             phone: digits, password, full_name: fullName,
             surname: ovog.trim(),
             given_name: ner.trim(),
-            role,
+            ...(canAssignRole ? { role } : {}),
             organization_id: safeOrganizationId,
             organization: organization || null,
             region: parseSignupRegion(region),
-            ...membershipPayload,
+            ...(canGrantMembership ? membershipPayload : {}),
           }),
         });
         if (!res.ok) { setFormError(await parseApiError(res)); return; }
@@ -717,6 +721,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <p className="mt-1 text-[10px] text-gray-400">Дээрх нэвтрэх хэсэгт оруулсан дугаараар автоматаар бөглөнө.</p>
                   )}
                 </div>
+                {canAssignRole && (
                 <div className="col-span-2">
                   <Label>Системийн эрх</Label>
                   <select
@@ -731,6 +736,7 @@ export default function UserFormModal({ isOpen, onClose, profile, organizations,
                     <option value="admin">Админ</option>
                   </select>
                 </div>
+                )}
               </div>
 
               {/* Org searchable combobox */}

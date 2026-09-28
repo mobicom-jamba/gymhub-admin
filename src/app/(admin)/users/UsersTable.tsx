@@ -284,7 +284,7 @@ export default function UsersTable({
                 <Th col="lastVisit" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[130px]`} label="Сүүлд ирсэн" />}
               {(visibleColumns?.streak ?? false) &&
                 <Th col="streak" className={`sticky top-0 bg-white dark:bg-gray-900 ${hdrSortable} w-[100px]`} label="Streak" />}
-              {(onEdit || onDelete || onResetDailyCheckin) && (
+              {(onEdit || onDelete || onResetDailyCheckin || onResetPassword || onNoteClick) && (
                 <TableCell isHeader className={`${hdrPlain} text-end sticky top-0 bg-white dark:bg-gray-900 min-w-[9rem]`}>Үйлдлүүд</TableCell>
               )}
             </TableRow>
