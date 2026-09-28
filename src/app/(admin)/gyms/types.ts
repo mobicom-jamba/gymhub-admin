@@ -15,6 +15,8 @@ export type Gym = {
   is_active?: boolean | null;
   /** Max check-ins per local day (UTC+8); null = unlimited */
   daily_visitor_limit?: number | null;
+  /** Admin toggle: shown as full today (limit/limit) and check-ins blocked */
+  force_full?: boolean | null;
   /** Lower = earlier in app fitness list */
   sort_order?: number | null;
   /** null = no partner billing configured */

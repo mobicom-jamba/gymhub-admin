@@ -100,7 +100,7 @@ export default function GymsSection() {
     const { data, error: err } = await supabase
       .from("gyms")
       .select(
-        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, daily_visitor_limit, sort_order, billing_mode, billing_amount_mnt, created_at, type",
+        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, daily_visitor_limit, force_full, sort_order, billing_mode, billing_amount_mnt, created_at, type",
       )
       .order("sort_order", { ascending: true })
       .order("name")
@@ -168,6 +168,26 @@ export default function GymsSection() {
       return;
     }
     fetchGyms();
+  };
+
+  const handleToggleFull = async (gym: Gym) => {
+    const next = !gym.force_full;
+    const supabase = createBrowserSupabaseClient();
+    const { error: err } = await supabase
+      .from("gyms")
+      .update({ force_full: next })
+      .eq("id", gym.id);
+    if (err) {
+      toast.show(toMnErrorMessage(err.message), "error");
+      return;
+    }
+    setGyms((prev) =>
+      prev.map((g) => (g.id === gym.id ? { ...g, force_full: next } : g)),
+    );
+    toast.show(
+      next ? `"${gym.name}" дүүрсэн гэж харагдана` : `"${gym.name}" дүүргэлт унтарлаа`,
+      "success",
+    );
   };
 
   if (loading) {
@@ -298,6 +318,7 @@ export default function GymsSection() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onQR={setQrGym}
+          onToggleFull={handleToggleFull}
           visitCounts={visitCounts}
           visitPeriod={visitPeriod}
           visitLoading={visitLoading}
