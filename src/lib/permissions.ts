@@ -4,11 +4,14 @@ export type AppPermission =
   | "admin.app.access"
   | "users.view"
   | "users.manage"
+  | "users.create"
+  | "users.delete"
   | "users.password.reset"
   | "users.role.assign"
   | "users.subscription.edit"
   | "organizations.view"
   | "organizations.create"
+  | "organizations.delete"
   | "gyms.view"
   | "gyms.map.view"
   | "fitness.activity.view"
@@ -33,11 +36,14 @@ const ALL_PERMISSIONS: AppPermission[] = [
   "admin.app.access",
   "users.view",
   "users.manage",
+  "users.create",
+  "users.delete",
   "users.password.reset",
   "users.role.assign",
   "users.subscription.edit",
   "organizations.view",
   "organizations.create",
+  "organizations.delete",
   "gyms.view",
   "gyms.map.view",
   "fitness.activity.view",
@@ -61,13 +67,15 @@ const ALL_PERMISSIONS: AppPermission[] = [
 
 const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
   admin: ALL_PERMISSIONS,
-  // Moderators: view-only for users + organizations, but can reset password.
+  // Moderators: can add organizations and create plain user accounts
+  // (users.create — no role, no membership), delete plain users (users.delete),
+  // reset passwords; otherwise view-only.
   moderator: ALL_PERMISSIONS.filter(
     (permission) =>
       permission !== "users.manage" &&
       permission !== "users.role.assign" &&
       permission !== "users.subscription.edit" &&
-      permission !== "organizations.create" &&
+      permission !== "organizations.delete" &&
       permission !== "org.admins.manage" &&
       permission !== "videos.manage",
   ),
@@ -76,6 +84,7 @@ const ROLE_PERMISSIONS: Record<AppRole, AppPermission[]> = {
     "users.view",
     "organizations.view",
     "organizations.create",
+    "organizations.delete",
     "gyms.view",
     "gyms.map.view",
     "commissions.view.own",

@@ -49,7 +49,8 @@ export async function POST(request: Request) {
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!hasPermission(auth.permissions, "users.manage")) {
+    const canManageUsers = hasPermission(auth.permissions, "users.manage");
+    if (!canManageUsers && !hasPermission(auth.permissions, "users.create")) {
       return errorResponse("FORBIDDEN", "Хэрэглэгч үүсгэх эрх хүрэлцэхгүй байна.", 403);
     }
 
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       role,
       organization_id,
       organization,
-      membership_tier,
+      membership_tier: rawMembershipTier,
       membership_started_at,
       membership_expires_at,
       region,
@@ -82,6 +83,9 @@ export async function POST(request: Request) {
     if (role !== undefined && !hasPermission(auth.permissions, "users.role.assign")) {
       return errorResponse("FORBIDDEN", "Хэрэглэгчийн эрх өөрчлөх боломжгүй.", 403);
     }
+
+    // users.create (модератор) — зөвхөн аккаунт нээнэ, гишүүнчлэлийн багц өгөхгүй.
+    const membership_tier = canManageUsers ? rawMembershipTier : null;
 
     const isTryingToSetSubscriptionDates =
       membership_started_at !== undefined || membership_expires_at !== undefined;

@@ -324,12 +324,15 @@ function usersTabLabel(tab: UsersRoleTab): string {
 export default function UsersSection() {
   const { can } = useAuth();
   const canManageUsers = can("users.manage");
+  const canCreateUsers = canManageUsers || can("users.create");
   // Зөвхөн модератор — админ UserFormModal-оор солино, шинэ reset товч харагдахгүй
   const canResetPassword = can("users.password.reset") && !canManageUsers;
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<UsersRoleTab>("user");
+  // Модератор зөвхөн энгийн гишүүнийг нэг нэгээр устгана (API ч мөн шалгана).
+  const canDeleteUsers = canManageUsers || (can("users.delete") && tab === "user");
   const [search, setSearch] = useState("");
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -1676,7 +1679,7 @@ export default function UsersSection() {
                   CSV
                 </button>
 
-                {canManageUsers && (
+                {canCreateUsers && (
                   <button
                     type="button"
                     onClick={() => setFormProfile("new")}
@@ -1984,7 +1987,7 @@ export default function UsersSection() {
           density={density}
           onRoleChange={canManageUsers ? handleRoleChange : undefined}
           onEdit={canManageUsers ? (p) => setFormProfile(p) : undefined}
-          onDelete={canManageUsers ? handleDelete : undefined}
+          onDelete={canDeleteUsers ? handleDelete : undefined}
           onResetDailyCheckin={
             canManageUsers && tab === "user"
               ? (p) => setConfirmResetCheckin({ id: p.id, name: profileDisplayName(p) })

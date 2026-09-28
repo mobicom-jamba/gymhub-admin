@@ -226,7 +226,8 @@ export async function DELETE(
   try {
     const auth = await verifyBearerUser(request);
     if (!auth.ok) return auth.response;
-    if (!hasPermission(auth.permissions, "users.manage")) {
+    const canManageUsers = hasPermission(auth.permissions, "users.manage");
+    if (!canManageUsers && !hasPermission(auth.permissions, "users.delete")) {
       return errorResponse("FORBIDDEN", "Хэрэглэгч устгах эрх хүрэлцэхгүй байна.", 403);
     }
 
@@ -241,6 +242,22 @@ export async function DELETE(
       );
     }
     const admin = createClient(supabaseUrl, serviceRoleKey);
+
+    // users.delete (модератор) — зөвхөн энгийн гишүүнийг устгана (ажилтныг биш).
+    if (!canManageUsers) {
+      const { data: target } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("id", id)
+        .maybeSingle();
+      if (!target) {
+        return errorResponse("NOT_FOUND", "Хэрэглэгч олдсонгүй.", 404);
+      }
+      if (String(target.role ?? "user").toLowerCase() !== "user") {
+        return errorResponse("FORBIDDEN", "Модератор зөвхөн гишүүдийг устгах эрхтэй.", 403);
+      }
+    }
+
     const { error } = await admin.auth.admin.deleteUser(id);
     if (error) {
       return errorResponse("VALIDATION_ERROR", "Хэрэглэгч устгах үед алдаа гарлаа.", 400, error.message);
