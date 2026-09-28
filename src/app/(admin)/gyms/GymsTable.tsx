@@ -22,6 +22,7 @@ export default function GymsTable({
   onEdit,
   onDelete,
   onQR,
+  onToggleFull,
   visitCounts,
   visitPeriod,
   visitLoading,
@@ -33,6 +34,7 @@ export default function GymsTable({
   onEdit?: (gym: Gym) => void;
   onDelete?: (gym: Gym) => void;
   onQR?: (gym: Gym) => void;
+  onToggleFull?: (gym: Gym) => void;
   visitCounts?: Record<string, number>;
   visitPeriod?: VisitPeriod;
   visitLoading?: boolean;
@@ -109,7 +111,7 @@ export default function GymsTable({
                   </span>
                 </TableCell>
               )}
-              {(onEdit || onDelete || onQR) && (
+              {(onEdit || onDelete || onQR || onToggleFull) && (
                 <TableCell
                   isHeader
                   className="px-5 py-3 font-medium text-gray-500 text-end text-theme-xs dark:text-gray-400"
@@ -162,6 +164,14 @@ export default function GymsTable({
                   >
                     {gym.is_active ? t("active") : t("inactive")}
                   </Badge>
+                  {gym.force_full && (
+                    <span className="ml-1.5">
+                      <Badge size="sm" color="warning">
+                        Дүүрсэн
+                        {` ${gym.daily_visitor_limit || 25}/${gym.daily_visitor_limit || 25}`}
+                      </Badge>
+                    </span>
+                  )}
                 </TableCell>
                 {visitCounts && (
                   <TableCell className="px-5 py-4">
@@ -236,9 +246,23 @@ export default function GymsTable({
                     )}
                   </TableCell>
                 )}
-                {(onEdit || onDelete || onQR) && (
+                {(onEdit || onDelete || onQR || onToggleFull) && (
                   <TableCell className="px-5 py-4 text-end">
                     <div className="flex justify-end gap-2">
+                      {onToggleFull && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onToggleFull(gym)}
+                          className={
+                            gym.force_full
+                              ? "text-warning-600 dark:text-warning-400"
+                              : undefined
+                          }
+                        >
+                          {gym.force_full ? "Дүүрсэн: Унтраах" : "Дүүрсэн болгох"}
+                        </Button>
+                      )}
                       {onQR && (
                         <Button
                           size="sm"

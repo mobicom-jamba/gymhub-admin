@@ -147,7 +147,7 @@ export async function POST(request: Request) {
 
     const { data: gymRow, error: gymErr } = await supabase
       .from("gyms")
-      .select("daily_visitor_limit")
+      .select("daily_visitor_limit, force_full")
       .eq("id", gym_id)
       .maybeSingle();
 
@@ -156,6 +156,19 @@ export async function POST(request: Request) {
     }
 
     const cap = gymRow?.daily_visitor_limit;
+    // Админ "Дүүрсэн" гэж асаасан бол бодит тооноос үл хамааран бүртгэлийг хаана.
+    if (gymRow?.force_full) {
+      return NextResponse.json(
+        {
+          error:
+            "Энэ фитнес өнөөдрийн зочлогчийн тоо дүүрсэн байна. Маргааш эсвэл өөр өдөр дахин оролдоно уу.",
+          gym_at_capacity: true,
+          daily_visitor_limit: cap ?? null,
+          today_visitors: cap ?? null,
+        },
+        { status: 429 }
+      );
+    }
     if (cap != null && cap > 0) {
       const used = await countGymVisitorsToday(supabase, gym_id, todayStart);
       if (!gymHasDailyCapacityLeft(cap, used)) {

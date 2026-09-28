@@ -1,37 +1,58 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getTodayStartUTC8 } from "@/lib/gym-daily-capacity";
 
-type GymRow = { id: string };
+type GymRow = {
+  id: string;
+  daily_visitor_limit?: number | null;
+  force_full?: boolean | null;
+};
 
-function withZeroCounts<T extends GymRow>(gyms: T[]): Array<T & { today_visitors: number }> {
-  return gyms.map((g) => ({ ...g, today_visitors: 0 }));
+type WithCounts<T> = T & { today_visitors: number; is_full: boolean };
+
+/** Shown capacity when a gym is switched to full but has no daily_visitor_limit. */
+const FORCED_FULL_DEFAULT_LIMIT = 25;
+
+/** Admin "Дүүрсэн" switch reports the gym as full: visitors = limit (e.g. 25/25). */
+function withFullness<T extends GymRow>(g: T, counted: number): WithCounts<T> {
+  const limit = g.daily_visitor_limit != null && g.daily_visitor_limit > 0 ? g.daily_visitor_limit : null;
+  if (g.force_full) {
+    const shownLimit = limit ?? FORCED_FULL_DEFAULT_LIMIT;
+    return {
+      ...g,
+      daily_visitor_limit: shownLimit,
+      today_visitors: Math.max(counted, shownLimit),
+      is_full: true,
+    };
+  }
+  return { ...g, today_visitors: counted, is_full: limit != null && counted >= limit };
+}
+
+function withZeroCounts<T extends GymRow>(gyms: T[]): Array<WithCounts<T>> {
+  return gyms.map((g) => withFullness(g, 0));
 }
 
 function mapCounts<T extends GymRow>(
   gyms: T[],
   rows: Array<{ gym_id?: string | null; visitor_count?: number | string | null }> | null,
-): Array<T & { today_visitors: number }> {
+): Array<WithCounts<T>> {
   const byGym = new Map<string, number>();
   for (const row of rows ?? []) {
     const gid = String(row.gym_id ?? "").trim();
     if (!gid) continue;
     byGym.set(gid, Number(row.visitor_count) || 0);
   }
-  return gyms.map((g) => ({
-    ...g,
-    today_visitors: byGym.get(g.id) ?? 0,
-  }));
+  return gyms.map((g) => withFullness(g, byGym.get(g.id) ?? 0));
 }
 
 /**
- * Adds `today_visitors` to each gym (pending+approved check-ins since local midnight UTC+8).
+ * Adds `today_visitors` (pending+approved check-ins since local midnight UTC+8) and `is_full` to each gym.
  * Uses a GROUP BY RPC so we never download every visit row. On failure, returns 0 counts
  * so GET /api/gyms still succeeds.
  */
 export async function mergeTodayVisitorCounts<T extends GymRow>(
   supabase: SupabaseClient,
   gyms: T[]
-): Promise<Array<T & { today_visitors: number }>> {
+): Promise<Array<WithCounts<T>>> {
   if (gyms.length === 0) return [];
 
   const todayStart = getTodayStartUTC8();
