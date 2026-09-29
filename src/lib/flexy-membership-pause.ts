@@ -18,7 +18,6 @@ function userIdsFromOverdueRows(
   return [...ids];
 }
 
-/** Active plan дээр overdue хуваарьтай бүх хэрэглэгчийн membership → paused */
 export async function pauseMembershipsForOverdueFlexy(
   supabase: SupabaseClient,
 ): Promise<number> {
