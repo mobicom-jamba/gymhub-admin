@@ -15,7 +15,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
 import SearchInput from "@/components/common/SearchInput";
 import { PlusIcon } from "@/icons";
-import { exportToCsv } from "@/lib/csv-export";
+import UsersCsvExportModal from "./UsersCsvExportModal";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useToast } from "@/components/ui/Toast";
 import type { Density } from "./UsersTable";
@@ -187,6 +187,13 @@ function isMembershipExpired(expiresAt: string | null): boolean {
   return new Date(expiresAt) < new Date();
 }
 
+const PROFILE_STATUS_LABELS: Record<ReturnType<typeof profileStatus>, string> = {
+  active: "Идэвх",
+  paused: "Түдгэлзүүлсэн",
+  inactive: "Идэвхгүй",
+  expired: "Дууссан",
+};
+
 function profileStatus(p: Profile): "active" | "expired" | "inactive" | "paused" {
   if (p.membership_status === "paused") return "paused";
   if (p.membership_status === "inactive") return "inactive";
@@ -337,6 +344,7 @@ export default function UsersSection() {
   const [orgFilter, setOrgFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [regMonth, setRegMonth] = useState(""); // "YYYY-MM" — бүртгүүлсэн сараар шүүх
+  const [csvOpen, setCsvOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [formProfile, setFormProfile] = useState<Profile | null | "new">(null);
@@ -1664,13 +1672,7 @@ export default function UsersSection() {
 
                 <button
                   type="button"
-                  onClick={() => exportToCsv("users", filteredProfiles, [
-                    { key: "full_name", label: "Нэр" },
-                    { key: "phone", label: "Утас" },
-                    { key: "organization", label: "Байгууллага" },
-                    { key: "membership_status", label: "Төлөв" },
-                    { key: "membership_expires_at", label: "Дуусах огноо" },
-                  ])}
+                  onClick={() => setCsvOpen(true)}
                   className="flex h-9 items-center gap-1.5 rounded-xl bg-white px-3 text-sm font-medium text-gray-600 shadow-sm ring-1 ring-gray-200/80 transition hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-white/[0.06]"
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -2079,6 +2081,14 @@ export default function UsersSection() {
         stats={panelProfile ? (statsMap?.[panelProfile.id] ?? null) : null}
         loading={statsLoading}
         onClose={() => setPanelProfile(null)}
+      />
+
+      <UsersCsvExportModal
+        isOpen={csvOpen}
+        onClose={() => setCsvOpen(false)}
+        profiles={filteredProfiles}
+        orgName={profileOrgName}
+        statusLabel={(p) => PROFILE_STATUS_LABELS[profileStatus(p)]}
       />
 
       <UserNoteModal
