@@ -15,6 +15,7 @@ import { t } from "@/lib/i18n";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import type { Gym, VisitPeriod } from "./types";
 import { formatMnt, gymMonthAmountMnt } from "./types";
+import GymOpeningCountdown from "./GymOpeningCountdown";
 
 export default function GymsTable({
   gyms,
@@ -172,6 +173,7 @@ export default function GymsTable({
                       </Badge>
                     </span>
                   )}
+                  {gym.opens_at && <GymOpeningCountdown opensAt={gym.opens_at} />}
                 </TableCell>
                 {visitCounts && (
                   <TableCell className="px-5 py-4">

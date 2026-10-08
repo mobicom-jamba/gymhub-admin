@@ -9,7 +9,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("gyms")
       .select(
-        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, created_at, daily_visitor_limit, force_full, sort_order"
+        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, created_at, daily_visitor_limit, force_full, opens_at, sort_order"
       )
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
