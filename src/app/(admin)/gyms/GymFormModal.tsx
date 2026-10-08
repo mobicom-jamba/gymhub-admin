@@ -6,10 +6,10 @@ import { Modal } from "@/components/ui/modal";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import Checkbox from "@/components/form/input/Checkbox";
 import { FormError, SubmitLabel } from "@/components/form/FormFeedback";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import { t } from "@/lib/i18n";
+import { formatCountdown } from "@/lib/gym-opening";
 
 import type { Gym, GymBillingMode } from "./types";
 
@@ -77,6 +77,32 @@ function parseRaw(raw: unknown): DaySchedules {
   return result;
 }
 
+/** New gyms start "coming soon" while the contract is being signed. */
+const DEFAULT_OPENS_IN_DAYS = "30";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How the gym appears in the app: open now, "coming soon" countdown, or hidden. */
+type OpenMode = "open" | "soon" | "hidden";
+
+function initialOpenMode(gym: Gym | null | undefined): OpenMode {
+  if (!gym) return "soon";
+  if (gym.is_active === false) return "hidden";
+  return remainingDays(gym.opens_at) ? "soon" : "open";
+}
+
+/** e.g. "2026.11.07 16:11" */
+function formatOpenDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** Whole days left until opens_at (rounded up), or "" when already open. */
+function remainingDays(opensAt: string | null | undefined): string {
+  if (!opensAt) return "";
+  const ms = new Date(opensAt).getTime() - Date.now();
+  return ms > 0 ? String(Math.ceil(ms / DAY_MS)) : "";
+}
+
 function buildSchedule(schedules: DaySchedules): Schedule {
   const s = {} as Schedule;
   DAY_KEYS.forEach((k) => {
@@ -100,7 +126,7 @@ export default function GymFormModal({
   const [city, setCity] = useState<string>(gym?.city ?? "ulaanbaatar");
   const [type, setType] = useState<string>(gym?.type ?? defaultType ?? "gym");
   const [imageUrl, setImageUrl] = useState(gym?.image_url ?? "");
-  const [isActive, setIsActive] = useState(gym?.is_active ?? true);
+  const [openMode, setOpenMode] = useState<OpenMode>(() => initialOpenMode(gym));
   const [dailyVisitorLimit, setDailyVisitorLimit] = useState(
     () => (gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : "")
   );
@@ -116,6 +142,11 @@ export default function GymFormModal({
   const [daySchedules, setDaySchedules] = useState<DaySchedules>(() =>
     parseRaw(gym?.opening_hours)
   );
+  const [opensInDays, setOpensInDays] = useState(() =>
+    (gym && remainingDays(gym.opens_at)) || DEFAULT_OPENS_IN_DAYS
+  );
+  // Editing keeps the saved opens_at unless the admin changes the day count.
+  const [opensInDaysDirty, setOpensInDaysDirty] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -149,7 +180,7 @@ export default function GymFormModal({
       setCity(gym?.city ?? "ulaanbaatar");
       setType(gym?.type ?? defaultType ?? "gym");
       setImageUrl(gym?.image_url ?? "");
-      setIsActive(gym?.is_active ?? true);
+      setOpenMode(initialOpenMode(gym));
       setDailyVisitorLimit(
         gym?.daily_visitor_limit != null ? String(gym.daily_visitor_limit) : ""
       );
@@ -159,6 +190,8 @@ export default function GymFormModal({
         gym?.billing_amount_mnt != null ? String(gym.billing_amount_mnt) : ""
       );
       setDaySchedules(parseRaw(gym?.opening_hours));
+      setOpensInDays((gym && remainingDays(gym.opens_at)) || DEFAULT_OPENS_IN_DAYS);
+      setOpensInDaysDirty(false);
       setError("");
       setOwnerName("");
       setOwnerPhone("");
@@ -260,6 +293,19 @@ export default function GymFormModal({
       daily_visitor_limit = n;
     }
 
+    // undefined = leave the saved opens_at untouched
+    let opens_at: string | null | undefined = undefined;
+    if (openMode === "open") {
+      opens_at = null;
+    } else if (openMode === "soon" && (!gym || opensInDaysDirty)) {
+      const n = parseInt(opensInDays.trim(), 10);
+      if (!Number.isFinite(n) || n < 1) {
+        setError("Нээгдэх хүртэлх хоног нь 1-ээс их бүхэл тоо байна (жишээ нь 30)");
+        return;
+      }
+      opens_at = new Date(Date.now() + n * DAY_MS).toISOString();
+    }
+
     let sort_order = 9999;
     const orderTrim = sortOrder.trim();
     if (orderTrim !== "") {
@@ -308,12 +354,13 @@ export default function GymFormModal({
       address: address || null,
       city: city || "ulaanbaatar",
       image_url: imageUrl || null,
-      is_active: isActive,
+      is_active: openMode !== "hidden",
       daily_visitor_limit,
       sort_order,
       opening_hours: buildSchedule(daySchedules),
       type: type,
     };
+    if (opens_at !== undefined) payload.opens_at = opens_at;
     if (showBilling) {
       payload.billing_mode = billing_mode;
       payload.billing_amount_mnt = billing_amount_mnt;
@@ -559,12 +606,104 @@ export default function GymFormModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              checked={isActive}
-              onChange={(checked) => setIsActive(checked)}
-            />
-            <Label className="!mb-0">{t("active")}</Label>
+          <div>
+            <Label>Вэб дээр хэрхэн харагдах вэ?</Label>
+            <div className="space-y-2">
+              {(
+                [
+                  {
+                    mode: "soon",
+                    title: "Гэрээ хийгдэж байна · Тун удахгүй",
+                    hint: "Вэб дээр харагдана, нээгдэх хүртэл хоног тоолно. Бүртгэл авахгүй.",
+                  },
+                  {
+                    mode: "open",
+                    title: "Шууд нээх",
+                    hint: "Вэб дээр харагдаж, одоо бүртгэл авна.",
+                  },
+                  {
+                    mode: "hidden",
+                    title: "Идэвхгүй",
+                    hint: "Вэб дээр огт харагдахгүй.",
+                  },
+                ] as const
+              ).map((o) => (
+                <label
+                  key={o.mode}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition ${
+                    openMode === o.mode
+                      ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
+                      : "border-gray-200 hover:border-gray-300 dark:border-gray-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="open-mode"
+                    className="mt-1 accent-brand-500"
+                    checked={openMode === o.mode}
+                    onChange={() => {
+                      setOpenMode(o.mode);
+                      // Switching into countdown starts a fresh count from now.
+                      if (o.mode === "soon" && !remainingDays(gym?.opens_at)) {
+                        setOpensInDaysDirty(true);
+                      }
+                    }}
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-gray-800 dark:text-white/90">
+                      {o.title}
+                    </span>
+                    <span className="block text-[11px] text-gray-500">{o.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {openMode === "soon" && (
+              <div className="mt-3 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                <Label>Хэдэн хоногийн дараа нээгдэх вэ?</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    value={opensInDays}
+                    onChange={(e) => {
+                      setOpensInDays(e.target.value);
+                      setOpensInDaysDirty(true);
+                    }}
+                    placeholder="30"
+                  />
+                  <span className="text-sm text-gray-500">хоног</span>
+                </div>
+                {(() => {
+                  const n = parseInt(opensInDays.trim(), 10);
+                  const opensAt =
+                    gym?.opens_at && !opensInDaysDirty
+                      ? new Date(gym.opens_at)
+                      : Number.isFinite(n) && n >= 1
+                        ? new Date(Date.now() + n * DAY_MS)
+                        : null;
+                  if (!opensAt) return null;
+                  return (
+                    <div className="mt-2 space-y-1 text-[12px] text-gray-600 dark:text-gray-300">
+                      <p>
+                        Нээгдэх огноо: <b>{formatOpenDate(opensAt)}</b>
+                      </p>
+                      <p>
+                        Вэб дээр:{" "}
+                        <span className="rounded bg-blue-light-50 px-1.5 py-0.5 text-blue-light-500">
+                          Тун удахгүй
+                        </span>{" "}
+                        <span className="tabular-nums font-semibold">
+                          {formatCountdown(opensAt.getTime() - Date.now())}
+                        </span>{" "}
+                        → 0 болмогц автоматаар нээгдэнэ.
+                      </p>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           <div>

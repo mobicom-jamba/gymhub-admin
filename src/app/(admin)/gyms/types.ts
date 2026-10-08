@@ -17,6 +17,8 @@ export type Gym = {
   daily_visitor_limit?: number | null;
   /** Admin toggle: shown as full today (limit/limit) and check-ins blocked */
   force_full?: boolean | null;
+  /** Future = "Тун удахгүй" countdown, check-ins blocked; null/past = open */
+  opens_at?: string | null;
   /** Lower = earlier in app fitness list */
   sort_order?: number | null;
   /** null = no partner billing configured */

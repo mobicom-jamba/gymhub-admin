@@ -6,6 +6,7 @@ import {
   getWeekStartMondayUTC8,
   gymHasDailyCapacityLeft,
 } from "@/lib/gym-daily-capacity";
+import { isGymComingSoon } from "@/lib/gym-opening";
 
 /**
  * GET /api/checkin?user_id=xxx — Check if user already checked in today
@@ -147,12 +148,24 @@ export async function POST(request: Request) {
 
     const { data: gymRow, error: gymErr } = await supabase
       .from("gyms")
-      .select("daily_visitor_limit, force_full")
+      .select("daily_visitor_limit, force_full, opens_at")
       .eq("id", gym_id)
       .maybeSingle();
 
     if (gymErr) {
       return NextResponse.json({ error: gymErr.message }, { status: 500 });
+    }
+
+    // Гэрээ хийгдэж буй фитнес нээгдэх хүртлээ бүртгэл авахгүй.
+    if (isGymComingSoon(gymRow?.opens_at)) {
+      return NextResponse.json(
+        {
+          error: "Энэ фитнес тун удахгүй нээгдэнэ. Нээгдсэний дараа дахин оролдоно уу.",
+          gym_coming_soon: true,
+          opens_at: gymRow?.opens_at,
+        },
+        { status: 403 }
+      );
     }
 
     const cap = gymRow?.daily_visitor_limit;

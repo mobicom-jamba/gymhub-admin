@@ -100,7 +100,7 @@ export default function GymsSection() {
     const { data, error: err } = await supabase
       .from("gyms")
       .select(
-        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, daily_visitor_limit, force_full, sort_order, billing_mode, billing_amount_mnt, created_at, type",
+        "id, name, description, address, city, lat, lng, image_url, opening_hours, amenities, is_active, daily_visitor_limit, force_full, opens_at, sort_order, billing_mode, billing_amount_mnt, created_at, type",
       )
       .order("sort_order", { ascending: true })
       .order("name")
