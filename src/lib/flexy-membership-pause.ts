@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { attributeMembershipAudit } from "@/lib/membership-audit";
 
 type PlanJoin = { user_id: string; status: string } | { user_id: string; status: string }[] | null;
-
 function userIdsFromOverdueRows(
   rows: { installment_plans: PlanJoin }[] | null,
 ): string[] {
