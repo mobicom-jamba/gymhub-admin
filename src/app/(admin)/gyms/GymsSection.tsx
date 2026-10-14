@@ -81,6 +81,8 @@ export default function GymsSection() {
   const [visitCounts, setVisitCounts] = useState<Record<string, number>>({});
   const [visitLoading, setVisitLoading] = useState(false);
   const [monthlyGym, setMonthlyGym] = useState<Gym | null>(null);
+  /** gym_id → хаалганы код (ажилтангүй фитнес) */
+  const [doorCodes, setDoorCodes] = useState<Record<string, string>>({});
   const toast = useToast();
   const { role } = useAuth();
   const showBilling = role === "admin";
@@ -110,6 +112,52 @@ export default function GymsSection() {
     setLoading(false);
   };
 
+  const fetchDoorCodes = async () => {
+    const supabase = createBrowserSupabaseClient();
+    const { data } = await supabase.from("gym_door_codes").select("gym_id, code");
+    const map: Record<string, string> = {};
+    for (const row of data ?? []) map[row.gym_id as string] = row.code as string;
+    setDoorCodes(map);
+  };
+
+  const handleSaveDoorCode = async (gym: Gym, code: string): Promise<boolean> => {
+    const supabase = createBrowserSupabaseClient();
+    const trimmed = code.trim();
+    if (!trimmed) {
+      const { error: err } = await supabase
+        .from("gym_door_codes")
+        .delete()
+        .eq("gym_id", gym.id);
+      if (err) {
+        toast.show(toMnErrorMessage(err.message), "error");
+        return false;
+      }
+      setDoorCodes((prev) => {
+        const next = { ...prev };
+        delete next[gym.id];
+        return next;
+      });
+      toast.show(`"${gym.name}" хаалганы код устгагдлаа`, "success");
+      return true;
+    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { error: err } = await supabase.from("gym_door_codes").upsert({
+      gym_id: gym.id,
+      code: trimmed,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id ?? null,
+    });
+    if (err) {
+      toast.show(toMnErrorMessage(err.message), "error");
+      return false;
+    }
+    setDoorCodes((prev) => ({ ...prev, [gym.id]: trimmed }));
+    toast.show(`"${gym.name}" хаалганы код шинэчлэгдлээ`, "success");
+    return true;
+  };
+
   const fetchVisitCounts = async (period: VisitPeriod) => {
     const since = sinceForPeriod(period);
     setVisitLoading(true);
@@ -136,6 +184,7 @@ export default function GymsSection() {
 
   useEffect(() => {
     fetchGyms();
+    fetchDoorCodes();
     fetchVisitCounts("today");
   }, []);
 
@@ -319,6 +368,7 @@ export default function GymsSection() {
           onDelete={handleDelete}
           onQR={setQrGym}
           onToggleFull={handleToggleFull}
+          doorCodes={doorCodes}
           visitCounts={visitCounts}
           visitPeriod={visitPeriod}
           visitLoading={visitLoading}
@@ -349,7 +399,13 @@ export default function GymsSection() {
         defaultType={typeTab}
         showBilling={showBilling}
       />
-      <GymQRModal gym={qrGym} onClose={() => setQrGym(null)} />
+      <GymQRModal
+        key={qrGym ? `${qrGym.id}:${doorCodes[qrGym.id] ?? ""}` : "none"}
+        gym={qrGym}
+        onClose={() => setQrGym(null)}
+        doorCode={qrGym ? (doorCodes[qrGym.id] ?? "") : ""}
+        onSaveDoorCode={handleSaveDoorCode}
+      />
       <GymVisitMonthlyPanel
         gym={monthlyGym}
         onClose={() => setMonthlyGym(null)}

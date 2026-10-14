@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { Modal } from "@/components/ui/modal";
 import type { Gym } from "./types";
@@ -8,11 +8,26 @@ import type { Gym } from "./types";
 export default function GymQRModal({
   gym,
   onClose,
+  doorCode = "",
+  onSaveDoorCode,
 }: {
   gym: Gym | null;
   onClose: () => void;
+  /** Одоогийн хаалганы код ("" = тохируулаагүй) */
+  doorCode?: string;
+  /** "" дамжуулбал кодыг устгана */
+  onSaveDoorCode?: (gym: Gym, code: string) => Promise<boolean>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [codeDraft, setCodeDraft] = useState(doorCode);
+  const [savingCode, setSavingCode] = useState(false);
+
+  const saveCode = async (code: string) => {
+    if (!gym || !onSaveDoorCode) return;
+    setSavingCode(true);
+    await onSaveDoorCode(gym, code);
+    setSavingCode(false);
+  };
 
   useEffect(() => {
     if (!gym || !canvasRef.current) return;
@@ -100,6 +115,51 @@ export default function GymQRModal({
           </svg>
           Хэвлэх
         </button>
+
+        {onSaveDoorCode && (
+          <div className="space-y-2 border-t border-gray-100 pt-4 text-left dark:border-white/[0.06]">
+            <label
+              htmlFor="gym-door-code"
+              className="block text-sm font-semibold text-gray-700 dark:text-gray-300"
+            >
+              Хаалганы код
+            </label>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Ажилтангүй фитнест QR уншуулсны дараа хэрэглэгчид энэ код харагдана.
+              Хоосон бол код харуулахгүй.
+            </p>
+            <div className="flex gap-2">
+              <input
+                id="gym-door-code"
+                type="text"
+                value={codeDraft}
+                onChange={(e) => setCodeDraft(e.target.value)}
+                placeholder="Жишээ: 1234#"
+                maxLength={32}
+                autoComplete="off"
+                className="h-10 min-w-0 flex-1 rounded-lg border border-gray-300 bg-transparent px-3 text-sm font-semibold tracking-widest text-gray-800 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:text-white/90"
+              />
+              <button
+                type="button"
+                disabled={savingCode || codeDraft.trim() === doorCode}
+                onClick={() => saveCode(codeDraft)}
+                className="rounded-lg bg-brand-500 px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-50"
+              >
+                Хадгалах
+              </button>
+            </div>
+            {doorCode && (
+              <button
+                type="button"
+                disabled={savingCode}
+                onClick={() => saveCode("")}
+                className="text-xs font-medium text-error-600 hover:underline disabled:opacity-50 dark:text-error-400"
+              >
+                Кодыг устгах
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );
