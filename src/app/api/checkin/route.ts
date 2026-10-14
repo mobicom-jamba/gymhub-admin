@@ -7,6 +7,7 @@ import {
   gymHasDailyCapacityLeft,
 } from "@/lib/gym-daily-capacity";
 import { isGymComingSoon } from "@/lib/gym-opening";
+import { verifyJwtUser } from "@/lib/verify-jwt-user";
 
 /**
  * GET /api/checkin?user_id=xxx — Check if user already checked in today
@@ -48,6 +49,28 @@ export async function GET(request: Request) {
   }
 }
 
+/**
+ * Хаалганы код (ажилтангүй фитнес) — зөвхөн тухайн хэрэглэгчийн өөрийн token-оор
+ * хандсан үед буцаана. Код тохируулаагүй бол null.
+ */
+async function doorCodeFor(
+  supabase: ReturnType<typeof createAdminClient>,
+  request: Request,
+  userId: string,
+  gymId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("gym_door_codes")
+    .select("code")
+    .eq("gym_id", gymId)
+    .maybeSingle();
+  const code = (data?.code as string | undefined)?.trim();
+  if (!code) return null;
+  const auth = await verifyJwtUser(request);
+  if (!auth.ok || auth.userId !== userId) return null;
+  return code;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -70,7 +93,7 @@ export async function POST(request: Request) {
     const todayStart = getTodayStartUTC8();
     const { data: existing, error: checkErr } = await supabase
       .from("gym_visits")
-      .select("id, gym_name, checked_in_at")
+      .select("id, gym_id, gym_name, status, checked_in_at")
       .eq("user_id", user_id)
       .gte("checked_in_at", todayStart)
       .limit(1);
@@ -80,11 +103,17 @@ export async function POST(request: Request) {
     }
 
     if (existing && existing.length > 0) {
+      // Өнөөдөр яг энэ фитнест бүртгүүлсэн бол хаалганы кодыг дахин харуулна.
+      const door_code =
+        existing[0].gym_id === gym_id
+          ? await doorCodeFor(supabase, request, user_id, gym_id)
+          : null;
       return NextResponse.json(
         {
           error: "Та өнөөдөр аль хэдийн бүртгүүлсэн байна. Өдөрт 1 удаа л очих боломжтой.",
           already_checked_in: true,
           visit: existing[0],
+          door_code,
         },
         { status: 409 }
       );
@@ -231,9 +260,12 @@ export async function POST(request: Request) {
       }
     })();
 
+    const door_code = await doorCodeFor(supabase, request, user_id, gym_id);
+
     return NextResponse.json({
       success: true,
       visit,
+      door_code,
       message: "Амжилттай бүртгэгдлээ!",
     });
   } catch (err: unknown) {

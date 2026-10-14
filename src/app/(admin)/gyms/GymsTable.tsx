@@ -24,6 +24,7 @@ export default function GymsTable({
   onDelete,
   onQR,
   onToggleFull,
+  doorCodes,
   visitCounts,
   visitPeriod,
   visitLoading,
@@ -36,6 +37,8 @@ export default function GymsTable({
   onDelete?: (gym: Gym) => void;
   onQR?: (gym: Gym) => void;
   onToggleFull?: (gym: Gym) => void;
+  /** gym_id → хаалганы код */
+  doorCodes?: Record<string, string>;
   visitCounts?: Record<string, number>;
   visitPeriod?: VisitPeriod;
   visitLoading?: boolean;
@@ -174,6 +177,13 @@ export default function GymsTable({
                     </span>
                   )}
                   {gym.opens_at && <GymOpeningCountdown opensAt={gym.opens_at} />}
+                  {doorCodes?.[gym.id] && (
+                    <div className="mt-1.5">
+                      <Badge size="sm" color="info">
+                        Код: {doorCodes[gym.id]}
+                      </Badge>
+                    </div>
+                  )}
                 </TableCell>
                 {visitCounts && (
                   <TableCell className="px-5 py-4">
