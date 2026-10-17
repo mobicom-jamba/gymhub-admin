@@ -12,7 +12,7 @@ export type StoredMembershipTier =
   | "gymcore"
   | "early"
   | "gymgo"
-  /** Зөвхөн йога төвүүдэд check-in хийнэ; months = йогийн сар */
+  /** Зөвхөн иог төвүүдэд check-in хийнэ; months = иогийн сар */
   | "yoga";
 
 export type MembershipPackage = {

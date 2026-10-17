@@ -106,7 +106,7 @@ export function planTierDisplayLabel(tier: string | null | undefined): string {
     case "gymgo":
       return "GymGo";
     case "yoga":
-      return "Йога";
+      return "Иог";
     case "early":
       return "Early";
     case "standard":
@@ -178,8 +178,8 @@ export function getMembershipPlanVisual(profile: ProfileLike): MembershipPlanVis
 
   if (key === "yoga") {
     return {
-      title: "Йога багц — зөвхөн йога төвүүд",
-      shortLabel: "Йога",
+      title: "Иог багц — зөвхөн иог төвүүд",
+      shortLabel: "Иог",
       variant: "yoga",
     };
   }

@@ -145,7 +145,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Йога багц зөвхөн йога төвүүдэд хүчинтэй.
+    // Иог багц зөвхөн иог төвүүдэд хүчинтэй.
     if (memberRow?.membership_tier === "yoga") {
       const { data: gymRow, error: gymErr } = await supabase
         .from("gyms")
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
       if (gymRow?.type !== "yoga") {
         return NextResponse.json(
           {
-            error: "Таны йога багц зөвхөн йога төвүүдэд хүчинтэй.",
+            error: "Таны иог багц зөвхөн иог төвүүдэд хүчинтэй.",
             yoga_only: true,
           },
           { status: 403 }

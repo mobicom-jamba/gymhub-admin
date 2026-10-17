@@ -4,7 +4,7 @@ export type ProfileMembershipSnap = {
   membership_started_at: string | null;
   membership_expires_at: string | null;
   membership_status: string | null;
-  /** Йога ↔ фитнес солигдох эсэхийг шалгахад */
+  /** Иог ↔ фитнес солигдох эсэхийг шалгахад */
   membership_tier?: string | null;
 };
 

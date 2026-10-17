@@ -53,7 +53,7 @@ const STORED_TIER_OPTIONS: { value: StoredMembershipTier; label: string }[] = [
   { value: "premium2", label: "Premium 2" },
   { value: "gymcore", label: "GymCore" },
   { value: "gymgo", label: "GymGo" },
-  { value: "yoga", label: "Йога (зөвхөн йога төв)" },
+  { value: "yoga", label: "Иог (зөвхөн иог төв)" },
   { value: "early", label: "Early" },
 ];
 
@@ -151,7 +151,7 @@ function PackageFormModal({
       return;
     }
     if (draft.months < 1 || draft.months > 60) {
-      setError(`${draft.stored_tier === "yoga" ? "Йога" : "Фитнес"} хугацаа 1–60 сар байна.`);
+      setError(`${draft.stored_tier === "yoga" ? "Иог" : "Фитнес"} хугацаа 1–60 сар байна.`);
       return;
     }
     onSave(
@@ -209,7 +209,7 @@ function PackageFormModal({
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              {draft.stored_tier === "yoga" ? "Йога (сар)" : "Фитнес (сар)"}
+              {draft.stored_tier === "yoga" ? "Иог (сар)" : "Фитнес (сар)"}
             </label>
             <input
               type="number"
@@ -264,7 +264,7 @@ function PackageFormModal({
           </select>
           {draft.stored_tier === "yoga" && (
             <p className="mt-1 text-xs text-gray-400">
-              Аппын &quot;Йога багц&quot; табд харагдана. Зөвхөн йога төвүүдэд check-in хийнэ.
+              Аппын &quot;Иог багц&quot; табд харагдана. Зөвхөн иог төвүүдэд check-in хийнэ.
             </p>
           )}
         </div>
@@ -793,9 +793,9 @@ export default function PaymentAppSettingsSection() {
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
         <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Йога багц</h3>
+            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Иог багц</h3>
             <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-              Аппын &quot;Йога багц&quot; табд харагдана · зөвхөн йога төвүүдэд check-in
+              Аппын &quot;Иог багц&quot; табд харагдана · зөвхөн иог төвүүдэд check-in
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
@@ -805,7 +805,7 @@ export default function PaymentAppSettingsSection() {
               onClick={() => openCreate({ stored_tier: "yoga" })}
               disabled={loading || saving}
             >
-              Шинэ йога багц
+              Шинэ иог багц
             </Button>
             <Button size="sm" onClick={save} disabled={loading || saving}>
               {saving ? "Хадгалж байна…" : "Хадгалах"}
@@ -817,7 +817,7 @@ export default function PaymentAppSettingsSection() {
           {loading ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">Ачаалж байна…</p>
           ) : yogaPackages.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">Йога багц алга.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Иог багц алга.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -833,7 +833,7 @@ export default function PaymentAppSettingsSection() {
                       Үнэ
                     </TableCell>
                     <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
-                      Йога
+                      Иог
                     </TableCell>
                     <TableCell isHeader className="px-3 py-3 text-left text-xs font-medium text-gray-500">
                       Нэмэлт

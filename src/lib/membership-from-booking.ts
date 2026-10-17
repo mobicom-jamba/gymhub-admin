@@ -277,7 +277,7 @@ export function computeMembershipDatesAfterPayment(args: {
   }
 
   const storedTier = storedTierForPackageId(parsed.tier, monthsCfg);
-  // Йога ба фитнес эрх нэг tier-т багтахгүй — төрөл солигдвол үлдсэн хугацааг залгахгүй.
+  // Иог ба фитнес эрх нэг tier-т багтахгүй — төрөл солигдвол үлдсэн хугацааг залгахгүй.
   const switchesVenueType =
     (storedTier === "yoga") !== (String(profile.membership_tier ?? "").toLowerCase() === "yoga");
 
