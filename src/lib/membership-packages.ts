@@ -5,7 +5,15 @@ import {
 } from "@/lib/office-packages";
 
 /** profiles.membership_tier enum-д байгаа утгууд */
-export type StoredMembershipTier = "standard" | "premium1" | "premium2" | "gymcore" | "early" | "gymgo";
+export type StoredMembershipTier =
+  | "standard"
+  | "premium1"
+  | "premium2"
+  | "gymcore"
+  | "early"
+  | "gymgo"
+  /** Зөвхөн иог төвүүдэд check-in хийнэ; months = иогийн сар */
+  | "yoga";
 
 export type MembershipPackage = {
   /** Booking slug: membership-{id}-{ts} */
@@ -27,6 +35,8 @@ export type MembershipPackage = {
   qpay_only?: boolean;
   /** YYYY-MM-DD — энэ өдөр дуустал (UB). Хоосон бол хугацаагүй. */
   available_until?: string | null;
+  /** Багцын карт дээр нэмж харуулах мөрүүд (зөвхөн харуулалт) */
+  extras?: string[];
 };
 
 export type PaymentAppSettingsRow = {
@@ -204,7 +214,15 @@ function slugifyPackageId(raw: string): string {
 }
 
 export function isValidStoredTier(v: unknown): v is StoredMembershipTier {
-  return v === "standard" || v === "premium1" || v === "premium2" || v === "gymcore" || v === "early" || v === "gymgo";
+  return (
+    v === "standard" ||
+    v === "premium1" ||
+    v === "premium2" ||
+    v === "gymcore" ||
+    v === "early" ||
+    v === "gymgo" ||
+    v === "yoga"
+  );
 }
 
 export function normalizePackage(raw: unknown, index: number): MembershipPackage | null {
@@ -228,6 +246,12 @@ export function normalizePackage(raw: unknown, index: number): MembershipPackage
   const def = DEFAULT_PACKAGES.find((p) => p.id === id);
   const untilRaw = String(o.available_until ?? def?.available_until ?? "").trim();
   const available_until = /^\d{4}-\d{2}-\d{2}/.test(untilRaw) ? untilRaw.slice(0, 10) : (def?.available_until ?? null);
+  const extras = Array.isArray(o.extras)
+    ? o.extras
+        .map((e) => String(e ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 20)
+    : [];
   return {
     id,
     name,
@@ -242,6 +266,7 @@ export function normalizePackage(raw: unknown, index: number): MembershipPackage
     locked,
     qpay_only: o.qpay_only === true || def?.qpay_only === true,
     available_until,
+    extras,
   };
 }
 
