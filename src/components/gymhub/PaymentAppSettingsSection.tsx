@@ -52,6 +52,7 @@ const STORED_TIER_OPTIONS: { value: StoredMembershipTier; label: string }[] = [
   { value: "premium2", label: "Premium 2" },
   { value: "gymcore", label: "GymCore" },
   { value: "gymgo", label: "GymGo" },
+  { value: "yoga", label: "Йога (зөвхөн йога төв)" },
   { value: "early", label: "Early" },
 ];
 
@@ -149,7 +150,7 @@ function PackageFormModal({
       return;
     }
     if (draft.months < 1 || draft.months > 60) {
-      setError("Фитнес хугацаа 1–60 сар байна.");
+      setError(`${draft.stored_tier === "yoga" ? "Йога" : "Фитнес"} хугацаа 1–60 сар байна.`);
       return;
     }
     onSave(
@@ -157,6 +158,7 @@ function PackageFormModal({
         ...draft,
         id: draft.locked ? draft.id : id,
         name: draft.name.trim(),
+        extras: (draft.extras ?? []).map((e) => e.trim()).filter(Boolean),
         locked: draft.locked,
       },
       previousId,
@@ -206,7 +208,7 @@ function PackageFormModal({
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Фитнес (сар)
+              {draft.stored_tier === "yoga" ? "Йога (сар)" : "Фитнес (сар)"}
             </label>
             <input
               type="number"
@@ -259,6 +261,24 @@ function PackageFormModal({
               </option>
             ))}
           </select>
+          {draft.stored_tier === "yoga" && (
+            <p className="mt-1 text-xs text-gray-400">
+              Аппын &quot;Йога багц&quot; табд харагдана. Зөвхөн йога төвүүдэд check-in хийнэ.
+            </p>
+          )}
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Нэмэлт (мөр бүр нэг)
+          </label>
+          <textarea
+            rows={3}
+            className={inputClass}
+            value={(draft.extras ?? []).join("\n")}
+            onChange={(e) => patch({ extras: e.target.value.split("\n") })}
+            placeholder={"1 сар Nova Mind Academy\nInbody оношилгоо"}
+          />
+          <p className="mt-1 text-xs text-gray-400">Багцын карт дээр жагсаалтаар харагдана.</p>
         </div>
         <div className="flex flex-wrap gap-6">
           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">

@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     // Гишүүнчлэл идэвхтэй бөгөөд хугацаа нь дуусаагүй эсэхийг шалгах
     const { data: memberRow, error: memberErr } = await supabase
       .from("profiles")
-      .select("membership_status, membership_expires_at, weekly_visit_limit")
+      .select("membership_status, membership_expires_at, weekly_visit_limit, membership_tier")
       .eq("id", user_id)
       .maybeSingle();
 
@@ -143,6 +143,27 @@ export async function POST(request: Request) {
         },
         { status: 403 }
       );
+    }
+
+    // Йога багц зөвхөн йога төвүүдэд хүчинтэй.
+    if (memberRow?.membership_tier === "yoga") {
+      const { data: gymRow, error: gymErr } = await supabase
+        .from("gyms")
+        .select("type")
+        .eq("id", gym_id)
+        .maybeSingle();
+      if (gymErr) {
+        return NextResponse.json({ error: gymErr.message }, { status: 500 });
+      }
+      if (gymRow?.type !== "yoga") {
+        return NextResponse.json(
+          {
+            error: "Таны йога багц зөвхөн йога төвүүдэд хүчинтэй.",
+            yoga_only: true,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // 7 хоногийн зочлох эрхийн лимит.

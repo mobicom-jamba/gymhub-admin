@@ -45,6 +45,8 @@ export function canonicalStoredTier(bookingTier: string): string {
     // Хуучин Early — DB-д early үлдээнэ
     case "gymgo":
       return "gymgo";
+    case "yoga":
+      return "yoga";
     case "early":
     case "early_year":
     case "early_month":
@@ -274,8 +276,13 @@ export function computeMembershipDatesAfterPayment(args: {
     };
   }
 
+  const storedTier = storedTierForPackageId(parsed.tier, monthsCfg);
+  // Йога ба фитнес эрх нэг tier-т багтахгүй — төрөл солигдвол үлдсэн хугацааг залгахгүй.
+  const switchesVenueType =
+    (storedTier === "yoga") !== (String(profile.membership_tier ?? "").toLowerCase() === "yoga");
+
   let baseDate = now;
-  if (profile.membership_expires_at) {
+  if (profile.membership_expires_at && !switchesVenueType) {
     const currentExpiry = new Date(profile.membership_expires_at);
     if (currentExpiry > now && profile.membership_status === "active") {
       // Client+server race: web/app аль хэдийн нэмсэн бол дахин stack хийхгүй.
@@ -295,7 +302,6 @@ export function computeMembershipDatesAfterPayment(args: {
   const months = membershipMonthsForTier(parsed.tier, monthsCfg);
   const expiresAt = addCalendarMonths(baseDate, months);
 
-  const storedTier = storedTierForPackageId(parsed.tier, monthsCfg);
   return {
     membership_tier: storedTier,
     membership_status: "active",
@@ -383,6 +389,7 @@ export async function applyMembershipActivationForPaidBooking(
     membership_started_at: profile?.membership_started_at ?? null,
     membership_expires_at: profile?.membership_expires_at ?? null,
     membership_status: profile?.membership_status ?? null,
+    membership_tier: profile?.membership_tier ?? null,
   };
 
   const settings = await getPaymentAppSettings();
