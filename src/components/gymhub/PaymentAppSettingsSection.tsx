@@ -16,6 +16,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import {
   DEFAULT_BANNER,
   DEFAULT_PACKAGES,
+  formatMonthsLabel,
   newBlankPackage,
   type BannerConfig,
   type MembershipPackage,
@@ -434,8 +435,8 @@ export default function PaymentAppSettingsSection() {
     load();
   }, [load]);
 
-  const openCreate = () => {
-    const blank = newBlankPackage(packages);
+  const openCreate = (preset?: Partial<MembershipPackage>) => {
+    const blank = { ...newBlankPackage(packages), ...preset };
     setEditingPackage(blank);
     setModalMode("create");
     setModalOpen(true);
@@ -551,6 +552,51 @@ export default function PaymentAppSettingsSection() {
     }
   };
 
+  const fitnessPackages = packages.filter((p) => p.stored_tier !== "yoga");
+  const yogaPackages = packages.filter((p) => p.stored_tier === "yoga");
+
+  const renderStatusAndEditCells = (pkg: MembershipPackage) => (
+    <>
+      <TableCell className="px-3 py-3 text-center">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={pkg.enabled}
+          aria-label={pkg.enabled ? "Идэвхгүй болгох" : "Идэвхтэй болгох"}
+          onClick={() =>
+            setPackages((prev) =>
+              prev.map((p) =>
+                p.id === pkg.id ? { ...p, enabled: !p.enabled } : p,
+              ),
+            )
+          }
+          className={[
+            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors",
+            pkg.enabled ? "bg-brand-500" : "bg-gray-200 dark:bg-gray-700",
+          ].join(" ")}
+        >
+          <span
+            className={[
+              "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+              pkg.enabled ? "translate-x-6" : "translate-x-1",
+            ].join(" ")}
+          />
+        </button>
+      </TableCell>
+      <TableCell className="px-3 py-3 text-right">
+        <button
+          type="button"
+          onClick={() => openEdit(pkg)}
+          title="Засах"
+          aria-label={`${pkg.name} засах`}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white"
+        >
+          <PencilIcon className="h-4 w-4" />
+        </button>
+      </TableCell>
+    </>
+  );
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
@@ -567,7 +613,7 @@ export default function PaymentAppSettingsSection() {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-            <Button variant="outline" size="sm" onClick={openCreate} disabled={loading || saving}>
+            <Button variant="outline" size="sm" onClick={() => openCreate()} disabled={loading || saving}>
               Шинэ багц
             </Button>
             <Button size="sm" onClick={save} disabled={loading || saving}>
@@ -614,7 +660,7 @@ export default function PaymentAppSettingsSection() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {packages.map((pkg) => (
+                  {fitnessPackages.map((pkg) => (
                     <TableRow key={pkg.id} className="border-b border-gray-50 dark:border-gray-800/60">
                       <TableCell className="px-3 py-3 text-sm font-medium text-gray-800 dark:text-white/90">
                         {pkg.name}
@@ -642,43 +688,7 @@ export default function PaymentAppSettingsSection() {
                       <TableCell className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">
                         {tierLabel(pkg.stored_tier)}
                       </TableCell>
-                      <TableCell className="px-3 py-3 text-center">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={pkg.enabled}
-                          aria-label={pkg.enabled ? "Идэвхгүй болгох" : "Идэвхтэй болгох"}
-                          onClick={() =>
-                            setPackages((prev) =>
-                              prev.map((p) =>
-                                p.id === pkg.id ? { ...p, enabled: !p.enabled } : p,
-                              ),
-                            )
-                          }
-                          className={[
-                            "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors",
-                            pkg.enabled ? "bg-brand-500" : "bg-gray-200 dark:bg-gray-700",
-                          ].join(" ")}
-                        >
-                          <span
-                            className={[
-                              "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-                              pkg.enabled ? "translate-x-6" : "translate-x-1",
-                            ].join(" ")}
-                          />
-                        </button>
-                      </TableCell>
-                      <TableCell className="px-3 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openEdit(pkg)}
-                          title="Засах"
-                          aria-label={`${pkg.name} засах`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition hover:bg-gray-50 hover:text-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                      </TableCell>
+                      {renderStatusAndEditCells(pkg)}
                     </TableRow>
                   ))}
 
@@ -776,6 +786,96 @@ export default function PaymentAppSettingsSection() {
             <p className="mt-4 text-xs text-gray-400">
               Сүүлд шинэчилсэн: {new Date(updatedAt).toLocaleString("mn-MN", { hour12: false })}
             </p>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Йога багц</h3>
+            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+              Аппын &quot;Йога багц&quot; табд харагдана · зөвхөн йога төвүүдэд check-in
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openCreate({ stored_tier: "yoga" })}
+              disabled={loading || saving}
+            >
+              Шинэ йога багц
+            </Button>
+            <Button size="sm" onClick={save} disabled={loading || saving}>
+              {saving ? "Хадгалж байна…" : "Хадгалах"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-6">
+          {loading ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Ачаалж байна…</p>
+          ) : yogaPackages.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Йога багц алга.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="border-b border-gray-100 dark:border-gray-800">
+                  <TableRow>
+                    <TableCell isHeader className="px-3 py-3 text-left text-xs font-medium text-gray-500">
+                      Нэр
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-left text-xs font-medium text-gray-500">
+                      ID
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-right text-xs font-medium text-gray-500">
+                      Үнэ
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
+                      Йога
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-left text-xs font-medium text-gray-500">
+                      Нэмэлт
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
+                      Төлөв
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-right text-xs font-medium text-gray-500">
+                      &nbsp;
+                    </TableCell>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {yogaPackages.map((pkg) => (
+                    <TableRow key={pkg.id} className="border-b border-gray-50 dark:border-gray-800/60">
+                      <TableCell className="px-3 py-3 text-sm font-medium text-gray-800 dark:text-white/90">
+                        {pkg.name}
+                      </TableCell>
+                      <TableCell className="px-3 py-3 font-mono text-xs text-gray-500">{pkg.id}</TableCell>
+                      <TableCell className="px-3 py-3 text-right text-sm tabular-nums text-gray-800 dark:text-white/90">
+                        {formatMnt(pkg.price_mnt)}
+                      </TableCell>
+                      <TableCell className="px-3 py-3 text-center text-sm text-gray-600 dark:text-gray-300">
+                        {formatMonthsLabel(pkg.months)}
+                      </TableCell>
+                      <TableCell className="px-3 py-3 text-xs text-gray-500 dark:text-gray-400">
+                        {pkg.extras && pkg.extras.length > 0 ? (
+                          <ul className="space-y-0.5">
+                            {pkg.extras.map((e) => (
+                              <li key={e}>{e}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      {renderStatusAndEditCells(pkg)}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </div>
       </div>
