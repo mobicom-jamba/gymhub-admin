@@ -4,9 +4,7 @@ import { recordGiftMembershipGrant } from "@/lib/gift-membership";
 import { hasPermission } from "@/lib/permissions";
 import { verifyBearerUser } from "@/lib/verify-gym-access";
 import { parseSignupRegion } from "@/lib/signup-region";
-
 const PHONE_DOMAIN = "gymhub.mn";
-
 function phoneToEmail(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   return `${digits}@${PHONE_DOMAIN}`;
