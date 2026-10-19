@@ -16,6 +16,7 @@ function userIdsFromOverdueRows(
   }
   return [...ids];
 }
+
 export async function pauseMembershipsForOverdueFlexy(
   supabase: SupabaseClient,
 ): Promise<number> {
