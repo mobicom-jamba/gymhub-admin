@@ -14,12 +14,15 @@ import {
 } from "@/components/ui/table";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import {
+  COMBO_PACKAGE_SEED,
   DEFAULT_BANNER,
   DEFAULT_PACKAGES,
+  PACKAGE_COMBO_OPTIONS,
   formatMonthsLabel,
   newBlankPackage,
   type BannerConfig,
   type MembershipPackage,
+  type PackageCombo,
   type StoredMembershipTier,
 } from "@/lib/membership-packages";
 import {
@@ -100,6 +103,20 @@ function MoneyInput({
 
 function tierLabel(tier: StoredMembershipTier): string {
   return STORED_TIER_OPTIONS.find((o) => o.value === tier)?.label ?? tier;
+}
+
+function comboLabel(combo: PackageCombo): string {
+  return PACKAGE_COMBO_OPTIONS.find((o) => o.value === combo)?.label ?? combo;
+}
+
+/** Хосолсон багцын фитнес / иог / бассейн сар (иог tier бол months = иогийн сар) */
+function comboMonths(pkg: MembershipPackage): { fitness: number; yoga: number; pool: number } {
+  const yogaTier = pkg.stored_tier === "yoga";
+  return {
+    fitness: yogaTier ? 0 : pkg.months,
+    yoga: yogaTier ? pkg.months : pkg.yoga_months,
+    pool: pkg.pool_months,
+  };
 }
 
 type PackageModalProps = {
@@ -235,7 +252,7 @@ function PackageFormModal({
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Иога
+              Иог
             </label>
             <input
               type="number"
@@ -265,6 +282,28 @@ function PackageFormModal({
           {draft.stored_tier === "yoga" && (
             <p className="mt-1 text-xs text-gray-400">
               Аппын &quot;Иог багц&quot; табд харагдана. Зөвхөн иог төвүүдэд check-in хийнэ.
+            </p>
+          )}
+        </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Хосолсон багц
+          </label>
+          <select
+            className={inputClass}
+            value={draft.combo ?? ""}
+            onChange={(e) => patch({ combo: (e.target.value || null) as PackageCombo | null })}
+          >
+            <option value="">— Үгүй —</option>
+            {PACKAGE_COMBO_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {draft.combo && (
+            <p className="mt-1 text-xs text-gray-400">
+              Аппын &quot;Хосолсон багц&quot; таб → &quot;{comboLabel(draft.combo)}&quot; хэсэгт харагдана.
             </p>
           )}
         </div>
@@ -552,8 +591,28 @@ export default function PaymentAppSettingsSection() {
     }
   };
 
-  const fitnessPackages = packages.filter((p) => p.stored_tier !== "yoga");
-  const yogaPackages = packages.filter((p) => p.stored_tier === "yoga");
+  const fitnessPackages = packages.filter((p) => !p.combo && p.stored_tier !== "yoga");
+  const yogaPackages = packages.filter((p) => !p.combo && p.stored_tier === "yoga");
+  const comboPackages = PACKAGE_COMBO_OPTIONS.flatMap((opt) =>
+    packages.filter((p) => p.combo === opt.value),
+  );
+  const missingComboSeeds = COMBO_PACKAGE_SEED.filter(
+    (seed) => !packages.some((p) => p.id === seed.id),
+  );
+
+  const addComboSeeds = () => {
+    setPackages((prev) => {
+      let order = prev.reduce((m, p) => Math.max(m, p.sort_order), 0);
+      const ids = new Set(prev.map((p) => p.id));
+      const added = COMBO_PACKAGE_SEED.filter((seed) => !ids.has(seed.id)).map((seed) => ({
+        ...seed,
+        extras: [...(seed.extras ?? [])],
+        sort_order: ++order,
+      }));
+      return [...prev, ...added];
+    });
+    toast.show("Хосолсон багцууд нэмэгдлээ. Хадгалах товч дарна уу.");
+  };
 
   const renderStatusAndEditCells = (pkg: MembershipPackage) => (
     <>
@@ -873,6 +932,110 @@ export default function PaymentAppSettingsSection() {
                       {renderStatusAndEditCells(pkg)}
                     </TableRow>
                   ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-white/[0.03]">
+        <div className="flex flex-col gap-3 border-b border-gray-100 px-6 py-5 dark:border-gray-800 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-medium text-gray-800 dark:text-white/90">Хосолсон багц</h3>
+            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+              Аппын &quot;Хосолсон багц&quot; табд харагдана · Фитнес + Иог, Фитнес + Бассейн, Иог + Бассейн
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+            {missingComboSeeds.length > 0 && (
+              <Button variant="outline" size="sm" onClick={addComboSeeds} disabled={loading || saving}>
+                Excel-ийн багц нэмэх ({missingComboSeeds.length})
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openCreate({ combo: "fitness_yoga", stored_tier: "premium2" })}
+              disabled={loading || saving}
+            >
+              Шинэ хосолсон багц
+            </Button>
+            <Button size="sm" onClick={save} disabled={loading || saving}>
+              {saving ? "Хадгалж байна…" : "Хадгалах"}
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-6">
+          {loading ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Ачаалж байна…</p>
+          ) : comboPackages.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">Хосолсон багц алга.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="border-b border-gray-100 dark:border-gray-800">
+                  <TableRow>
+                    <TableCell isHeader className="px-3 py-3 text-left text-xs font-medium text-gray-500">
+                      Нэр
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-left text-xs font-medium text-gray-500">
+                      Төрөл
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-right text-xs font-medium text-gray-500">
+                      Үнэ
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
+                      Фитнес
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
+                      Иог
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
+                      Бассейн
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-center text-xs font-medium text-gray-500">
+                      Төлөв
+                    </TableCell>
+                    <TableCell isHeader className="px-3 py-3 text-right text-xs font-medium text-gray-500">
+                      &nbsp;
+                    </TableCell>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {comboPackages.map((pkg) => {
+                    const m = comboMonths(pkg);
+                    return (
+                      <TableRow key={pkg.id} className="border-b border-gray-50 dark:border-gray-800/60">
+                        <TableCell className="px-3 py-3 text-sm font-medium text-gray-800 dark:text-white/90">
+                          {pkg.name}
+                          {pkg.featured && (
+                            <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand-600 dark:bg-brand-500/15 dark:text-brand-400">
+                              Онцлох
+                            </span>
+                          )}
+                          <div className="font-mono text-[11px] font-normal text-gray-400">{pkg.id}</div>
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">
+                          {pkg.combo ? comboLabel(pkg.combo) : "—"}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-right text-sm tabular-nums text-gray-800 dark:text-white/90">
+                          {formatMnt(pkg.price_mnt)}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-center text-sm text-gray-600 dark:text-gray-300">
+                          {m.fitness > 0 ? formatMonthsLabel(m.fitness) : "—"}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-center text-sm text-gray-600 dark:text-gray-300">
+                          {m.yoga > 0 ? formatMonthsLabel(m.yoga) : "—"}
+                        </TableCell>
+                        <TableCell className="px-3 py-3 text-center text-sm text-gray-600 dark:text-gray-300">
+                          {m.pool > 0 ? formatMonthsLabel(m.pool) : "—"}
+                        </TableCell>
+                        {renderStatusAndEditCells(pkg)}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

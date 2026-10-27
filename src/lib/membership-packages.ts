@@ -15,6 +15,19 @@ export type StoredMembershipTier =
   /** Зөвхөн иог төвүүдэд check-in хийнэ; months = иогийн сар */
   | "yoga";
 
+/** Хосолсон багцын төрөл — аппын "Хосолсон багц" табд дэд таб болж харагдана */
+export type PackageCombo = "fitness_yoga" | "fitness_pool" | "yoga_pool";
+
+export const PACKAGE_COMBO_OPTIONS: { value: PackageCombo; label: string }[] = [
+  { value: "fitness_yoga", label: "Фитнес + Иог" },
+  { value: "fitness_pool", label: "Фитнес + Бассейн" },
+  { value: "yoga_pool", label: "Иог + Бассейн" },
+];
+
+export function isPackageCombo(v: unknown): v is PackageCombo {
+  return v === "fitness_yoga" || v === "fitness_pool" || v === "yoga_pool";
+}
+
 export type MembershipPackage = {
   /** Booking slug: membership-{id}-{ts} */
   id: string;
@@ -37,6 +50,8 @@ export type MembershipPackage = {
   available_until?: string | null;
   /** Багцын карт дээр нэмж харуулах мөрүүд (зөвхөн харуулалт) */
   extras?: string[];
+  /** Хоосон бол энгийн багц; утгатай бол "Хосолсон багц" табд харагдана */
+  combo?: PackageCombo | null;
 };
 
 export type PaymentAppSettingsRow = {
@@ -267,6 +282,7 @@ export function normalizePackage(raw: unknown, index: number): MembershipPackage
     qpay_only: o.qpay_only === true || def?.qpay_only === true,
     available_until,
     extras,
+    combo: isPackageCombo(o.combo) ? o.combo : null,
   };
 }
 
@@ -535,3 +551,40 @@ export function newBlankPackage(existing: MembershipPackage[]): MembershipPackag
 }
 
 
+
+const COMBO_EXTRAS = ["InBody – 1 удаа", "Амар гэнэтийн ослын даатгал", "Nova Mind Academy – 10 хоног"];
+
+/**
+ * GYMHUB-БАГЦУУД.xlsx-ийн хосолсон багцууд.
+ * Фитнес багцад months = фитнес сар; иог+бассейн багцад stored_tier "yoga" тул months = иогийн сар.
+ */
+export const COMBO_PACKAGE_SEED: Omit<MembershipPackage, "sort_order">[] = (
+  [
+    ["fitness_yoga", "gymstart1", "Gym Start-1", 300_000, 3, 1, 0, false],
+    ["fitness_yoga", "gymgo1", "Gym Go-1", 600_000, 6, 2, 0, true],
+    ["fitness_yoga", "gymsmart1", "Gym Smart-1", 750_000, 8, 2, 0, false],
+    ["fitness_yoga", "gympremium1", "Gym Premium-1", 975_000, 10, 3, 0, false],
+    ["fitness_pool", "gymstart2", "Gym Start-2", 300_000, 3, 0, 1, false],
+    ["fitness_pool", "gymgo2", "Gym Go-2", 600_000, 6, 0, 2, true],
+    ["fitness_pool", "gymsmart2", "Gym Smart-2", 750_000, 8, 0, 2, false],
+    ["fitness_pool", "gympremium2", "Gym Premium-2", 975_000, 10, 0, 3, false],
+    ["yoga_pool", "yogastart", "Yoga Start", 300_000, 3, 0, 1, false],
+    ["yoga_pool", "yogaaquago", "YogaAqua Go", 600_000, 6, 0, 2, true],
+    ["yoga_pool", "yogaaquasmart", "YogaAqua Smart", 750_000, 8, 0, 2, false],
+    ["yoga_pool", "yogaaquapremium", "YogaAqua Premium", 975_000, 10, 0, 3, false],
+  ] as const
+).map(([combo, id, name, price_mnt, months, yoga_months, pool_months, featured]) => ({
+  id,
+  name,
+  price_mnt,
+  months,
+  pool_months,
+  yoga_months,
+  // Фитнес+Иог → Premium 2, Фитнес+Бассейн → Premium 1-тэй ижил эрх (7 хоногт 4 удаа)
+  stored_tier: combo === "yoga_pool" ? "yoga" : combo === "fitness_yoga" ? "premium2" : "premium1",
+  enabled: true,
+  featured,
+  locked: false,
+  extras: [...COMBO_EXTRAS],
+  combo,
+}));

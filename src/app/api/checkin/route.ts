@@ -7,6 +7,8 @@ import {
   gymHasDailyCapacityLeft,
 } from "@/lib/gym-daily-capacity";
 import { isGymComingSoon } from "@/lib/gym-opening";
+import { findPackage } from "@/lib/membership-packages";
+import { getPaymentAppSettings } from "@/lib/payment-app-settings";
 import { verifyJwtUser } from "@/lib/verify-jwt-user";
 
 /**
@@ -122,7 +124,7 @@ export async function POST(request: Request) {
     // Гишүүнчлэл идэвхтэй бөгөөд хугацаа нь дуусаагүй эсэхийг шалгах
     const { data: memberRow, error: memberErr } = await supabase
       .from("profiles")
-      .select("membership_status, membership_expires_at, weekly_visit_limit, membership_tier")
+      .select("membership_status, membership_expires_at, weekly_visit_limit, membership_tier, membership_package_id")
       .eq("id", user_id)
       .maybeSingle();
 
@@ -145,7 +147,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Иог багц зөвхөн иог төвүүдэд хүчинтэй.
+    // Иог багц зөвхөн иог төвүүдэд хүчинтэй (Иог + Бассейн багц бол бассейнд ч орно).
     if (memberRow?.membership_tier === "yoga") {
       const { data: gymRow, error: gymErr } = await supabase
         .from("gyms")
@@ -155,7 +157,12 @@ export async function POST(request: Request) {
       if (gymErr) {
         return NextResponse.json({ error: gymErr.message }, { status: 500 });
       }
-      if (gymRow?.type !== "yoga") {
+      let allowed = gymRow?.type === "yoga";
+      if (!allowed && gymRow?.type === "pool" && memberRow.membership_package_id) {
+        const pkg = findPackage(await getPaymentAppSettings(), memberRow.membership_package_id as string);
+        allowed = (pkg?.pool_months ?? 0) > 0;
+      }
+      if (!allowed) {
         return NextResponse.json(
           {
             error: "Таны иог багц зөвхөн иог төвүүдэд хүчинтэй.",
