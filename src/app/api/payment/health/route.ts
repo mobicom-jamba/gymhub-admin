@@ -256,6 +256,7 @@ export async function GET() {
         qpay_only: p.qpay_only === true,
         available_until: p.available_until ?? null,
         extras: p.extras ?? [],
+        combo: p.combo ?? null,
       })),
     // Оффис (байгууллагын) багц — аппд зөвхөн харагдаж, захиалгын хүсэлт үлдээнэ.
     office_packages: settings.office_packages
