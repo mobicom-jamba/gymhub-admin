@@ -95,10 +95,12 @@ export function priceForPackageId(
     | "premium_membership_price_mnt"
     | "premium4_price_mnt"
     | "early_membership_price_mnt"
-  >,
+  > &
+    Partial<Pick<PaymentAppSettingsRow, "packages">>,
   packageId: string,
 ): number {
-  switch ((packageId || "").toLowerCase()) {
+  const id = (packageId || "").toLowerCase();
+  switch (id) {
     case "smart":
     case "gymgo":
       return 300_000;
@@ -120,7 +122,8 @@ export function priceForPackageId(
     case "early":
       return settings.early_membership_price_mnt;
     default:
-      return 0;
+      // Админаас нэмсэн багц (иог, хосолсон г.м.)
+      return settings.packages?.find((p) => p.id === id)?.price_mnt ?? 0;
   }
 }
 
